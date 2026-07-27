@@ -1,0 +1,16 @@
+{
+  "credential_env": "credentials/goalevolve_codex.env",
+  "student": {
+    "model": "gpt-5.6-terra",
+    "reasoning_effort": "xhigh",
+    "retries": 3,
+    "timeout_s": 1800,
+    "max_repair_attempts": 4
+  },
+  "teacher": {
+    "model": "gpt-5.6-terra",
+    "reasoning_effort": "xhigh",
+    "retries": 3,
+    "timeout_s": 1800
+  }
+}

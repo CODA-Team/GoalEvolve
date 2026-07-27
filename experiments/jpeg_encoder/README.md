@@ -8,8 +8,7 @@ Regenerate that record when changing the source snapshot or flow:
 
 ```bash
 PYTHONPATH=. python3 -m goalevolve.cli baseline \
-  --config experiments/contest2026/jpeg_encoder.bootstrap.json \
-  --output outputs/baseline/jpeg_encoder
+  --config experiments/jpeg_encoder/baseline.json
 ```
 
 ```bash

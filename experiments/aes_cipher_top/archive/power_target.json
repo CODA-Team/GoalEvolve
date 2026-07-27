@@ -9,10 +9,10 @@
     "dynamic_power_pw": 381931800000.0,
     "leakage_power_pw": 68200000.0
   },
-  "target_ratios": {
-    "tns_abs_ns": 1.349718785151856,
-    "dynamic_power_pw": 0.9163939740026884,
-    "leakage_power_pw": 0.5131964809384164
+  "target_metrics": {
+    "tns_abs_ns": 12.0,
+    "dynamic_power_pw": 350000000000.0,
+    "leakage_power_pw": 35000000.0
   },
   "metric_weights": {
     "tns_abs_ns": 1.0,
@@ -34,15 +34,6 @@
   "allowed_patch_roots": ["src/rsz", "src/rmp", "src/grt"],
   "require_cpp_patch": true,
   "build_jobs": 8,
-  "codex_model": "gpt-5.6-sol",
-  "codex_reasoning_effort": "xhigh",
-  "codex_retries": 3,
-  "codex_timeout_s": 1800,
-  "codex_max_repair_attempts": 4,
-  "teacher_model": "gpt-5.6-sol",
-  "teacher_reasoning_effort": "xhigh",
-  "teacher_retries": 3,
-  "teacher_timeout_s": 3600,
   "command_timeout_s": 1200,
   "command_retries": 0,
   "min_free_gb": 8.0,

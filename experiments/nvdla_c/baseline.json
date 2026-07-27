@@ -1,8 +1,9 @@
 {
-  "extends": "base.json",
+  "extends": "../ae3_base.json",
   "design": "nvdla_c",
   "state_root": "../../outputs/baseline/nvdla_c",
+  "campaign_ready": false,
   "baseline_metrics": {"tns_abs_ns": 55.58, "dynamic_power_pw": 583700000000.0, "leakage_power_pw": 17300000000.0},
-  "target_ratios": {"tns_abs_ns": 1.0, "dynamic_power_pw": 1.0, "leakage_power_pw": 1.0},
+  "target_metrics": {"tns_abs_ns": 55.58, "dynamic_power_pw": 583700000000.0, "leakage_power_pw": 17300000000.0},
   "metric_weights": {"tns_abs_ns": 1.0, "dynamic_power_pw": 1.0, "leakage_power_pw": 1.0}
 }

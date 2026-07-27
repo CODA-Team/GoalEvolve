@@ -1,8 +1,9 @@
 {
-  "extends": "base.json",
+  "extends": "../ae3_base.json",
   "design": "jpeg_encoder",
   "state_root": "../../outputs/baseline/jpeg_encoder",
+  "campaign_ready": false,
   "baseline_metrics": {"tns_abs_ns": 48.77, "dynamic_power_pw": 293826000000.0, "leakage_power_pw": 174000000.0},
-  "target_ratios": {"tns_abs_ns": 1.0, "dynamic_power_pw": 1.0, "leakage_power_pw": 1.0},
+  "target_metrics": {"tns_abs_ns": 48.77, "dynamic_power_pw": 293826000000.0, "leakage_power_pw": 174000000.0},
   "metric_weights": {"tns_abs_ns": 1.0, "dynamic_power_pw": 1.0, "leakage_power_pw": 1.0}
 }

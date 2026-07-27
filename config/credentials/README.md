@@ -10,5 +10,5 @@ the campaign `outputs/` directory. The worker homes are not credential
 sources: each turn reloads this project dotenv, so key rotation takes effect
 without reusing `~/.codex` or a stale worker configuration.
 
-An experiment may set `credential_env` to another project-local dotenv path,
-but all shipped AE-3 profiles explicitly use this canonical file.
+Models, reasoning effort, retry behavior, and timeouts do not belong here.
+They are shared across every design in the committed `../codex.json` file.

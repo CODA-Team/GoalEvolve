@@ -44,13 +44,9 @@ GOALEVOLVE_GOALS=true
 GOALEVOLVE_WSL_ACK=true
 ```
 
-The API-key file is the sole credential source. Worker homes are generated under `outputs/` and do not inherit `~/.codex`. The supplied profiles set Teacher and Student to `gpt-5.6-terra`, `xhigh`.
+The API-key file is the sole credential source. Worker homes are generated under `outputs/` and do not inherit `~/.codex`. The project-wide Teacher and Student model policy is committed in `config/codex.json`; it currently uses `gpt-5.6-terra` with `xhigh` reasoning.
 
 ```bash
-# One real Teacher/Student round: connectivity and complete workflow check.
-PYTHONPATH=. python3 -m goalevolve.cli run \
-  --config experiments/aes_cipher_top/ae3_smoke.json --rounds 1
-
 # Four independent Students for a normal fresh campaign.
 PYTHONPATH=. python3 -m goalevolve.cli run \
   --config experiments/aes_cipher_top/evolve.json --rounds 10
@@ -75,6 +71,6 @@ The following generated evidence was produced on 2026-07-27 and remains under ig
 |---|---|---|
 | AE-1 | command JSON stdout | passed; all shipped paths and Python/CMake interfaces present |
 | AE-2 | `outputs/ae2/aes_r54_student1/report/ae2_report.json` | passed with rebuilt `build/bin/openroad`; TNS `15.79 ns`, dynamic `335.9714B pW`, leakage `28.6M pW`, official 4/4 pass |
-| AE-3 | `outputs/ae3/aes_cipher_top_smoke/rounds/round_001/round.json` | one real Teacher/Student round completed; candidate activated and passed 4/4, then was refuted for no QoR improvement |
+| AE-3 | local historical smoke record | one real Teacher/Student round completed; candidate activated and passed 4/4, then was refuted for no QoR improvement |
 
-AE-3 token accounting for this smoke run is in `outputs/ae3/aes_cipher_top_smoke/rounds/round_001/token_usage.json`; total tokens were `1,682,734`. Generated API homes and `auth.json` files are ignored and must not be copied into release evidence.
+The historical smoke token total was `1,682,734`. Generated API homes and `auth.json` files are ignored and must not be copied into release evidence.

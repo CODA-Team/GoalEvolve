@@ -8,10 +8,10 @@
     "dynamic_power_pw": 381931800000.0,
     "leakage_power_pw": 68200000.0
   },
-  "target_ratios": {
-    "tns_abs_ns": 1.349718785151856,
-    "dynamic_power_pw": 0.9163939740026884,
-    "leakage_power_pw": 0.5131964809384164
+  "target_metrics": {
+    "tns_abs_ns": 12.0,
+    "dynamic_power_pw": 350000000000.0,
+    "leakage_power_pw": 35000000.0
   },
   "metric_weights": {
     "tns_abs_ns": 1.0,
@@ -43,16 +43,5 @@
   "power_reclaim_proportion_percent": 80.0,
   "build_jobs": 8,
   "command_timeout_s": 1200,
-  "codex_model": "gpt-5.6-terra",
-  "teacher_model": "gpt-5.6-terra",
-  "codex_reasoning_effort": "xhigh",
-  "teacher_reasoning_effort": "xhigh",
-  "codex_retries": 1,
-  "teacher_retries": 1,
-  "codex_timeout_s": 1800,
-  "teacher_timeout_s": 1800,
-  "codex_max_repair_attempts": 2,
-  "codex_home": "../../outputs/codex_home",
-  "credential_env": "../../config/credentials/goalevolve_codex.env",
   "max_campaign_rounds": 1
 }

@@ -41,7 +41,7 @@ class GoalEvolveV2Tests(unittest.TestCase):
         self.contract = build_contract(
             design="unit",
             baseline_metrics={"tns_abs_ns": 100.0, "leakage_power_pw": 200.0},
-            target_ratios={"tns_abs_ns": 0.5, "leakage_power_pw": 0.8},
+            target_metrics={"tns_abs_ns": 50.0, "leakage_power_pw": 160.0},
             weights={"tns_abs_ns": 1.0, "leakage_power_pw": 1.0},
         )
         distance, _, _ = self.contract.evaluate(self.contract.baseline_metrics)
@@ -53,6 +53,14 @@ class GoalEvolveV2Tests(unittest.TestCase):
         self.assertGreater(distance, 0.0)
         self.assertEqual(missing, ["leakage_power_pw"])
         self.assertIsNone(residuals["leakage_power_pw"])
+
+    def test_goal_contract_rejects_mismatched_decision_metric_names(self) -> None:
+        with self.assertRaisesRegex(ValueError, "goal metric names must match"):
+            build_contract(
+                design="mismatched",
+                baseline_metrics={"tns_abs_ns": 100.0},
+                target_metrics={"dynamic_power_pw": 50.0},
+            )
 
     def test_epd_baseline_is_not_counted_as_pending_strategy(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -85,11 +93,11 @@ class GoalEvolveV2Tests(unittest.TestCase):
                 "SPPA": 10.0,
                 "Sfinal": 5.0,
             },
-            target_ratios={
-                "tns_abs_ns": 0.5,
-                "runtime_s": 0.5,
-                "SPPA": 2.0,
-                "Sfinal": 2.0,
+            target_metrics={
+                "tns_abs_ns": 50.0,
+                "runtime_s": 30.0,
+                "SPPA": 20.0,
+                "Sfinal": 10.0,
             },
         )
         self.assertEqual([spec.name for spec in contract.metrics], ["tns_abs_ns"])
@@ -266,7 +274,7 @@ class GoalEvolveV2Tests(unittest.TestCase):
             contract=build_contract(
                 design="unit",
                 baseline_metrics=parent.metrics,
-                target_ratios={"tns_abs_ns": 0.8, "leakage_power_pw": 0.9},
+                target_metrics={"tns_abs_ns": 10.176, "leakage_power_pw": 85_860_000.0},
             ),
             parent=parent,
             checkpoints={
@@ -284,7 +292,7 @@ class GoalEvolveV2Tests(unittest.TestCase):
             contract=build_contract(
                 design="unit",
                 baseline_metrics=parent.metrics,
-                target_ratios={"tns_abs_ns": 0.5, "leakage_power_pw": 0.7},
+                target_metrics={"tns_abs_ns": 50.0, "leakage_power_pw": 140.0},
             ),
             parent=parent,
             checkpoints={
@@ -718,7 +726,7 @@ class GoalEvolveV2Tests(unittest.TestCase):
         contract = build_contract(
             design="power_first",
             baseline_metrics={"tns_abs_ns": 8.89, "dynamic_power_pw": 381_931_800_000.0, "leakage_power_pw": 68_200_000.0},
-            target_ratios={"tns_abs_ns": 12.0 / 8.89, "dynamic_power_pw": 350.0 / 381.9318, "leakage_power_pw": 35.0 / 68.2},
+            target_metrics={"tns_abs_ns": 12.0, "dynamic_power_pw": 350_000_000_000.0, "leakage_power_pw": 35_000_000.0},
         )
         parent = Parent(
             "power_parent",
@@ -758,7 +766,7 @@ class GoalEvolveV2Tests(unittest.TestCase):
         contract = build_contract(
             design="power_frontier",
             baseline_metrics={"tns_abs_ns": 8.89, "dynamic_power_pw": 381_931_800_000.0, "leakage_power_pw": 68_200_000.0},
-            target_ratios={"tns_abs_ns": 12.0 / 8.89, "dynamic_power_pw": 350.0 / 381.9318, "leakage_power_pw": 35.0 / 68.2},
+            target_metrics={"tns_abs_ns": 12.0, "dynamic_power_pw": 350_000_000_000.0, "leakage_power_pw": 35_000_000.0},
         )
         parent = Parent("parent", {"tns_abs_ns": 8.87, "dynamic_power_pw": 379_937_000_000.0, "leakage_power_pw": 63_000_000.0, "drv_count": 0.0}, "base", "hash", 0.16)
         checks = [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")]
@@ -778,7 +786,7 @@ class GoalEvolveV2Tests(unittest.TestCase):
         contract = build_contract(
             design="timing_recovery",
             baseline_metrics={"tns_abs_ns": 8.89, "dynamic_power_pw": 381_931_800_000.0, "leakage_power_pw": 68_200_000.0},
-            target_ratios={"tns_abs_ns": 12.0 / 8.89, "dynamic_power_pw": 350.0 / 381.9318, "leakage_power_pw": 35.0 / 68.2},
+            target_metrics={"tns_abs_ns": 12.0, "dynamic_power_pw": 350_000_000_000.0, "leakage_power_pw": 35_000_000.0},
         )
         parent = Parent("low_power", {"tns_abs_ns": 20.0, "dynamic_power_pw": 349_000_000_000.0, "leakage_power_pw": 34_000_000.0, "drv_count": 0.0}, "base", "hash", 0.0)
         candidate = CandidateResult("student", self.hypothesis, {"tns_abs_ns": 10.0, "dynamic_power_pw": 349_000_000_000.0, "leakage_power_pw": 34_000_000.0, "drv_count": 0.0}, {"accepted": 1.0}, [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")], "+++ recovery\n", "commit")
@@ -794,10 +802,10 @@ class GoalEvolveV2Tests(unittest.TestCase):
                 "dynamic_power_pw": 293_826_000_000.0,
                 "leakage_power_pw": 174_000_000.0,
             },
-            target_ratios={
-                "tns_abs_ns": 53.0 / 48.77,
-                "dynamic_power_pw": 250_000_000_000.0 / 293_826_000_000.0,
-                "leakage_power_pw": 80_000_000.0 / 174_000_000.0,
+            target_metrics={
+                "tns_abs_ns": 53.0,
+                "dynamic_power_pw": 250_000_000_000.0,
+                "leakage_power_pw": 80_000_000.0,
             },
         )
         parent = Parent(
@@ -823,7 +831,7 @@ class GoalEvolveV2Tests(unittest.TestCase):
         contract = build_contract(
             design="adaptive",
             baseline_metrics={"tns_abs_ns": 100.0, "dynamic_power_pw": 300.0, "leakage_power_pw": 180.0},
-            target_ratios={"tns_abs_ns": 0.5, "dynamic_power_pw": 250.0 / 300.0, "leakage_power_pw": 80.0 / 180.0},
+            target_metrics={"tns_abs_ns": 50.0, "dynamic_power_pw": 250.0, "leakage_power_pw": 80.0},
         )
         parent_metrics = {"tns_abs_ns": 105.0, "dynamic_power_pw": 240.0, "leakage_power_pw": 107.0, "drv_count": 0.0}
         parent = Parent("adaptive", parent_metrics, "source", "hash", contract.evaluate(parent_metrics)[0], "power_then_timing")
@@ -925,10 +933,10 @@ class GoalEvolveV2Tests(unittest.TestCase):
                 "dynamic_power_pw": 293_826_000_000.0,
                 "leakage_power_pw": 174_000_000.0,
             },
-            target_ratios={
-                "tns_abs_ns": 53.0 / 48.77,
-                "dynamic_power_pw": 250_000_000_000.0 / 293_826_000_000.0,
-                "leakage_power_pw": 80_000_000.0 / 174_000_000.0,
+            target_metrics={
+                "tns_abs_ns": 53.0,
+                "dynamic_power_pw": 250_000_000_000.0,
+                "leakage_power_pw": 80_000_000.0,
             },
         )
         parent_metrics = {
@@ -1645,15 +1653,16 @@ class GoalEvolveV2Tests(unittest.TestCase):
                 "design": "aes_cipher_top",
                 "state_root": "state",
                 "baseline_metrics": {"tns_abs_ns": 1.0},
-                "target_ratios": {"tns_abs_ns": 1.0},
+                "target_metrics": {"tns_abs_ns": 1.0},
                 "evaluator": "contest_openroad",
             })
             self.assertEqual(load_config(path).source_root, DEFAULT_OPENROAD_SEED)
             self.assertTrue(DEFAULT_OPENROAD_SEED.is_dir())
 
-    def test_portable_contest_profiles_resolve_only_project_assets(self) -> None:
+    def test_portable_design_profiles_resolve_only_project_assets(self) -> None:
         project_root = Path(__file__).resolve().parents[2]
-        expected_designs = {
+        expected_evolution_designs = {
+            "aes_cipher_top",
             "ariane",
             "jpeg_encoder",
             "mempool_group",
@@ -1662,11 +1671,16 @@ class GoalEvolveV2Tests(unittest.TestCase):
             "nvdla_m",
             "nvdla_p",
         }
-        profiles = sorted((project_root / "experiments" / "contest2026").glob("*.bootstrap.json"))
-        self.assertEqual({path.name.removesuffix(".bootstrap.json") for path in profiles}, expected_designs)
+        ready_designs = {"aes_cipher_top", "jpeg_encoder"}
+        profiles = sorted((project_root / "experiments").glob("*/evolve.json"))
+        self.assertEqual({load_config(path).design for path in profiles}, expected_evolution_designs)
         for profile in profiles:
             config = load_config(profile)
-            self.assertEqual(config.credential_env, DEFAULT_CREDENTIAL_ENV)
+            self.assertEqual(config.codex.credential_env, DEFAULT_CREDENTIAL_ENV)
+            self.assertEqual(config.codex.student.model, "gpt-5.6-terra")
+            self.assertEqual(config.codex.teacher.model, "gpt-5.6-terra")
+            self.assertEqual(config.state_root, project_root / "outputs" / "ae3" / config.design)
+            self.assertEqual(config.campaign_ready, config.design in ready_designs)
             self.assertTrue(config.source_root and config.source_root.is_dir())
             self.assertTrue((config.source_root / "CMakeLists.txt").is_file())
             benchmark = config.benchmark_root / config.design
@@ -1674,6 +1688,14 @@ class GoalEvolveV2Tests(unittest.TestCase):
             self.assertTrue((benchmark / f"{config.design}.v").is_file())
             self.assertTrue((benchmark / f"{config.design}.sdc").is_file())
             self.assertTrue((benchmark / "metrics.csv").is_file())
+
+        expected_baseline_designs = expected_evolution_designs - {"aes_cipher_top"}
+        baseline_profiles = sorted((project_root / "experiments").glob("*/baseline.json"))
+        self.assertEqual({load_config(path).design for path in baseline_profiles}, expected_baseline_designs)
+        for profile in baseline_profiles:
+            config = load_config(profile)
+            self.assertFalse(config.campaign_ready)
+            self.assertEqual(config.state_root, project_root / "outputs" / "baseline" / config.design)
 
     def test_baseline_builds_a_private_clone_of_the_shared_source_snapshot(self) -> None:
         source = inspect.getsource(Contest2026OpenROADEvaluator.evaluate_baseline)

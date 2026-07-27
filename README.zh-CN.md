@@ -48,30 +48,81 @@ AE-2 会重建 `artifact_evaluation/lineage/aes_cipher_top/r054_student1/source`
 
 ## AE-3：新鲜进化
 
-从 [config/credentials/goalevolve_codex.env.example](config/credentials/goalevolve_codex.env.example) 建立被忽略的 `config/credentials/goalevolve_codex.env`，并执行 `chmod 600 config/credentials/goalevolve_codex.env`。GoalEvolve 永远不读取 `~/.codex`，而是从这个项目文件创建隔离的 Teacher/Student home。提供的 AE-3 profile 使用 `gpt-5.6-terra` 和 `xhigh`。
+从 [config/credentials/goalevolve_codex.env.example](config/credentials/goalevolve_codex.env.example) 建立被忽略的 `config/credentials/goalevolve_codex.env`，并执行 `chmod 600 config/credentials/goalevolve_codex.env`。GoalEvolve 永远不读取 `~/.codex`，而是从这个项目文件创建隔离的 Teacher/Student home。所有 design 共用的模型和推理强度位于 `config/codex.json`，当前为 `gpt-5.6-terra` 与 `xhigh`。
 
 ## Design Profile
 
 项目现已携带全部八个 contest design 的输入：`aes_cipher_top`、`ariane`、`jpeg_encoder`、`mempool_group`、`nvdla_a`、`nvdla_c`、`nvdla_m`、`nvdla_p`。每个 design 的 `.def(.gz)`、Verilog、SDC 与官方初始 metrics 位于 `third_party/benchmarks/benchmarks/`；它们共享 `artifact_evaluation/lineage/openroad_power/p0/` 的 source-only OpenROAD p0 快照，并以全树内容 hash 标识。
 
-新 design 运行 campaign 前，必须先对该 design 的同一 source/flow 执行 baseline，并将测得 metrics 冻结到 evolution profile：
+所有 design 都使用相同的两份 profile：`experiments/<design>/baseline.json`
+测量 p0，`experiments/<design>/evolve.json` 启动多轮进化。新 design 必须先对同一
+source/flow 执行 baseline，并将测得 metrics 冻结到 evolution profile。首先在
+`third_party/benchmarks/benchmarks/<design>/` 放入 `<design>.def` 或
+`<design>.def.gz`、`<design>.v`、`<design>.sdc` 和 `metrics.csv`；所有新 design
+共用 `artifact_evaluation/lineage/openroad_power/p0/source` 的源码快照。
+
+从模板建立两个 profile：
+
+```bash
+mkdir -p experiments/my_design
+cp config/templates/design.baseline.example.json \
+  experiments/my_design/baseline.json
+cp config/templates/design.evolve.example.json \
+  experiments/my_design/evolve.json
+```
+
+将两个文件中的所有 `replace_design` 改为实际 design 名称。保持
+`campaign_ready: false`，baseline profile 中的 placeholder 指标可暂时保留，然后运行：
 
 ```bash
 PYTHONPATH=. python3 -m goalevolve.cli baseline \
-  --config experiments/contest2026/<design>.bootstrap.json \
-  --output outputs/baseline/<design>
+  --config experiments/my_design/baseline.json
 ```
 
-该命令在 `outputs/` 创建私有 build，不依赖外部 OpenROAD checkout 或预编译 binary。只有 baseline 对该源码快照和 flow 有效后，才能运行 `goalevolve run`。
+该命令在 `outputs/baseline/my_design/baseline.json` 产生实测结果，不依赖外部
+OpenROAD checkout 或预编译 binary。将其中的 `tns_abs_ns`、`dynamic_power_pw`、
+`leakage_power_pw` 写入 `experiments/my_design/evolve.json` 的
+`baseline_metrics`；再手工设定绝对 `target_metrics`，最后将 `campaign_ready`
+改为 `true`：
 
-先验证一轮真实 Teacher/Student：
+```json
+{
+  "design": "my_design",
+  "campaign_ready": true,
+  "baseline_evaluation_root": "../../outputs/baseline/my_design",
+  "baseline_metrics": {
+    "tns_abs_ns": 100.0,
+    "dynamic_power_pw": 300000000000.0,
+    "leakage_power_pw": 100000000.0
+  },
+  "target_metrics": {
+    "tns_abs_ns": 80.0,
+    "dynamic_power_pw": 270000000000.0,
+    "leakage_power_pw": 80000000.0
+  }
+}
+```
+
+上面的数值仅为示例。两个 map 的指标名必须完全一致；target 是手工设定的绝对 QoR
+门槛，不能填写比例，也不能混用不同 OpenROAD 源码、不同 flow 阶段或 pre-route 的
+结果。完成审阅后启动：
 
 ```bash
 PYTHONPATH=. python3 -m goalevolve.cli run \
-  --config experiments/aes_cipher_top/ae3_smoke.json --rounds 1
+  --config experiments/my_design/evolve.json --rounds 10
 ```
 
-正常四 Student 实验使用 `experiments/aes_cipher_top/evolve.json`。新鲜 campaign 只写入 `outputs/`；不得要求它精确复现 R54 数值。
+已审核目标的 AES 可直接启动：
+
+```bash
+PYTHONPATH=. python3 -m goalevolve.cli run \
+  --config experiments/aes_cipher_top/evolve.json --rounds 10
+```
+
+所有 `evolve.json` 都不显式设置 `state_root`，因此自动写入
+`outputs/ae3/<design>/`。同一命令再次执行会从最后一个已完成 round 续跑，并新增
+指定的 `--rounds` 数量。AES、JPEG 已可启动；其他 design 在完成自己的 p0 baseline
+前由 `campaign_ready: false` 阻止启动。完整流程见 [experiments/README.md](experiments/README.md)。新鲜 campaign 只写入 `outputs/`；不得要求它精确复现 R54 数值。
 
 ## 当前固定 AES artifact
 

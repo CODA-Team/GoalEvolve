@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +21,7 @@ from .agents.teacher import CodexTeacher, CodexTeacherConfig, HeuristicTeacher
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+CODEX_CONFIG_PATH = PROJECT_ROOT / "config" / "codex.json"
 # Public experiment profiles use these relocatable defaults.  A local machine
 # may override either one without editing a reviewed JSON artifact.
 DEFAULT_OPENROAD_SEED = Path(
@@ -34,11 +35,55 @@ DEFAULT_CREDENTIAL_ENV = PROJECT_ROOT / "config" / "credentials" / "goalevolve_c
 
 
 @dataclass(frozen=True)
+class CodexWorkerSettings:
+    model: str
+    reasoning_effort: str
+    retries: int
+    timeout_s: int
+    max_repair_attempts: int | None = None
+
+
+@dataclass(frozen=True)
+class CodexSettings:
+    student: CodexWorkerSettings
+    teacher: CodexWorkerSettings
+    credential_env: Path
+
+
+def load_codex_settings(path: Path = CODEX_CONFIG_PATH) -> CodexSettings:
+    """Load one project-wide, versioned Codex runtime policy."""
+    raw = json.loads(path.read_text(encoding="utf-8"))
+
+    def worker(name: str, *, needs_repairs: bool) -> CodexWorkerSettings:
+        values = dict(raw.get(name) or {})
+        required = ("model", "reasoning_effort", "retries", "timeout_s")
+        missing = [field for field in required if field not in values]
+        if needs_repairs and "max_repair_attempts" not in values:
+            missing.append("max_repair_attempts")
+        if missing:
+            raise ValueError(f"Codex configuration {name!r} lacks: {', '.join(missing)}")
+        return CodexWorkerSettings(
+            model=str(values["model"]),
+            reasoning_effort=str(values["reasoning_effort"]),
+            retries=int(values["retries"]),
+            timeout_s=int(values["timeout_s"]),
+            max_repair_attempts=int(values["max_repair_attempts"]) if needs_repairs else None,
+        )
+
+    credential_env = Path(str(raw.get("credential_env") or "credentials/goalevolve_codex.env"))
+    return CodexSettings(
+        student=worker("student", needs_repairs=True),
+        teacher=worker("teacher", needs_repairs=False),
+        credential_env=(path.parent / credential_env).resolve() if not credential_env.is_absolute() else credential_env,
+    )
+
+
+@dataclass(frozen=True)
 class ExperimentConfig:
     design: str
     state_root: Path
     baseline_metrics: dict[str, float]
-    target_ratios: dict[str, float]
+    target_metrics: dict[str, float]
     metric_weights: dict[str, float]
     hard_metrics: set[str]
     maximize_metrics: set[str]
@@ -64,17 +109,7 @@ class ExperimentConfig:
     benchmark_root: Path = DEFAULT_BENCHMARK_ROOT
     baseline_evaluation_root: Path | None = None
     build_jobs: int = 2
-    codex_model: str = "gpt-5.6-sol"
-    codex_reasoning_effort: str = "xhigh"
-    codex_retries: int = 3
-    codex_timeout_s: int = 3600
-    codex_max_repair_attempts: int = 4
-    codex_home: Path = PROJECT_ROOT / "outputs" / "codex_home"
-    credential_env: Path = DEFAULT_CREDENTIAL_ENV
-    teacher_model: str = "gpt-5.6-sol"
-    teacher_reasoning_effort: str = "xhigh"
-    teacher_retries: int = 3
-    teacher_timeout_s: int = 3600
+    codex: CodexSettings = field(default_factory=load_codex_settings)
     initial_parent_id: str | None = None
     initial_parent_source_root: Path | None = None
     initial_parent_metrics: dict[str, float] | None = None
@@ -84,6 +119,7 @@ class ExperimentConfig:
     initial_parent_artifacts: dict[str, str] | None = None
     max_campaign_rounds: int | None = None
     prefer_execution_champion: bool = False
+    campaign_ready: bool | None = None
 
 
 def _load_raw_config(path: Path) -> dict[str, Any]:
@@ -116,6 +152,7 @@ def load_config(path: Path) -> ExperimentConfig:
         candidate = Path(str(value)).expanduser()
         return candidate if candidate.is_absolute() else (base / candidate).resolve()
 
+    design = str(raw["design"])
     evaluator = str(raw.get("evaluator") or "mock")
     student_editor = str(raw.get("student_editor") or ("codex_student" if evaluator == "contest_openroad" else "noop_student"))
     teacher = str(raw.get("teacher") or ("codex_teacher" if evaluator == "contest_openroad" else "heuristic_teacher"))
@@ -123,10 +160,10 @@ def load_config(path: Path) -> ExperimentConfig:
     if evaluator == "contest_openroad" and source_root is None:
         source_root = DEFAULT_OPENROAD_SEED
     return ExperimentConfig(
-        design=str(raw["design"]),
-        state_root=optional_path(raw.get("state_root")) or (base / "state"),
+        design=design,
+        state_root=optional_path(raw.get("state_root")) or (PROJECT_ROOT / "outputs" / "ae3" / design),
         baseline_metrics={key: float(value) for key, value in dict(raw["baseline_metrics"]).items()},
-        target_ratios={key: float(value) for key, value in dict(raw["target_ratios"]).items()},
+        target_metrics={key: float(value) for key, value in dict(raw["target_metrics"]).items()},
         metric_weights={key: float(value) for key, value in dict(raw.get("metric_weights") or {}).items()},
         hard_metrics=set(raw.get("hard_metrics") or []),
         maximize_metrics=set(raw.get("maximize_metrics") or []),
@@ -152,17 +189,7 @@ def load_config(path: Path) -> ExperimentConfig:
         benchmark_root=optional_path(raw.get("benchmark_root")) or DEFAULT_BENCHMARK_ROOT,
         baseline_evaluation_root=optional_path(raw.get("baseline_evaluation_root")),
         build_jobs=int(raw.get("build_jobs", 2)),
-        codex_model=str(raw.get("codex_model") or "gpt-5.6-sol"),
-        codex_reasoning_effort=str(raw.get("codex_reasoning_effort") or "xhigh"),
-        codex_retries=int(raw.get("codex_retries", 3)),
-        codex_timeout_s=int(raw.get("codex_timeout_s", 3600)),
-        codex_max_repair_attempts=int(raw.get("codex_max_repair_attempts", 4)),
-        codex_home=optional_path(raw.get("codex_home")) or (PROJECT_ROOT / "outputs" / "codex_home"),
-        credential_env=optional_path(raw.get("credential_env")) or DEFAULT_CREDENTIAL_ENV,
-        teacher_model=str(raw.get("teacher_model") or raw.get("codex_model") or "gpt-5.6-sol"),
-        teacher_reasoning_effort=str(raw.get("teacher_reasoning_effort") or raw.get("codex_reasoning_effort") or "xhigh"),
-        teacher_retries=int(raw.get("teacher_retries", raw.get("codex_retries", 3))),
-        teacher_timeout_s=int(raw.get("teacher_timeout_s", raw.get("codex_timeout_s", 3600))),
+        codex=load_codex_settings(),
         initial_parent_id=str(raw.get("initial_parent_id") or "") or None,
         initial_parent_source_root=optional_path(raw.get("initial_parent_source_root")),
         initial_parent_metrics={key: float(value) for key, value in dict(raw.get("initial_parent_metrics") or {}).items()} or None,
@@ -176,6 +203,7 @@ def load_config(path: Path) -> ExperimentConfig:
         } or None,
         max_campaign_rounds=int(raw["max_campaign_rounds"]) if raw.get("max_campaign_rounds") is not None else None,
         prefer_execution_champion=bool(raw.get("prefer_execution_champion", False)),
+        campaign_ready=bool(raw["campaign_ready"]) if "campaign_ready" in raw else None,
     )
 
 
@@ -184,7 +212,7 @@ def build_runtime(config: ExperimentConfig) -> tuple[GoalContract, PluginRegistr
     contract = build_contract(
         design=config.design,
         baseline_metrics=config.baseline_metrics,
-        target_ratios=config.target_ratios,
+        target_metrics=config.target_metrics,
         weights=config.metric_weights,
         hard_metrics=config.hard_metrics,
         maximize_metrics=config.maximize_metrics,
@@ -204,17 +232,17 @@ def build_runtime(config: ExperimentConfig) -> tuple[GoalContract, PluginRegistr
     registry.register_evaluator(MockEvaluator())
     registry.register_student_editor(NoopStudentEditor())
     registry.register_teacher(HeuristicTeacher())
-    registry.register_teacher(CodexTeacher(CodexTeacherConfig(model=config.teacher_model, reasoning_effort=config.teacher_reasoning_effort, retries=config.teacher_retries, timeout_s=config.teacher_timeout_s, seed_home=config.codex_home, credential_env=config.credential_env)))
+    registry.register_teacher(CodexTeacher(CodexTeacherConfig(model=config.codex.teacher.model, reasoning_effort=config.codex.teacher.reasoning_effort, retries=config.codex.teacher.retries, timeout_s=config.codex.teacher.timeout_s, seed_home=config.state_root, credential_env=config.codex.credential_env)))
     registry.register_student_editor(
         CodexStudentEditor(
             CodexStudentConfig(
-                model=config.codex_model,
-                reasoning_effort=config.codex_reasoning_effort,
-                retries=config.codex_retries,
-                timeout_s=config.codex_timeout_s,
-                max_repair_attempts=config.codex_max_repair_attempts,
-                seed_home=config.codex_home,
-                credential_env=config.credential_env,
+                model=config.codex.student.model,
+                reasoning_effort=config.codex.student.reasoning_effort,
+                retries=config.codex.student.retries,
+                timeout_s=config.codex.student.timeout_s,
+                max_repair_attempts=int(config.codex.student.max_repair_attempts or 0),
+                seed_home=config.state_root,
+                credential_env=config.codex.credential_env,
                 allowed_patch_roots=config.allowed_patch_roots,
             )
         )

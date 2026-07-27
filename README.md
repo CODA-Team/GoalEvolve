@@ -31,7 +31,7 @@ GoalEvolve/
 │   ├── lineage/                 # Immutable OpenROAD source snapshots
 │   └── expected/                # Fixed QoR/evidence manifests and portable Tcl
 ├── experiments/                 # Reviewed design profiles and campaign examples
-├── config/                      # Schema, templates, and credential example
+├── config/                      # Schema, global Codex policy, templates, and credential example
 ├── third_party/                 # reference inputs and official checker
 ├── toolchain/                   # Release toolchain lock
 ├── paper/                       # Paper PDF
@@ -104,7 +104,7 @@ The release includes the material required for the fixed AES artifact:
 - `third_party/official_checker/`: the official log parser and 4/4 validity checker snapshot.
 - `artifact_evaluation/lineage/aes_cipher_top/r054_student1/source/`: the frozen OpenROAD source for the fixed replay.
 
-The repository also carries contest profiles for `aes_cipher_top`, `ariane`, `jpeg_encoder`, `mempool_group`, `nvdla_a`, `nvdla_c`, `nvdla_m`, and `nvdla_p`. Availability of a profile does not replace any license or access requirement for benchmark data on a separate deployment. See [experiments/contest2026/README.md](experiments/contest2026/README.md) before starting a new design.
+The repository also carries AE-3 profiles for `aes_cipher_top`, `ariane`, `jpeg_encoder`, `mempool_group`, `nvdla_a`, `nvdla_c`, `nvdla_m`, and `nvdla_p`. Availability of a profile does not replace any license or access requirement for benchmark data on a separate deployment. See [experiments/README.md](experiments/README.md) before starting a new design.
 
 ## Quick start: fixed artifact
 
@@ -164,38 +164,89 @@ chmod 600 config/credentials/goalevolve_codex.env
 
 Set the provider fields and API key in `config/credentials/goalevolve_codex.env`. Do not commit this file. GoalEvolve reads this project-local dotenv file, creates isolated Teacher/Student homes under `outputs/`, and does not inherit credentials from `~/.codex`.
 
-Verify that the Codex client is available, then run one real round:
+The shared Teacher/Student model, reasoning effort, retry, and timeout policy is versioned in [`config/codex.json`](config/codex.json). It applies to every design; API keys remain only in the ignored credential file.
+
+Verify that the Codex client is available, then start a normal multi-round AES
+campaign:
 
 ```bash
 command -v codex
-PYTHONPATH=. python3 -m goalevolve.cli run \
-  --config experiments/aes_cipher_top/ae3_smoke.json --rounds 1
-```
-
-For a normal AES campaign, use the four-Student profile:
-
-```bash
+cd /path/to/GoalEvolve
 PYTHONPATH=. python3 -m goalevolve.cli run \
   --config experiments/aes_cipher_top/evolve.json --rounds 10
 ```
 
-The profile controls source scope, build jobs, per-command timeout, model, reasoning effort, objective targets, and campaign state path. Inspect the JSON before changing the model, provider, source roots, or QoR contract. The supplied AE-3 profile uses `gpt-5.6-terra` with `xhigh` reasoning; this setting is a release profile value, not a claim that another model/provider will behave equivalently.
+The profile controls source scope, build jobs, per-command timeout, absolute objective targets, and campaign state path. Model and reasoning policy is shared by all designs through `config/codex.json`. `state_root` is optional; when omitted, a campaign writes to `outputs/ae3/<design>/`. The supplied global policy uses `gpt-5.6-terra` with `xhigh` reasoning; this setting is not a claim that another model/provider will behave equivalently.
+
+`run` is the only public command that starts a Teacher/Student evolution campaign. `baseline` measures a fixed p0 before preparing a new profile; `official-check` validates an existing post-flow result; `sfinal-observe` and `leaderboard` generate observer-only reports; `import-legacy` imports explicit metadata; and `smoke` is a mock-only test helper.
 
 ## Starting a different design
 
-First run a same-flow baseline for the selected bootstrap profile:
+Every design follows the same two-profile process. A new design needs a
+project-owned benchmark directory at
+`third_party/benchmarks/benchmarks/<design>/` containing `<design>.def` or
+`<design>.def.gz`, `<design>.v`, `<design>.sdc`, and `metrics.csv`, and uses
+the shared p0 source in `artifact_evaluation/lineage/openroad_power/p0/source`.
+
+Create the two profiles from the committed templates:
+
+```bash
+mkdir -p experiments/my_design
+cp config/templates/design.baseline.example.json \
+  experiments/my_design/baseline.json
+cp config/templates/design.evolve.example.json \
+  experiments/my_design/evolve.json
+```
+
+In both files, replace every `replace_design` with `my_design`. Leave
+`campaign_ready` as `false` and leave the placeholder metric values in place
+for the baseline command. Then measure p0:
 
 ```bash
 PYTHONPATH=. python3 -m goalevolve.cli baseline \
-  --config experiments/contest2026/jpeg_encoder.bootstrap.json \
-  --output outputs/baseline/jpeg_encoder
+  --config experiments/my_design/baseline.json
 ```
 
-This writes a private baseline measurement below `outputs/`. Copy the three measured decision metrics into a reviewed evolution profile, choose frozen target ratios, and give the new campaign a fresh `state_root`. Do not combine pre-route values, measurements from a different OpenROAD source, or another Tcl schedule with a full-flow campaign contract.
+This writes `outputs/baseline/my_design/baseline.json`. Copy the measured
+`tns_abs_ns`, `dynamic_power_pw`, and `leakage_power_pw` into
+`experiments/my_design/evolve.json` `baseline_metrics`, choose absolute
+`target_metrics`, and set `campaign_ready` to `true`:
 
-JPEG has completed this same-flow measurement and can be launched with
-`experiments/jpeg_encoder/evolve.json`. The other profiles intentionally stop
-at the baseline step until their own measured p0 record is frozen.
+```json
+{
+  "design": "my_design",
+  "campaign_ready": true,
+  "baseline_evaluation_root": "../../outputs/baseline/my_design",
+  "baseline_metrics": {
+    "tns_abs_ns": 100.0,
+    "dynamic_power_pw": 300000000000.0,
+    "leakage_power_pw": 100000000.0
+  },
+  "target_metrics": {
+    "tns_abs_ns": 80.0,
+    "dynamic_power_pw": 270000000000.0,
+    "leakage_power_pw": 80000000.0
+  }
+}
+```
+
+The values above are examples only. The baseline and target maps must contain
+the same metric names; targets are manual, absolute QoR limits, never ratios.
+Do not combine pre-route values, measurements from a different OpenROAD source,
+or another Tcl schedule with a full-flow campaign contract. Start the campaign
+after the review:
+
+```bash
+PYTHONPATH=. python3 -m goalevolve.cli run \
+  --config experiments/my_design/evolve.json --rounds 10
+```
+
+AES and JPEG have reviewed targets and are launchable. The other supplied
+designs intentionally stop at the baseline step until their own measured p0
+record is frozen. Every `evolve.json` omits `state_root`, so it automatically
+writes to `outputs/ae3/<design>/`; repeating a `run --rounds N` command resumes
+there and appends rounds. See [experiments/README.md](experiments/README.md)
+for the complete uniform workflow.
 
 ## Outputs and result inspection
 
@@ -241,4 +292,5 @@ AE-3 workflow completion is not evidence of a fixed QoR result. Conversely, a su
 - [Toolchain lock](toolchain/README.md): version-lock policy and artifact boundary.
 - [Implementation map](goalevolve/README.md): ownership of planning, execution, evaluation, and agents.
 - [Configuration guide](config/README.md): profiles, path resolution, and credentials policy.
+- `PYTHONPATH=. python3 -m goalevolve.cli --help`: public command reference. `run` is the only command that performs fresh source evolution; the other commands measure, validate, import, or report on artifacts.
 - [Paper](paper/GoalEvolve.pdf): framework, experimental setup, goal-attainment results, and AES case study.

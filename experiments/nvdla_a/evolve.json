@@ -1,0 +1,9 @@
+{
+  "extends": "../ae3_base.json",
+  "design": "nvdla_a",
+  "campaign_ready": false,
+  "baseline_evaluation_root": "../../outputs/baseline/nvdla_a",
+  "baseline_metrics": {"tns_abs_ns": 203.23, "dynamic_power_pw": 164679000000.0, "leakage_power_pw": 321000000.0},
+  "target_metrics": {"tns_abs_ns": 203.23, "dynamic_power_pw": 164679000000.0, "leakage_power_pw": 321000000.0},
+  "metric_weights": {"tns_abs_ns": 1.0, "dynamic_power_pw": 1.0, "leakage_power_pw": 1.0}
+}

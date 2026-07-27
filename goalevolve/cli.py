@@ -121,6 +121,11 @@ def _attach_initial_parent(*, engine: GoalEvolveEngine, config) -> None:
 
 def command_run(args: argparse.Namespace) -> int:
     engine, config = _engine(Path(args.config).resolve())
+    if config.evaluator == "contest_openroad" and config.campaign_ready is not True:
+        raise RuntimeError(
+            f"profile for {config.design!r} is not ready for evolution: measure the baseline, "
+            "set absolute target_metrics, then set campaign_ready=true"
+        )
     # initialize is idempotent and rejects a resume with a different frozen contract.
     engine.initialize(baseline_metrics=config.baseline_metrics)
     _attach_configured_baseline(engine=engine, config=config)
@@ -139,7 +144,7 @@ def command_smoke(args: argparse.Namespace) -> int:
         "design": "smoke_design",
         "state_root": str(root),
         "baseline_metrics": {"tns_abs_ns": 100.0, "leakage_power_pw": 200.0},
-        "target_ratios": {"tns_abs_ns": 0.20, "leakage_power_pw": 0.80},
+        "target_metrics": {"tns_abs_ns": 20.0, "leakage_power_pw": 160.0},
         "metric_weights": {"tns_abs_ns": 1.0, "leakage_power_pw": 0.5},
         "planner": "diverse_planner",
         "evaluator": "mock",
@@ -185,7 +190,9 @@ def command_baseline(args: argparse.Namespace) -> int:
     measure = getattr(evaluator, "evaluate_baseline", None)
     if not callable(measure):
         raise RuntimeError(f"evaluator {config.evaluator} does not implement baseline measurement")
-    output = Path(args.output).resolve() if args.output else config.state_root / "baseline_evaluation"
+    # Baseline profiles reserve state_root for the measurement itself, so the
+    # persisted record is always <state_root>/baseline.json by default.
+    output = Path(args.output).resolve() if args.output else config.state_root
     result = measure(contract=contract, output=output)
     atomic_json(output / "baseline.json", result)
     measured_metrics = {str(name): float(value) for name, value in dict(result.get("metrics") or {}).items() if isinstance(value, (int, float))}

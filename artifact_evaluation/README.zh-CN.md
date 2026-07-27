@@ -41,13 +41,9 @@ GOALEVOLVE_GOALS=true
 GOALEVOLVE_WSL_ACK=true
 ```
 
-该文件是唯一凭据来源。worker home 在 `outputs/` 中生成，绝不继承 `~/.codex`。提供的 profile 将 Teacher 和 Student 都设为 `gpt-5.6-terra`、`xhigh`。
+该文件是唯一凭据来源。worker home 在 `outputs/` 中生成，绝不继承 `~/.codex`。所有 design 共用的 `config/codex.json` 将 Teacher 和 Student 设为 `gpt-5.6-terra`、`xhigh`。
 
 ```bash
-# 一轮真实 Teacher/Student：连通性与完整工作流检查。
-PYTHONPATH=. python3 -m goalevolve.cli run \
-  --config experiments/aes_cipher_top/ae3_smoke.json --rounds 1
-
 # 正常四个独立 Student 的新鲜 campaign。
 PYTHONPATH=. python3 -m goalevolve.cli run \
   --config experiments/aes_cipher_top/evolve.json --rounds 10
@@ -71,6 +67,6 @@ AE-3 通过指 key、Codex 调用、源码编辑、build、flow、官方检查�
 |---|---|---|
 | AE-1 | 命令 JSON stdout | passed；所有发布路径和 Python/CMake 接口存在 |
 | AE-2 | `outputs/ae2/aes_r54_student1/report/ae2_report.json` | passed；使用重建的 `build/bin/openroad`，TNS `15.79 ns`、dynamic `335.9714B pW`、leakage `28.6M pW`、官方 4/4 pass |
-| AE-3 | `outputs/ae3/aes_cipher_top_smoke/rounds/round_001/round.json` | 完成一轮真实 Teacher/Student；候选激活并通过 4/4，随后因 QoR 未改善被 refute |
+| AE-3 | 本地历史 smoke 记录 | 完成一轮真实 Teacher/Student；候选激活并通过 4/4，随后因 QoR 未改善被 refute |
 
-本次 AE-3 smoke 的 token 记录在 `outputs/ae3/aes_cipher_top_smoke/rounds/round_001/token_usage.json`，total tokens 为 `1,682,734`。生成的 API home 和 `auth.json` 文件已被忽略，绝不能复制到 release evidence 中。
+该历史 smoke 的 total tokens 为 `1,682,734`。生成的 API home 和 `auth.json` 文件已被忽略，绝不能复制到 release evidence 中。

@@ -126,28 +126,43 @@ def build_contract(
     *,
     design: str,
     baseline_metrics: Mapping[str, float],
-    target_ratios: Mapping[str, float],
+    target_metrics: Mapping[str, float],
     weights: Mapping[str, float] | None = None,
     hard_metrics: set[str] | None = None,
     maximize_metrics: set[str] | None = None,
     source_fingerprint: Mapping[str, str] | None = None,
 ) -> GoalContract:
-    """Build once from a measured baseline and explicit target ratios."""
+    """Build once from a measured baseline and explicit absolute targets."""
     weights = weights or {}
     hard_metrics = hard_metrics or set()
     maximize_metrics = maximize_metrics or set()
+    decision_baselines = {
+        name for name in baseline_metrics
+        if name.lower() not in OBSERVER_ONLY_METRICS
+    }
+    decision_targets = {
+        name for name in target_metrics
+        if name.lower() not in OBSERVER_ONLY_METRICS
+    }
+    missing_targets = decision_baselines - decision_targets
+    unexpected_targets = decision_targets - decision_baselines
+    if missing_targets or unexpected_targets:
+        details: list[str] = []
+        if missing_targets:
+            details.append(f"missing target_metrics for {sorted(missing_targets)}")
+        if unexpected_targets:
+            details.append(f"target_metrics without a baseline for {sorted(unexpected_targets)}")
+        raise ValueError("goal metric names must match baseline_metrics: " + "; ".join(details))
     specs: list[MetricSpec] = []
     for name, baseline in baseline_metrics.items():
         if name.lower() in OBSERVER_ONLY_METRICS:
-            continue
-        if name not in target_ratios:
             continue
         minimize = name not in maximize_metrics
         specs.append(
             MetricSpec(
                 name=name,
                 baseline=float(baseline),
-                target=float(baseline) * float(target_ratios[name]),
+                target=float(target_metrics[name]),
                 weight=float(weights.get(name, 1.0)),
                 minimize=minimize,
                 hard=name in hard_metrics,

@@ -1,8 +1,39 @@
 {
-  "extends": "ae3_smoke.json",
-  "students": ["student_1", "student_2", "student_3", "student_4"],
-  "codex_retries": 3,
-  "teacher_retries": 3,
-  "codex_max_repair_attempts": 4,
-  "max_campaign_rounds": null
+  "extends": "../ae3_base.json",
+  "design": "aes_cipher_top",
+  "campaign_ready": true,
+  "source_root": "../../artifact_evaluation/lineage/aes_cipher_top/r054_student1/source",
+  "baseline_metrics": {
+    "tns_abs_ns": 8.89,
+    "dynamic_power_pw": 381931800000.0,
+    "leakage_power_pw": 68200000.0
+  },
+  "target_metrics": {
+    "tns_abs_ns": 12.0,
+    "dynamic_power_pw": 350000000000.0,
+    "leakage_power_pw": 35000000.0
+  },
+  "metric_weights": {
+    "tns_abs_ns": 1.0,
+    "dynamic_power_pw": 1.0,
+    "leakage_power_pw": 1.0
+  },
+  "promotion": "power_first_promotion",
+  "power_stage_tns_ceiling_ns": 60.0,
+  "power_stage_protected_rounds": 10,
+  "power_reclaim_phase": "early_forced_reclaim",
+  "power_reclaim_proportion_percent": 80.0,
+  "power_reclaim_max_moves": 0,
+  "initial_parent_id": "artifact:aes_r54_student1",
+  "initial_parent_source_root": "../../artifact_evaluation/lineage/aes_cipher_top/r054_student1/source",
+  "initial_parent_source_commit": "157457b7971ddd12e6b5a1bb63e008f28470f510ae5a2ec8795270f92762e52d",
+  "initial_parent_source_hash": "d826c042107b7498eb652c8f8c5e2c4fa71b2dda1dad9c49a4a1d28304e0f3bc",
+  "initial_parent_evaluation_mode": "power_then_timing",
+  "initial_parent_metrics": {
+    "tns_abs_ns": 15.79,
+    "dynamic_power_pw": 335971400000.0,
+    "leakage_power_pw": 28600000.0,
+    "drv_count": 0.0,
+    "runtime_s": 136.0
+  }
 }

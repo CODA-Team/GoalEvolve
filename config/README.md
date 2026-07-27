@@ -1,18 +1,14 @@
 # Configuration
 
-`schema/experiment.schema.json` describes reviewed top-level fields. `templates/` contains portable starting points; `experiments/` contains design-specific profiles. Relative paths are resolved relative to the profile itself. A profile may use a shallow `extends` field only for another profile in the same directory.
+`schema/experiment.schema.json` describes reviewed top-level fields. `templates/` contains portable starting points; `experiments/` contains design-specific profiles. Relative paths are resolved relative to the profile itself. A profile may use a shallow `extends` field for another reviewed profile in the experiment tree.
 
-For a new contest design, start from
-`templates/contest2026.design.bootstrap.example.json`, set the three
-same-flow baseline metrics, then run `goalevolve baseline`. The command builds
-the source-only p0 snapshot in a private output workspace and records a 4/4
-validated measurement. Freeze the measured metrics into the evolution profile
-before starting the campaign; do not copy metrics from a different OpenROAD
-source or flow stage.
+Each profile supplies `baseline_metrics` and absolute `target_metrics`; the runtime never derives a target by multiplying a ratio. `state_root` is optional and defaults to `outputs/ae3/<design>/`.
 
-Do not place keys, build outputs, or old runtime paths in this directory. The
-sole exception is the ignored `credentials/goalevolve_codex.env`, which is
-created locally from its committed `.example` template and is the canonical
-AE-3 credential source. Use environment variables `GOALEVOLVE_OPENROAD_SEED`
-and `GOALEVOLVE_BENCHMARK_ROOT` for machine-specific defaults, or explicit
-relative paths in a reviewed profile.
+For a new design, copy both `templates/design.baseline.example.json` and
+`templates/design.evolve.example.json` into `experiments/<design>/`. Run the
+baseline profile first; it writes `outputs/baseline/<design>/baseline.json`.
+Copy its measured decision metrics into `evolve.json`, set the absolute target
+metrics, and change `campaign_ready` to `true`. The evolve template begins
+locked deliberately, so placeholder values cannot launch a campaign.
+
+[`codex.json`](codex.json) is the committed, project-wide Teacher/Student policy: models, reasoning effort, retries, and timeouts. It applies to every design. Worker homes are created under each campaign `state_root`. The ignored `credentials/goalevolve_codex.env` is created locally from its committed `.example` template and is the canonical AE-3 credential source. It contains the API key and provider connection fields only. Use environment variables `GOALEVOLVE_OPENROAD_SEED` and `GOALEVOLVE_BENCHMARK_ROOT` for machine-specific defaults, or explicit relative paths in a reviewed profile.
