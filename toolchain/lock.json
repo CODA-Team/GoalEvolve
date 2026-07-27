@@ -4,10 +4,10 @@
     "seed_revision": "d231bd8f98d2a0adb8369002b2c1e7aa8e7877ed",
     "artifact_source": "artifact_evaluation/lineage/aes_cipher_top/r054_student1/source"
   },
-  "mlcad2026": {
+  "reference_flow": {
     "contest_scripts_revision": "bf8884df3b33d77d4f9cf60ed90f9d57de8997a4",
-    "official_checker": "third_party/mlcad2026_official",
-    "benchmark_root": "third_party/mlcad2026_benchmarks"
+    "official_checker": "third_party/official_checker",
+    "benchmark_root": "third_party/benchmarks"
   },
   "host_observed": {
     "python": "3.12.13",

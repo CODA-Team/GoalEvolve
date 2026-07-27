@@ -8,7 +8,7 @@
       "source_commit": "157457b7971ddd12e6b5a1bb63e008f28470f510ae5a2ec8795270f92762e52d",
       "source_root": "artifact_evaluation/lineage/aes_cipher_top/r054_student1/source",
       "expected_root": "artifact_evaluation/expected/aes_cipher_top/r054_student1",
-      "benchmark_root": "third_party/mlcad2026_benchmarks/benchmarks/aes_cipher_top",
+      "benchmark_root": "third_party/benchmarks/benchmarks/aes_cipher_top",
       "evaluation_stage": "post_route_global_route_estimate_parasitics",
       "tolerances": {
         "tns_abs_ns": 0.05,

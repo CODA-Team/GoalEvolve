@@ -24,7 +24,7 @@ from ..planning.timing_recovery import timing_recipe
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-OFFICIAL_ROOT = PROJECT_ROOT / "third_party" / "mlcad2026_official"
+OFFICIAL_ROOT = PROJECT_ROOT / "third_party" / "official_checker"
 OFFICIAL_CHECKER = OFFICIAL_ROOT / "validity_check" / "def_validity_check.py"
 OFFICIAL_EQUIV_CELLS = OFFICIAL_ROOT / "validity_check" / "asap7_equivalent_cell_list.csv"
 OFFICIAL_UTILS_TCL = OFFICIAL_ROOT / "validity_check" / "OpenROAD_utils.tcl"
@@ -406,7 +406,7 @@ def _checkpoint_metrics(log: Path) -> dict[str, object]:
         metrics: dict[str, float] = {}
         # Checkpoints use hidden STA queries serialized as custom lines.
         # Printing ``report_tns`` before the final report is invalid because
-        # the official MLCAD parser intentionally accepts the first matching
+        # the reference parser intentionally accepts the first matching
         # TNS/WNS in the log as the scored result.
         for metric_stage, name, value in _CHECKPOINT_VALUE.findall(block):
             if metric_stage == stage:
@@ -558,7 +558,7 @@ def official_four_check(*, pre_opt: Path, post_opt: Path, output_log: Path, poli
 
 
 class Contest2026OpenROADEvaluator:
-    """Built-in private-source OpenROAD evaluator using the official MLCAD 2026 checks."""
+    """Built-in private-source OpenROAD evaluator using the official reference checks."""
 
     name = "contest_openroad"
 

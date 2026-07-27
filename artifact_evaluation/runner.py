@@ -76,8 +76,8 @@ def ae1(*, artifact: dict[str, Any]) -> dict[str, Any]:
         "portable_tcl": expected_root / "evaluate.tcl",
         "expected_metrics": expected_root / "metrics.csv",
         "expected_evidence": expected_root / "evidence.json",
-        "official_checker": PROJECT_ROOT / "third_party/mlcad2026_official/validity_check/def_validity_check.py",
-        "official_parser": PROJECT_ROOT / "third_party/mlcad2026_official/evaluation/parse_log.py",
+        "official_checker": PROJECT_ROOT / "third_party/official_checker/validity_check/def_validity_check.py",
+        "official_parser": PROJECT_ROOT / "third_party/official_checker/evaluation/parse_log.py",
         "aes_benchmark": benchmark / "aes_cipher_top.def.gz",
         "asap7": benchmark.parents[1] / "asap7/setRC.tcl",
     }
@@ -162,7 +162,7 @@ def ae2(*, artifact: dict[str, Any], openroad: Path | None, jobs: int, rebuild: 
     environment = os.environ.copy()
     environment.update({
         "GOALEVOLVE_PROJECT_ROOT": str(PROJECT_ROOT),
-        "GOALEVOLVE_MLCAD_ROOT": str(benchmark_root.parents[1]),
+        "GOALEVOLVE_BENCHMARK_ROOT": str(benchmark_root.parents[1]),
         "GOALEVOLVE_AE_OUTPUT": str(output),
     })
     tcl = expected_root / "evaluate.tcl"
@@ -170,7 +170,7 @@ def ae2(*, artifact: dict[str, Any], openroad: Path | None, jobs: int, rebuild: 
     metrics_csv = output / "metrics.csv"
     if metrics_csv.exists():
         metrics_csv.unlink()
-    parser = PROJECT_ROOT / "third_party/mlcad2026_official/evaluation/parse_log.py"
+    parser = PROJECT_ROOT / "third_party/official_checker/evaluation/parse_log.py"
     parser_rc = _run([sys.executable, str(parser), "--csv", str(metrics_csv), str(output / "evaluation.log")], cwd=output, env=environment, log=report / "parse.log") if flow_rc == 0 else -1
     official_rc = -1
     official_detail = "flow_failed"

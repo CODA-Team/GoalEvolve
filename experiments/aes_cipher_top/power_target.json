@@ -2,8 +2,8 @@
   "design": "aes_cipher_top",
   "state_root": "../runtime/aes_campaign_power_target",
   "source_root": "../runtime/aes_campaign_finalflow_qor/parents/95cee93e21ccca6f71030e2de27274786616264cf5d02588e40d6f86ab7c7599/source",
-  "build_seed_root": "/home/haixuliu/MLCAD26/openroad-power",
-  "benchmark_root": "/home/haixuliu/MLCAD26/MLCAD26-Contest-Scripts-Benchmarks/benchmarks",
+  "build_seed_root": "/home/haixuliu/reference/openroad-power",
+  "benchmark_root": "/home/haixuliu/reference/legacy_benchmark_bundle/benchmarks",
   "baseline_metrics": {
     "tns_abs_ns": 8.89,
     "dynamic_power_pw": 381931800000.0,

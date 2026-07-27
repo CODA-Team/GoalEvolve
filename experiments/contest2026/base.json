@@ -1,6 +1,6 @@
 {
   "source_root": "../../artifact_evaluation/lineage/openroad_power/p0/source",
-  "benchmark_root": "../../third_party/mlcad2026_benchmarks/benchmarks",
+  "benchmark_root": "../../third_party/benchmarks/benchmarks",
   "planner": "diverse_planner",
   "evaluator": "contest_openroad",
   "student_editor": "codex_student",

@@ -1,4 +1,4 @@
-"""Observer-only implementation of the official MLCAD 2026 Sfinal score.
+"""Observer-only implementation of the official reference Sfinal score.
 
 Sfinal is retained for reporting against contest-oriented baselines.  It is
 never returned as an evolution metric, so contracts, EPD, Teacher prompts, and
@@ -14,7 +14,7 @@ from typing import Any, Mapping
 from ..core.io import atomic_json
 
 
-OFFICIAL_EQUIV_CELLS = Path(__file__).resolve().parents[2] / "third_party" / "mlcad2026_official" / "validity_check" / "asap7_equivalent_cell_list.csv"
+OFFICIAL_EQUIV_CELLS = Path(__file__).resolve().parents[2] / "third_party" / "official_checker" / "validity_check" / "asap7_equivalent_cell_list.csv"
 _WEIGHTS = {"tns": 30.0, "dynamic_power": 50.0, "leakage_power": 50.0, "slew": 0.001, "cap": 10.0, "fanout": 1.0, "tool_runtime": 1.0, "flow_runtime": 1.0, "displacement": 0.5, "max_overflow": 1.0, "total_overflow": 1.0}
 _FLOAT_KEYS = frozenset({"wns", "tns", "slew_over_sum", "cap_over_sum", "fanout_over_sum", "leakage_power", "total_power", "max_gr_overflow", "total_gr_overflow", "tool_runtime", "flow_runtime"})
 
@@ -113,7 +113,7 @@ def observe_sfinal(*, design: str, benchmark_dir: Path, candidate_dir: Path, out
         "schema_version": "goalevolve.v2.sfinal_observation.v1",
         "decision_role": "observer_only",
         "design": design,
-        "formula_source": "MLCAD 2026 official evaluation/compute_score.py",
+        "formula_source": "reference official evaluation/compute_score.py",
         "baseline_metrics": str(baseline_metrics),
         "candidate_metrics": str(candidate_metrics),
         "baseline_post_opt": str(benchmark_dir),

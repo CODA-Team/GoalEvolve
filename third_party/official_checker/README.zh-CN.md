@@ -1,4 +1,4 @@
-# MLCAD 2026 官方检查快照
+# reference 官方检查快照
 
 来源为官方 contest 工程中的 `evaluation` 目录。v2 固定 third-party 了最小必需集合：
 

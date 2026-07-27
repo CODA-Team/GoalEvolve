@@ -1,26 +1,26 @@
 {
   "artifacts": {
-    "candidate_source": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/workspace/source",
-    "checkpoint_metrics": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/contest_output/checkpoint_metrics.json",
-    "checkpoint_post_route_db": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/contest_output/post_route.odb",
-    "codex": "{\"initial\": {\"artifacts\": {\"codex_events\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/events.jsonl\", \"codex_invocation\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/invocation.json\", \"codex_last_message\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/last_message.md\", \"codex_prompt\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/prompt.md\", \"codex_session\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/codex_sessions/student_1_r054.json\", \"codex_stderr\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/stderr.log\", \"codex_token_usage\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/token_usage_attempt_01.json\"}, \"detail\": \"codex_turn_completed\", \"ok\": true, \"operation_id\": \"r054_student_1\", \"thread_id\": \"019f9bc9-9abb-73e0-b9c4-73815c7a48a9\"}, \"repairs\": []}",
-    "codex_events": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/events.jsonl",
-    "codex_invocation": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/invocation.json",
-    "codex_last_message": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/last_message.md",
-    "codex_prompt": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/prompt.md",
-    "codex_session": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/codex_sessions/student_1_r054.json",
-    "codex_stderr": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/stderr.log",
-    "codex_token_usage": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/token_usage_attempt_01.json",
-    "evaluation_log": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/contest_output/evaluation.log",
-    "metrics_csv": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/contest_output/metrics.csv",
-    "official_4of4_log": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/contest_output/official_4of4.log",
-    "power_timing_cell_tradeoff": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/contest_output/power_timing_cell_tradeoff.json",
+    "candidate_source": "/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/workspace/source",
+    "checkpoint_metrics": "/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/contest_output/checkpoint_metrics.json",
+    "checkpoint_post_route_db": "/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/contest_output/post_route.odb",
+    "codex": "{\"initial\": {\"artifacts\": {\"codex_events\": \"/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/events.jsonl\", \"codex_invocation\": \"/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/invocation.json\", \"codex_last_message\": \"/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/last_message.md\", \"codex_prompt\": \"/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/prompt.md\", \"codex_session\": \"/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/codex_sessions/student_1_r054.json\", \"codex_stderr\": \"/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/stderr.log\", \"codex_token_usage\": \"/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/token_usage_attempt_01.json\"}, \"detail\": \"codex_turn_completed\", \"ok\": true, \"operation_id\": \"r054_student_1\", \"thread_id\": \"019f9bc9-9abb-73e0-b9c4-73815c7a48a9\"}, \"repairs\": []}",
+    "codex_events": "/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/events.jsonl",
+    "codex_invocation": "/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/invocation.json",
+    "codex_last_message": "/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/last_message.md",
+    "codex_prompt": "/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/prompt.md",
+    "codex_session": "/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/codex_sessions/student_1_r054.json",
+    "codex_stderr": "/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/stderr.log",
+    "codex_token_usage": "/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/codex/token_usage_attempt_01.json",
+    "evaluation_log": "/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/contest_output/evaluation.log",
+    "metrics_csv": "/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/contest_output/metrics.csv",
+    "official_4of4_log": "/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/contest_output/official_4of4.log",
+    "power_timing_cell_tradeoff": "/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/contest_output/power_timing_cell_tradeoff.json",
     "preflight": "{\"changed_files\": [\"src/rsz/src/policy/RepairPowerPolicy.cc\", \"src/rsz/src/policy/RepairPowerPolicy.hh\"], \"ok\": true, \"require_cpp_patch\": true, \"violations\": []}",
-    "sfinal_observation": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/contest_output/sfinal_observation.json"
+    "sfinal_observation": "/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/contest_output/sfinal_observation.json"
   },
   "checks": [
     {
-      "detail": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/workspace/build_goalevolve/bin/openroad",
+      "detail": "/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/workspace/build_goalevolve/bin/openroad",
       "name": "build",
       "passed": true
     },

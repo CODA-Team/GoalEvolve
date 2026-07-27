@@ -246,7 +246,7 @@ def build_parser() -> argparse.ArgumentParser:
     legacy.add_argument("--manifest", required=True)
     legacy.add_argument("--state-root", required=True)
     legacy.set_defaults(func=command_import_legacy)
-    check = subs.add_parser("official-check", help="run the vendored MLCAD 2026 official 4/4 checker")
+    check = subs.add_parser("official-check", help="run the vendored reference official 4/4 checker")
     check.add_argument("--design", required=True)
     check.add_argument("--benchmark-root", required=True)
     check.add_argument("--post-opt", required=True)

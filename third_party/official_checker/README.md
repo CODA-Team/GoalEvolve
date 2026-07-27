@@ -1,6 +1,6 @@
-# Pinned MLCAD 2026 official checker snapshot
+# Pinned reference official checker snapshot
 
-Source: `MLCAD26-Contest-Scripts-Benchmarks/evaluation`.
+Source: `legacy_benchmark_bundle/evaluation`.
 
 The minimal v2 third-party set is:
 

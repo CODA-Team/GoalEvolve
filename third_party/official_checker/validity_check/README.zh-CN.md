@@ -1,4 +1,4 @@
-# 官方 MLCAD 2026 4/4 有效性检查器
+# 官方 reference 4/4 有效性检查器
 
 该目录是官方 contest validity checker 的快照。`def_validity_check.py` 编排四项检查；`flipflop_check.py` 实现 DFF/时钟检查；`OpenROAD_utils.tcl` 写出所需的 node/net 文件；CSV 列出允许移动的等价标准单元家族。
 

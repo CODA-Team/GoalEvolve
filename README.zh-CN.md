@@ -1,6 +1,6 @@
 # GoalEvolve：可复现的 OpenROAD 源码进化
 
-GoalEvolve 对 OpenROAD 中有边界的 C++ 机制进行进化；每个候选均经过 post-route contest flow 和 MLCAD 2026 官方 4/4 checker 验证，并保留晋升所需的证据。工程借鉴 MLBuf_MLCAD 对依赖、实现、实验和结果的清晰分离，但不是训练模型工程。
+GoalEvolve 对 OpenROAD 中有边界的 C++ 机制进行进化；每个候选均经过 post-route flow 和固定的 4/4 checker 验证，并保留晋升所需的证据。工程将依赖、实现、实验和结果清晰分离，但不是训练模型工程。
 
 ```text
 Goal contract → 诊断 → 检索 / Teacher 规划 → Student C++ 修改
@@ -52,7 +52,7 @@ AE-2 会重建 `artifact_evaluation/lineage/aes_cipher_top/r054_student1/source`
 
 ## Design Profile
 
-项目现已携带全部八个 contest design 的输入：`aes_cipher_top`、`ariane`、`jpeg_encoder`、`mempool_group`、`nvdla_a`、`nvdla_c`、`nvdla_m`、`nvdla_p`。每个 design 的 `.def(.gz)`、Verilog、SDC 与官方初始 metrics 位于 `third_party/mlcad2026_benchmarks/benchmarks/`；它们共享 `artifact_evaluation/lineage/openroad_power/p0/` 的 source-only OpenROAD p0 快照，并以全树内容 hash 标识。
+项目现已携带全部八个 contest design 的输入：`aes_cipher_top`、`ariane`、`jpeg_encoder`、`mempool_group`、`nvdla_a`、`nvdla_c`、`nvdla_m`、`nvdla_p`。每个 design 的 `.def(.gz)`、Verilog、SDC 与官方初始 metrics 位于 `third_party/benchmarks/benchmarks/`；它们共享 `artifact_evaluation/lineage/openroad_power/p0/` 的 source-only OpenROAD p0 快照，并以全树内容 hash 标识。
 
 新 design 运行 campaign 前，必须先对该 design 的同一 source/flow 执行 baseline，并将测得 metrics 冻结到 evolution profile：
 

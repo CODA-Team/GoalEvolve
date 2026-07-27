@@ -2,7 +2,7 @@
   "design": "aes_cipher_top",
   "state_root": "../../outputs/ae3/aes_cipher_top_smoke",
   "source_root": "../../artifact_evaluation/lineage/aes_cipher_top/r054_student1/source",
-  "benchmark_root": "../../third_party/mlcad2026_benchmarks/benchmarks",
+  "benchmark_root": "../../third_party/benchmarks/benchmarks",
   "baseline_metrics": {
     "tns_abs_ns": 8.89,
     "dynamic_power_pw": 381931800000.0,

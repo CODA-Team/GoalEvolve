@@ -9,7 +9,7 @@ import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
-from goalevolve.config import DEFAULT_CREDENTIAL_ENV, DEFAULT_OPENROAD_SEED, load_config
+from goalevolve.config import DEFAULT_BENCHMARK_ROOT, DEFAULT_CREDENTIAL_ENV, DEFAULT_OPENROAD_SEED, load_config
 from goalevolve.cli import _attach_configured_baseline
 from goalevolve.agents.codex_student import CodexStudentConfig, CodexStudentEditor, NoopStudentEditor, StudentEditReport
 from goalevolve.agents.codex_runtime import CodexRuntimeConfig, PersistentCodexRunner
@@ -1065,7 +1065,7 @@ class GoalEvolveV2Tests(unittest.TestCase):
     def test_contest_evaluator_writes_official_flow_tcl(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            benchmark_root = Path("/home/haixuliu/MLCAD26/MLCAD26-Contest-Scripts-Benchmarks/benchmarks")
+            benchmark_root = DEFAULT_BENCHMARK_ROOT
             evaluator = Contest2026OpenROADEvaluator(
                 Contest2026Config("aes_cipher_top", benchmark_root, DEFAULT_OPENROAD_SEED)
             )
@@ -2062,10 +2062,10 @@ class GoalEvolveV2Tests(unittest.TestCase):
             self.assertEqual(family["source_hooks"], ["src/rsz/src/RecoverPower.cc"])
 
     def test_official_four_of_four_checker_accepts_baseline(self) -> None:
-        benchmark_root = Path("/home/haixuliu/MLCAD26/MLCAD26-Contest-Scripts-Benchmarks/benchmarks")
+        benchmark_root = DEFAULT_BENCHMARK_ROOT
         baseline = benchmark_root / "aes_cipher_top"
         if not baseline.is_dir():
-            self.skipTest("MLCAD 2026 benchmark data is not installed")
+            self.skipTest("reference benchmark data is not installed")
         with tempfile.TemporaryDirectory() as temporary:
             passed, detail = official_four_check(
                 pre_opt=baseline,

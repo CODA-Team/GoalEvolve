@@ -1,4 +1,4 @@
-# Official MLCAD 2026 4/4 validity checker
+# Official reference 4/4 validity checker
 
 This directory is the official contest validity-check snapshot. `def_validity_check.py` orchestrates the four checks; `flipflop_check.py` implements the DFF/clock check; `OpenROAD_utils.tcl` writes the required node/net exports; and the CSV lists equivalent movable-cell families.
 

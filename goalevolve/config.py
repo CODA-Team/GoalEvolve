@@ -29,7 +29,7 @@ DEFAULT_OPENROAD_SEED = Path(
         PROJECT_ROOT / "artifact_evaluation" / "lineage" / "openroad_power" / "p0" / "source",
     )
 )
-DEFAULT_BENCHMARK_ROOT = Path(os.environ.get("GOALEVOLVE_BENCHMARK_ROOT", PROJECT_ROOT / "third_party" / "mlcad2026_benchmarks" / "benchmarks"))
+DEFAULT_BENCHMARK_ROOT = Path(os.environ.get("GOALEVOLVE_BENCHMARK_ROOT", PROJECT_ROOT / "third_party" / "benchmarks" / "benchmarks"))
 DEFAULT_CREDENTIAL_ENV = PROJECT_ROOT / "config" / "credentials" / "goalevolve_codex.env"
 
 

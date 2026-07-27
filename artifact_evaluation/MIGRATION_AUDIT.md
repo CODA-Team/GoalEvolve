@@ -1,7 +1,7 @@
 # GoalEvolve_v2 Migration Audit
 
-This audit compares `/home/haixuliu/MLCAD26/GoalEvolve_v2/goalevolve_v2`
-with the reorganized `goalevolve` package. It distinguishes module import
+This audit compares the original `GoalEvolve_v2` package with the reorganized
+`goalevolve` package. It distinguishes module import
 relocation from AST-level class and function-definition changes.
 
 Run the machine-checkable audit from the project root:

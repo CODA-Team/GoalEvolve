@@ -3,7 +3,7 @@
   "design": "replace_design",
   "state_root": "../../outputs/bootstrap/replace_design",
   "source_root": "../../artifact_evaluation/lineage/openroad_power/p0/source",
-  "benchmark_root": "../../third_party/mlcad2026_benchmarks/benchmarks",
+  "benchmark_root": "../../third_party/benchmarks/benchmarks",
   "baseline_metrics": {
     "tns_abs_ns": 1.0,
     "dynamic_power_pw": 1.0,

@@ -1,6 +1,6 @@
 # GoalEvolve: From Handcrafted Algorithm Priors to Goal-Driven Evolution of Physical Design Algorithms
 
-GoalEvolve evolves bounded C++ mechanisms in OpenROAD toward a frozen, post-route QoR target. Each source candidate is rebuilt in an isolated workspace, run through the same post-placement and global-routing flow, parsed with the MLCAD 2026 evaluator, and checked by the official 4/4 validity checker. The system records checkpoint evidence, source provenance, and promotion decisions so that a final result is traceable to a concrete implementation and full-flow measurement.
+An open-source goal-driven framework for evolving bounded OpenROAD C++ mechanisms under post-route QoR evaluation and validity checks.
 
 The accompanying paper is [GoalEvolve.pdf](paper/GoalEvolve.pdf): *GoalEvolve: From Handcrafted Algorithm Priors to Goal-Driven Evolution of Physical Design Algorithms*.
 
@@ -32,7 +32,7 @@ GoalEvolve/
 │   └── expected/                # Fixed QoR/evidence manifests and portable Tcl
 ├── experiments/                 # Reviewed design profiles and campaign examples
 ├── config/                      # Schema, templates, and credential example
-├── third_party/                 # MLCAD 2026 inputs and official checker
+├── third_party/                 # reference inputs and official checker
 ├── toolchain/                   # Release toolchain lock
 ├── paper/                       # Paper PDF
 ├── tests/                       # Unit, integration, and artifact tests
@@ -100,8 +100,8 @@ c++ --version
 
 The release includes the material required for the fixed AES artifact:
 
-- `third_party/mlcad2026_benchmarks/`: AES benchmark inputs and ASAP7 technology files used by AE-2.
-- `third_party/mlcad2026_official/`: the official log parser and 4/4 validity checker snapshot.
+- `third_party/benchmarks/`: AES benchmark inputs and ASAP7 technology files used by AE-2.
+- `third_party/official_checker/`: the official log parser and 4/4 validity checker snapshot.
 - `artifact_evaluation/lineage/aes_cipher_top/r054_student1/source/`: the frozen OpenROAD source for the fixed replay.
 
 The repository also carries contest profiles for `aes_cipher_top`, `ariane`, `jpeg_encoder`, `mempool_group`, `nvdla_a`, `nvdla_c`, `nvdla_m`, and `nvdla_p`. Availability of a profile does not replace any license or access requirement for benchmark data on a separate deployment. See [experiments/contest2026/README.md](experiments/contest2026/README.md) before starting a new design.
@@ -130,7 +130,7 @@ AE-2 performs the following steps:
 2. Runs the captured, path-portable `evaluate.tcl` from the original placed AES inputs.
 3. Executes repair, legalizes placement, performs global routing, and estimates routing parasitics.
 4. Parses post-route TNS, dynamic power, and leakage power.
-5. Runs the official MLCAD 2026 4/4 validity checker.
+5. Runs the official reference 4/4 validity checker.
 6. Compares the observed metrics to [the frozen manifest](artifact_evaluation/release_manifest.json) within the declared tolerances.
 
 The fixed claim is the `global_route + estimate_parasitics` endpoint, not detailed routing. Review [artifact_evaluation/README.md](artifact_evaluation/README.md) for the exact replay contract and report locations.

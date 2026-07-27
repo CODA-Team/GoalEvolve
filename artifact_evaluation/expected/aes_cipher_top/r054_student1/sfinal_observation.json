@@ -1,12 +1,12 @@
 {
-  "baseline_metrics": "/home/haixuliu/MLCAD26/MLCAD26-Contest-Scripts-Benchmarks/benchmarks/aes_cipher_top/metrics.csv",
-  "baseline_post_opt": "/home/haixuliu/MLCAD26/MLCAD26-Contest-Scripts-Benchmarks/benchmarks/aes_cipher_top",
-  "candidate_metrics": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/contest_output/metrics.csv",
-  "candidate_post_opt": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/contest_output",
+  "baseline_metrics": "/home/haixuliu/reference/legacy_benchmark_bundle/benchmarks/aes_cipher_top/metrics.csv",
+  "baseline_post_opt": "/home/haixuliu/reference/legacy_benchmark_bundle/benchmarks/aes_cipher_top",
+  "candidate_metrics": "/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/contest_output/metrics.csv",
+  "candidate_post_opt": "/home/haixuliu/reference/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_054/students/student_1/artifacts/contest_output",
   "decision_role": "observer_only",
   "design": "aes_cipher_top",
-  "equivalent_cells": "/home/haixuliu/MLCAD26/GoalEvolve_v2/vendor/mlcad2026_official/validity_check/asap7_equivalent_cell_list.csv",
-  "formula_source": "MLCAD 2026 official evaluation/compute_score.py",
+  "equivalent_cells": "/home/haixuliu/reference/GoalEvolve_v2/vendor/official_checker/validity_check/asap7_equivalent_cell_list.csv",
+  "formula_source": "reference official evaluation/compute_score.py",
   "schema_version": "goalevolve.v2.sfinal_observation.v1",
   "score": {
     "CAP_norm": 0.0,

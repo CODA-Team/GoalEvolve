@@ -1,7 +1,7 @@
 # Shared OpenROAD p0 source
 
-This is the immutable OpenROAD source baseline shared by every shipped MLCAD
-2026 design profile. It is a source-only snapshot: `.git`, `build`, and
+This is the immutable OpenROAD source baseline shared by every shipped design
+profile. It is a source-only snapshot: `.git`, `build`, and
 `build_power` are deliberately absent. GoalEvolve creates private build trees
 under each campaign output, so a design profile is reproducible without
 depending on an external OpenROAD checkout or a prebuilt binary.
@@ -21,4 +21,4 @@ ownership, permissions, and timestamps.
 
 The source is shared because the evolved program is OpenROAD itself; design
 specific inputs belong under
-`third_party/mlcad2026_benchmarks/benchmarks/<design>/`.
+`third_party/benchmarks/benchmarks/<design>/`.
