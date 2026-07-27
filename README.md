@@ -21,21 +21,22 @@ Frozen QoR contract
 ## Repository layout
 
 ```text
-goalevolve/                 GoalEvolve Python implementation and CLI
-  agents/                   Teacher/Student Codex workers
-  planning/                 diagnosis, retrieval, and evidence memory
-  execution/                isolated workspaces and campaign engine
-  evaluation/               Tcl generation, QoR parsing, 4/4 checks
-artifact_evaluation/        deterministic artifact-evaluation entry points
-  lineage/                  immutable OpenROAD source snapshots
-  expected/                 fixed QoR/evidence manifests and portable Tcl
-experiments/                reviewed design profiles and campaign examples
-config/                     configuration schema, templates, credentials example
-third_party/                MLCAD 2026 benchmark inputs and official checker
-toolchain/                  release toolchain lock
-paper/                      paper PDF
-tests/                      unit, integration, and artifact tests
-outputs/                    ignored builds, flows, Codex sessions, and campaigns
+GoalEvolve/
+├── goalevolve/                 # GoalEvolve Python implementation and CLI
+│   ├── agents/                  # Teacher/Student Codex workers
+│   ├── planning/                # Diagnosis, retrieval, and evidence memory
+│   ├── execution/               # Isolated workspaces and campaign engine
+│   └── evaluation/              # Tcl generation, QoR parsing, and 4/4 checks
+├── artifact_evaluation/         # Deterministic artifact-evaluation entry points
+│   ├── lineage/                 # Immutable OpenROAD source snapshots
+│   └── expected/                # Fixed QoR/evidence manifests and portable Tcl
+├── experiments/                 # Reviewed design profiles and campaign examples
+├── config/                      # Schema, templates, and credential example
+├── third_party/                 # MLCAD 2026 inputs and official checker
+├── toolchain/                   # Release toolchain lock
+├── paper/                       # Paper PDF
+├── tests/                       # Unit, integration, and artifact tests
+└── outputs/                     # Ignored builds, flows, Codex sessions, and campaigns
 ```
 
 `goalevolve/cli.py` is the public command implementation. `artifact_evaluation/lineage/` is immutable input to fixed replay; fresh Students never edit it in place. All generated content belongs under `outputs/`.
