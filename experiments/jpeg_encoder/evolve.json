@@ -1,0 +1,29 @@
+{
+  "extends": "../contest2026/base.json",
+  "design": "jpeg_encoder",
+  "state_root": "../../outputs/ae3/jpeg_encoder",
+  "baseline_evaluation_root": "../../outputs/baseline/jpeg_encoder",
+  "baseline_metrics": {
+    "tns_abs_ns": 70.08,
+    "dynamic_power_pw": 278839000000.0,
+    "leakage_power_pw": 161000000.0
+  },
+  "target_ratios": {
+    "tns_abs_ns": 0.7562785388127854,
+    "dynamic_power_pw": 0.8965797467354264,
+    "leakage_power_pw": 0.4968944099378882
+  },
+  "metric_weights": {
+    "tns_abs_ns": 1.0,
+    "dynamic_power_pw": 1.0,
+    "leakage_power_pw": 1.0
+  },
+  "promotion": "power_first_promotion",
+  "power_stage_tns_ceiling_ns": 200.0,
+  "power_stage_protected_rounds": 10,
+  "power_reclaim_phase": "early_forced_reclaim",
+  "power_reclaim_proportion_percent": 80.0,
+  "power_reclaim_max_moves": 0,
+  "prefer_execution_champion": true,
+  "max_campaign_rounds": 31
+}

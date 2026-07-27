@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GoalEvolve experiment configuration",
+  "type": "object",
+  "required": ["design", "baseline_metrics", "target_ratios", "evaluator", "planner", "promotion"],
+  "properties": {
+    "design": {"type": "string", "minLength": 1},
+    "state_root": {"type": "string"},
+    "source_root": {"type": "string"},
+    "build_seed_root": {"type": "string"},
+    "benchmark_root": {"type": "string"},
+    "credential_env": {"type": "string"},
+    "baseline_metrics": {"type": "object", "additionalProperties": {"type": "number"}},
+    "target_ratios": {"type": "object", "additionalProperties": {"type": "number"}},
+    "planner": {"enum": ["diverse_planner", "round_robin"]},
+    "evaluator": {"enum": ["contest_openroad", "mock"]},
+    "student_editor": {"enum": ["codex_student", "noop_student"]},
+    "teacher": {"enum": ["codex_teacher", "heuristic_teacher"]},
+    "promotion": {"enum": ["strict_evidence", "power_first_promotion"]},
+    "codex_model": {"type": "string"},
+    "teacher_model": {"type": "string"}
+  }
+}

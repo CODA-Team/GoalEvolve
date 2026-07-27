@@ -1,0 +1,26 @@
+{
+  "schema_version": "goalevolve.openroad-source-snapshot.v1",
+  "snapshot_id": "openroad_power:p0",
+  "purpose": "shared immutable OpenROAD p0 source for all shipped contest-design campaigns",
+  "source_origin": "/home/haixuliu/MLCAD26/openroad-power",
+  "source_git_commit": "d231bd8f98d2a0adb8369002b2c1e7aa8e7877ed",
+  "source_worktree_clean": false,
+  "source_worktree_note": "The origin had local source changes when captured. This release identifies the actual snapshot by content_sha256, not by the Git commit alone.",
+  "capture_excludes": [
+    ".git",
+    "build",
+    "build_power",
+    "__pycache__"
+  ],
+  "content_digest_algorithm": "sha256 over sorted D:path, F:path:size:content, and L:path:target records; ownership, mode, and timestamps excluded",
+  "content_sha256": "5c46197cd1c6c4fe65afa29d2befa7a542028f30d1e99288443d2cae49d2c4eb",
+  "regular_file_count": 11935,
+  "symlink_count": 372,
+  "directory_count": 682,
+  "verified_no_external_symlinks": true,
+  "allowed_patch_roots": [
+    "src/rsz",
+    "src/rmp",
+    "src/grt"
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "activation_signals": [
+    "repair_power_pure_vt_halo_examined"
+  ],
+  "allowed_patch_paths": [
+    "src/rsz/src/policy/RepairPowerPolicy.cc",
+    "src/rsz/src/policy/RepairPowerPolicy.hh"
+  ],
+  "claim": "At the existing early_forced_reclaim candidate-admission boundary, reuse only the already constructed union of the validated one-hop fanout and one-hop fanin halo sets to reject an otherwise legal pure kPowerVtSwap whose target instance belongs to that union. Apply no new traversal, path selection, or halo expansion. Preserve the direct critical-path exclusion, compound-only 6250 reserve and existing compound halos, pure-VT candidate generation and ordering, maximum pure-VT quota, size-down and buffer behavior, adaptive windows, electrical and timing guards, journals, rollback, phase budgets, command proportion, Tcl behavior, repair_timing implementation, and the controller-owned mt1_deep recipe.",
+  "conclusive_nonactivation_patterns": [],
+  "evaluation_mode": "power_then_timing",
+  "expected_signals": [
+    "repair_power_pure_vt_halo_examined",
+    "repair_power_pure_vt_halo_excluded"
+  ],
+  "hypothesis_id": "r54_student_1_timing_recovery_pure_vt_critical_halo",
+  "mechanism_family": "timing_recovery_pure_vt_critical_halo",
+  "novelty_key": "timing_recovery_pure_vt_critical_halo:src/rsz/src/policy/RepairPowerPolicy.cc|src/rsz/src/policy/RepairPowerPolicy.hh",
+  "retrieval_ids": [
+    "timing_recovery_pure_vt_critical_halo"
+  ],
+  "scope_evidence": [
+    "scope_confidence:verified_hook",
+    "metric:repair_power_guarded_moves",
+    "metric:repair_power_retained_gain",
+    "metric:repair_power_timing_rejected",
+    "metric:repair_power_timing_retained",
+    "symbol:OptimizationPolicy",
+    "symbol:envSet",
+    "symbol:for",
+    "symbol:if",
+    "symbol:positiveOrDefault",
+    "symbol:readBoolEnv",
+    "symbol:readDoubleEnv",
+    "symbol:slackBonus",
+    "symbol:switch",
+    "symbol:tnsWorsenedBeyond",
+    "symbol:while",
+    "teacher_falsification:Falsify if repair_power_pure_vt_halo_examined is not positive in a complete run, if no otherwise legal pure-VT candidate is excluded before journal mutation, if the implementation changes behavior outside the bounded pure kPowerVtSwap admission decision, or if the full official post-route result fails to achieve final TNS strictly below both the fresh exact-recipe mt1_deep no-diff baseline and 16.13 ns and normalized three-metric distance strictly below both that baseline and 0.1548931383577052 while maintaining dynamic power at or below 350000000000 pW, leakage power at or below 35000000 pW, post_repair_power TNS at or below 60.0 ns, zero DRV, integrity, complete required telemetry, and official 4/4 success."
+  ],
+  "source_hooks": [
+    "src/rsz/src/policy/RepairPowerPolicy.cc",
+    "src/rsz/src/policy/RepairPowerPolicy.hh"
+  ],
+  "timing_recipe_id": "mt1_deep"
+}

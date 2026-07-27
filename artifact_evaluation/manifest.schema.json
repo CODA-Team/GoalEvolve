@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GoalEvolve release artifact manifest",
+  "type": "object",
+  "required": ["schema", "artifacts"],
+  "properties": {
+    "schema": {"const": "goalevolve.release-manifest.v1"},
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["design", "parent_id", "source_hash", "source_root", "expected_root", "benchmark_root", "tolerances"]
+      }
+    }
+  }
+}

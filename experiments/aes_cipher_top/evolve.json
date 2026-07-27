@@ -1,0 +1,8 @@
+{
+  "extends": "ae3_smoke.json",
+  "students": ["student_1", "student_2", "student_3", "student_4"],
+  "codex_retries": 3,
+  "teacher_retries": 3,
+  "codex_max_repair_attempts": 4,
+  "max_campaign_rounds": null
+}

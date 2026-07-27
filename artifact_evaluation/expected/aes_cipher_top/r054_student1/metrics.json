@@ -1,0 +1,17 @@
+{
+  "decision_metrics": {
+    "dynamic_power_pw": 335971400000.0,
+    "leakage_power_pw": 28600000.0,
+    "tns_abs_ns": 15.79
+  },
+  "observer_metrics": {
+    "runtime_s": 136.0,
+    "sfinal": 14.035676144452337,
+    "sppa": 38.17754411681477
+  },
+  "quality_gates": {
+    "drv_count": 0.0,
+    "official_4of4": true
+  },
+  "stage": "post_route_global_route_estimate_parasitics"
+}

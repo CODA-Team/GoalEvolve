@@ -1,0 +1,2 @@
+design,placement_legal,total_insts,wns,tns,time_unit,slew_over_sum,slew_over_count,cap_over_sum,cap_over_count,cap_unit,fanout_over_sum,fanout_over_count,leakage_power,total_power,power_unit,max_gr_overflow,total_gr_overflow,legal_fail_summary,tool_runtime,flow_runtime
+ariane,1,210455,-0.9413,-7568.43,ns,49.060000000000436,1508,0.0,0,pF,0.0,0,17900000000.0,658000000000.0,pw,0.0,0.0,DPL-0005: Overlap check failed=22; DPL-0006: Site aligned check failed=170; DPL-0011: Padding check failed=22; DPL-0033: detailed placement checks failed,687.0,65.0

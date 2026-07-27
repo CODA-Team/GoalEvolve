@@ -1,0 +1,227 @@
+"""Artifact-evaluation entry point.
+
+AE-1 checks that a release is complete and runnable on the current machine.
+AE-2 rebuilds and replays a *fixed* released source artifact.  It deliberately
+does not import Teacher, Student, retrieval, or any API credential.  Fresh,
+non-deterministic evolution remains the separate AE-3 workflow.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+MANIFEST_PATH = PROJECT_ROOT / "artifact_evaluation" / "release_manifest.json"
+SHIPPED_CONTEST_DESIGNS = (
+    "aes_cipher_top",
+    "ariane",
+    "jpeg_encoder",
+    "mempool_group",
+    "nvdla_a",
+    "nvdla_c",
+    "nvdla_m",
+    "nvdla_p",
+)
+
+
+def _json(path: Path) -> dict[str, Any]:
+    return dict(json.loads(path.read_text(encoding="utf-8")))
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _artifact(name: str) -> dict[str, Any]:
+    manifest = _json(MANIFEST_PATH)
+    artifacts = dict(manifest.get("artifacts") or {})
+    if name not in artifacts:
+        raise SystemExit(f"unknown artifact {name!r}; available: {', '.join(sorted(artifacts))}")
+    result = dict(artifacts[name])
+    result["artifact_id"] = name
+    return result
+
+
+def _path(relative: str) -> Path:
+    return (PROJECT_ROOT / relative).resolve()
+
+
+def _run(command: list[str], *, cwd: Path, env: dict[str, str], log: Path) -> int:
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with log.open("w", encoding="utf-8") as stream:
+        stream.write("$ " + " ".join(command) + "\n")
+        process = subprocess.run(command, cwd=cwd, env=env, stdout=stream, stderr=subprocess.STDOUT, check=False)
+    return process.returncode
+
+
+def ae1(*, artifact: dict[str, Any]) -> dict[str, Any]:
+    expected_root = _path(str(artifact["expected_root"]))
+    source = _path(str(artifact["source_root"]))
+    benchmark = _path(str(artifact["benchmark_root"]))
+    required = {
+        "release_manifest": MANIFEST_PATH,
+        "frozen_source": source,
+        "portable_tcl": expected_root / "evaluate.tcl",
+        "expected_metrics": expected_root / "metrics.csv",
+        "expected_evidence": expected_root / "evidence.json",
+        "official_checker": PROJECT_ROOT / "third_party/mlcad2026_official/validity_check/def_validity_check.py",
+        "official_parser": PROJECT_ROOT / "third_party/mlcad2026_official/evaluation/parse_log.py",
+        "aes_benchmark": benchmark / "aes_cipher_top.def.gz",
+        "asap7": benchmark.parents[1] / "asap7/setRC.tcl",
+    }
+    checks = {name: path.is_file() or path.is_dir() for name, path in required.items()}
+    contest_root = benchmark.parent
+    for design in SHIPPED_CONTEST_DESIGNS:
+        design_root = contest_root / design
+        checks[f"benchmark_{design}"] = (
+            ((design_root / f"{design}.def.gz").is_file() or (design_root / f"{design}.def").is_file())
+            and (design_root / f"{design}.v").is_file()
+            and (design_root / f"{design}.sdc").is_file()
+            and (design_root / "metrics.csv").is_file()
+        )
+    p0_manifest = PROJECT_ROOT / "artifact_evaluation/lineage/openroad_power/p0/source_manifest.json"
+    checks["shared_openroad_p0_manifest"] = p0_manifest.is_file()
+    if checks["shared_openroad_p0_manifest"]:
+        from artifact_evaluation.verify_openroad_snapshot import snapshot_metadata
+
+        manifest = _json(p0_manifest)
+        observed = snapshot_metadata(p0_manifest.parent / "source")
+        checks["shared_openroad_p0"] = all(
+            observed[name] == manifest.get(name)
+            for name in (
+                "content_sha256",
+                "regular_file_count",
+                "symlink_count",
+                "directory_count",
+                "verified_no_external_symlinks",
+            )
+        )
+    else:
+        checks["shared_openroad_p0"] = False
+    tools = {name: shutil.which(name) is not None for name in ("cmake", "python3")}
+    # A release need not ship a prebuilt binary: AE-2 builds the frozen source
+    # when requested.  A PATH OpenROAD is reported for convenience only.
+    tools["openroad_on_path"] = shutil.which("openroad") is not None
+    return {
+        "schema": "goalevolve.artifact-ae1.v1",
+        "artifact_id": artifact["artifact_id"],
+        "passed": all(checks.values()) and tools["cmake"] and tools["python3"],
+        "paths": {name: str(path) for name, path in required.items()},
+        "checks": checks,
+        "tools": tools,
+        "portable_tcl_sha256": _sha256(expected_root / "evaluate.tcl") if checks["portable_tcl"] else None,
+    }
+
+
+def _build_openroad(*, source: Path, build: Path, jobs: int, report: Path) -> Path:
+    # OpenROAD's top-level CMake install layout puts the executable in
+    # ``bin/openroad``.  Keep this path explicit: AE-2 must validate the
+    # binary just built from the frozen artifact, rather than falling back to
+    # a binary inherited from another campaign.
+    binary = build / "bin" / "openroad"
+    if binary.is_file():
+        return binary
+    configure = ["cmake", "-S", str(source), "-B", str(build), "-DCMAKE_BUILD_TYPE=Release"]
+    if _run(configure, cwd=PROJECT_ROOT, env=os.environ.copy(), log=report / "configure.log") != 0:
+        raise RuntimeError(f"CMake configure failed; see {report / 'configure.log'}")
+    build_command = ["cmake", "--build", str(build), "--target", "openroad", "-j", str(jobs)]
+    if _run(build_command, cwd=PROJECT_ROOT, env=os.environ.copy(), log=report / "build.log") != 0:
+        raise RuntimeError(f"OpenROAD build failed; see {report / 'build.log'}")
+    if not binary.is_file():
+        raise RuntimeError(f"build completed without expected binary {binary}")
+    return binary
+
+
+def ae2(*, artifact: dict[str, Any], openroad: Path | None, jobs: int, rebuild: bool) -> dict[str, Any]:
+    """Build/replay one fixed source artifact and compare its official evidence."""
+    source = _path(str(artifact["source_root"]))
+    expected_root = _path(str(artifact["expected_root"]))
+    benchmark_root = _path(str(artifact["benchmark_root"]))
+    output = PROJECT_ROOT / "outputs" / "ae2" / str(artifact["artifact_id"]) / "contest_output"
+    report = output.parent / "report"
+    output.mkdir(parents=True, exist_ok=True)
+    report.mkdir(parents=True, exist_ok=True)
+    build_dir = output.parent / "build"
+    if openroad is None:
+        openroad = _build_openroad(source=source, build=build_dir, jobs=jobs, report=report) if rebuild else build_dir / "bin" / "openroad"
+    openroad = openroad.resolve()
+    if not openroad.is_file():
+        raise RuntimeError("no OpenROAD executable: use --rebuild or pass --openroad /path/to/openroad")
+    environment = os.environ.copy()
+    environment.update({
+        "GOALEVOLVE_PROJECT_ROOT": str(PROJECT_ROOT),
+        "GOALEVOLVE_MLCAD_ROOT": str(benchmark_root.parents[1]),
+        "GOALEVOLVE_AE_OUTPUT": str(output),
+    })
+    tcl = expected_root / "evaluate.tcl"
+    flow_rc = _run([str(openroad), "-exit", str(tcl)], cwd=output, env=environment, log=output / "evaluation.log")
+    metrics_csv = output / "metrics.csv"
+    if metrics_csv.exists():
+        metrics_csv.unlink()
+    parser = PROJECT_ROOT / "third_party/mlcad2026_official/evaluation/parse_log.py"
+    parser_rc = _run([sys.executable, str(parser), "--csv", str(metrics_csv), str(output / "evaluation.log")], cwd=output, env=environment, log=report / "parse.log") if flow_rc == 0 else -1
+    official_rc = -1
+    official_detail = "flow_failed"
+    if flow_rc == 0 and parser_rc == 0:
+        from goalevolve.evaluation.contest2026 import official_four_check
+        from goalevolve.execution.execution import ExecutionPolicy
+        passed, official_detail = official_four_check(pre_opt=benchmark_root, post_opt=output, output_log=output / "official_4of4.log", policy=ExecutionPolicy(timeout_s=3600, retries=1))
+        official_rc = 0 if passed else 1
+    expected = dict(_json(expected_root / "candidate.json").get("metrics") or {})
+    observed: dict[str, Any] = {}
+    if metrics_csv.is_file():
+        from goalevolve.evaluation.contest2026 import _read_metrics
+        observed = _read_metrics(metrics_csv)
+    tolerances = dict(artifact.get("tolerances") or {})
+    comparisons: dict[str, dict[str, Any]] = {}
+    for metric in ("tns_abs_ns", "dynamic_power_pw", "leakage_power_pw"):
+        actual, reference = observed.get(metric), expected.get(metric)
+        tolerance = float(tolerances.get(metric, 0.0))
+        passed = actual is not None and reference is not None and abs(float(actual) - float(reference)) <= tolerance
+        comparisons[metric] = {"expected": reference, "observed": actual, "absolute_tolerance": tolerance, "passed": passed}
+    result = {
+        "schema": "goalevolve.artifact-ae2.v1",
+        "artifact_id": artifact["artifact_id"],
+        "source": str(source),
+        "source_hash": artifact["source_hash"],
+        "openroad": str(openroad),
+        "portable_tcl_sha256": _sha256(tcl),
+        "flow_returncode": flow_rc,
+        "parser_returncode": parser_rc,
+        "official_check_returncode": official_rc,
+        "official_check_detail": official_detail,
+        "comparisons": comparisons,
+    }
+    result["passed"] = flow_rc == 0 and parser_rc == 0 and official_rc == 0 and all(row["passed"] for row in comparisons.values())
+    (report / "ae2_report.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return result
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="GoalEvolve artifact evaluation")
+    parser.add_argument("mode", choices=("ae1", "ae2"))
+    parser.add_argument("--artifact", default="aes_r54_student1")
+    parser.add_argument("--openroad", type=Path)
+    parser.add_argument("--rebuild", action="store_true", help="configure and build the frozen AE-2 source before replay")
+    parser.add_argument("--jobs", type=int, default=2)
+    args = parser.parse_args()
+    artifact = _artifact(args.artifact)
+    result = ae1(artifact=artifact) if args.mode == "ae1" else ae2(artifact=artifact, openroad=args.openroad, jobs=args.jobs, rebuild=args.rebuild)
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0 if bool(result["passed"]) else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

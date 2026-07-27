@@ -1,0 +1,20 @@
+{
+  "schema": "goalevolve.release-manifest.v1",
+  "artifacts": {
+    "aes_r54_student1": {
+      "design": "aes_cipher_top",
+      "parent_id": "round_054:student_1",
+      "source_hash": "d826c042107b7498eb652c8f8c5e2c4fa71b2dda1dad9c49a4a1d28304e0f3bc",
+      "source_commit": "157457b7971ddd12e6b5a1bb63e008f28470f510ae5a2ec8795270f92762e52d",
+      "source_root": "artifact_evaluation/lineage/aes_cipher_top/r054_student1/source",
+      "expected_root": "artifact_evaluation/expected/aes_cipher_top/r054_student1",
+      "benchmark_root": "third_party/mlcad2026_benchmarks/benchmarks/aes_cipher_top",
+      "evaluation_stage": "post_route_global_route_estimate_parasitics",
+      "tolerances": {
+        "tns_abs_ns": 0.05,
+        "dynamic_power_pw": 1000000000.0,
+        "leakage_power_pw": 1000000.0
+      }
+    }
+  }
+}

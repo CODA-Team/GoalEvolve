@@ -1,0 +1,14 @@
+{
+  "schema": "goalevolve.fixed-source-artifact.v1",
+  "artifact_id": "aes_r54_student1",
+  "parent_id": "round_054:student_1",
+  "source_hash": "d826c042107b7498eb652c8f8c5e2c4fa71b2dda1dad9c49a4a1d28304e0f3bc",
+  "source_commit": "157457b7971ddd12e6b5a1bb63e008f28470f510ae5a2ec8795270f92762e52d",
+  "frozen_source_root": "../../../lineage/aes_cipher_top/r054_student1/source",
+  "r54_changed_files": {
+    "src/rsz/src/policy/RepairPowerPolicy.cc": "59008911ef93b8d9322773daaf4a45603ddcb34cc1a62850125925f513758ef6",
+    "src/rsz/src/policy/RepairPowerPolicy.hh": "ccccd901bcc0499eb4e128ab8906da6448df39c4a321b6864b14223deef6b9a1"
+  },
+  "implementation_diff_sha256": "c606c1c2e864ab2fc83467619837a336db5d7c0a268c0e98d49de9499c66aaf8",
+  "portable_tcl_sha256": "3f746361573208788189cbd0671773088579bac9d99c7b03ccf6423c5bc3b1d0"
+}

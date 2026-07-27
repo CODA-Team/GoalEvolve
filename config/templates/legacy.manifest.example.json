@@ -1,0 +1,11 @@
+{
+  "records": [
+    {
+      "record_id": "legacy_example_only",
+      "design": "aes_cipher_top",
+      "metrics": {"tns_abs_ns": 15.0, "leakage_power_pw": 120000000.0},
+      "provenance_grade": "artifact_only",
+      "notes": "Metadata-only import. This record cannot be promoted until v2 reruns it with build/flow/metrics/LEC evidence."
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+design,placement_legal,total_insts,wns,tns,time_unit,slew_over_sum,slew_over_count,cap_over_sum,cap_over_count,cap_unit,fanout_over_sum,fanout_over_count,leakage_power,total_power,power_unit,max_gr_overflow,total_gr_overflow,legal_fail_summary,tool_runtime,flow_runtime
+nvdla_c,1,312696,-0.202,-55.58,ns,14.57999999999985,437,0.0,0,pF,0.0,0,17300000000.0,601000000000.0,pw,0.0,0.0,DPL-0005: Overlap check failed=15; DPL-0006: Site aligned check failed=54; DPL-0011: Padding check failed=15; DPL-0033: detailed placement checks failed,632.0,106.0

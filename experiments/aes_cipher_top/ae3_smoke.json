@@ -1,0 +1,58 @@
+{
+  "design": "aes_cipher_top",
+  "state_root": "../../outputs/ae3/aes_cipher_top_smoke",
+  "source_root": "../../artifact_evaluation/lineage/aes_cipher_top/r054_student1/source",
+  "benchmark_root": "../../third_party/mlcad2026_benchmarks/benchmarks",
+  "baseline_metrics": {
+    "tns_abs_ns": 8.89,
+    "dynamic_power_pw": 381931800000.0,
+    "leakage_power_pw": 68200000.0
+  },
+  "target_ratios": {
+    "tns_abs_ns": 1.349718785151856,
+    "dynamic_power_pw": 0.9163939740026884,
+    "leakage_power_pw": 0.5131964809384164
+  },
+  "metric_weights": {
+    "tns_abs_ns": 1.0,
+    "dynamic_power_pw": 1.0,
+    "leakage_power_pw": 1.0
+  },
+  "planner": "diverse_planner",
+  "evaluator": "contest_openroad",
+  "student_editor": "codex_student",
+  "teacher": "codex_teacher",
+  "workspace": "isolated_workspace",
+  "promotion": "power_first_promotion",
+  "students": ["student_1"],
+  "initial_parent_id": "artifact:aes_r54_student1",
+  "initial_parent_source_root": "../../artifact_evaluation/lineage/aes_cipher_top/r054_student1/source",
+  "initial_parent_source_commit": "157457b7971ddd12e6b5a1bb63e008f28470f510ae5a2ec8795270f92762e52d",
+  "initial_parent_source_hash": "d826c042107b7498eb652c8f8c5e2c4fa71b2dda1dad9c49a4a1d28304e0f3bc",
+  "initial_parent_evaluation_mode": "power_then_timing",
+  "initial_parent_metrics": {
+    "tns_abs_ns": 15.79,
+    "dynamic_power_pw": 335971400000.0,
+    "leakage_power_pw": 28600000.0,
+    "drv_count": 0.0,
+    "runtime_s": 136.0
+  },
+  "allowed_patch_roots": ["src/rsz", "src/rmp", "src/grt"],
+  "power_stage_tns_ceiling_ns": 60.0,
+  "power_reclaim_phase": "early_forced_reclaim",
+  "power_reclaim_proportion_percent": 80.0,
+  "build_jobs": 8,
+  "command_timeout_s": 1200,
+  "codex_model": "gpt-5.6-terra",
+  "teacher_model": "gpt-5.6-terra",
+  "codex_reasoning_effort": "xhigh",
+  "teacher_reasoning_effort": "xhigh",
+  "codex_retries": 1,
+  "teacher_retries": 1,
+  "codex_timeout_s": 1800,
+  "teacher_timeout_s": 1800,
+  "codex_max_repair_attempts": 2,
+  "codex_home": "../../outputs/codex_home",
+  "credential_env": "../../config/credentials/goalevolve_codex.env",
+  "max_campaign_rounds": 1
+}
