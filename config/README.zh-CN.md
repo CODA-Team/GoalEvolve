@@ -4,6 +4,13 @@
 
 每个 profile 必须写入 `baseline_metrics` 和绝对值 `target_metrics`；运行时不会再用比例计算目标。`state_root` 是可选项，缺省路径为 `outputs/ae3/<design>/`。
 
+`source_root` 是可选项。省略或写为 `null` 时，`contest_openroad` profile 使用共享
+源码快照 `artifact_evaluation/lineage/openroad_power/p0/source`；设置
+`GOALEVOLVE_OPENROAD_SEED` 可替换该机器上的默认值。若某个 design 需使用专用源码，
+必须在该 design 的 `baseline.json` 与 `evolve.json` 中写入完全相同的
+`source_root`。它必须指向含 `CMakeLists.txt` 的 OpenROAD 源码根目录，不能指向已经
+build 的 `openroad` 二进制。
+
 新 design 时，将 `templates/design.baseline.example.json` 和
 `templates/design.evolve.example.json` 分别复制为
 `experiments/<design>/baseline.json`、`experiments/<design>/evolve.json`。

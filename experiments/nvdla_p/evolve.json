@@ -4,6 +4,6 @@
   "campaign_ready": false,
   "baseline_evaluation_root": "../../outputs/baseline/nvdla_p",
   "baseline_metrics": {"tns_abs_ns": 198.18, "dynamic_power_pw": 39694000000.0, "leakage_power_pw": 306000000.0},
-  "target_metrics": {"tns_abs_ns": 198.18, "dynamic_power_pw": 39694000000.0, "leakage_power_pw": 306000000.0},
+  "target_metrics": {"tns_abs_ns": 246.0, "dynamic_power_pw": 36400000000.0, "leakage_power_pw": 66600000.0},
   "metric_weights": {"tns_abs_ns": 1.0, "dynamic_power_pw": 1.0, "leakage_power_pw": 1.0}
 }

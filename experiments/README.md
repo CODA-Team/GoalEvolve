@@ -21,6 +21,22 @@ metric names. Targets are absolute values; the runtime never calculates a
 target from a ratio. A profile is rejected when either metric map has a missing
 or unexpected decision metric.
 
+## Reviewed AE-3 targets
+
+All values below are the exact `target_metrics` values in the corresponding
+`evolve.json`. TNS is in ns; dynamic and leakage power are in pW.
+
+| Design | TNS | Dynamic power | Leakage power | Status |
+| --- | ---: | ---: | ---: | --- |
+| `aes_cipher_top` | 12 | 350000000000 | 35000000 | launchable |
+| `jpeg_encoder` | 53 | 250000000000 | 80000000 | launchable |
+| `ariane` | 1850 | 623000000000 | 17500000000 | baseline required |
+| `nvdla_c` | 10 | 583000000000 | 16500000000 | baseline required |
+| `nvdla_p` | 246 | 36400000000 | 66600000 | baseline required |
+| `mempool_group` | 1 | 1 | 1 | temporary target; baseline required |
+| `nvdla_a` | 1 | 1 | 1 | temporary target; baseline required |
+| `nvdla_m` | 1 | 1 | 1 | temporary target; baseline required |
+
 ## Prepare a design
 
 For a design whose `evolve.json` has `"campaign_ready": false`, first run its

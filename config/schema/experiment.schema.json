@@ -6,7 +6,7 @@
   "properties": {
     "design": {"type": "string", "minLength": 1},
     "state_root": {"type": "string"},
-    "source_root": {"type": "string"},
+    "source_root": {"type": ["string", "null"], "description": "Optional OpenROAD source root. When omitted for contest_openroad, uses artifact_evaluation/lineage/openroad_power/p0/source or GOALEVOLVE_OPENROAD_SEED."},
     "build_seed_root": {"type": "string"},
     "benchmark_root": {"type": "string"},
     "campaign_ready": {"type": "boolean"},

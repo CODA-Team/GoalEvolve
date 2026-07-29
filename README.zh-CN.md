@@ -55,11 +55,20 @@ AE-2 会重建 `artifact_evaluation/lineage/aes_cipher_top/r054_student1/source`
 项目现已携带全部八个 contest design 的输入：`aes_cipher_top`、`ariane`、`jpeg_encoder`、`mempool_group`、`nvdla_a`、`nvdla_c`、`nvdla_m`、`nvdla_p`。每个 design 的 `.def(.gz)`、Verilog、SDC 与官方初始 metrics 位于 `third_party/benchmarks/benchmarks/`；它们共享 `artifact_evaluation/lineage/openroad_power/p0/` 的 source-only OpenROAD p0 快照，并以全树内容 hash 标识。
 
 所有 design 都使用相同的两份 profile：`experiments/<design>/baseline.json`
-测量 p0，`experiments/<design>/evolve.json` 启动多轮进化。新 design 必须先对同一
-source/flow 执行 baseline，并将测得 metrics 冻结到 evolution profile。首先在
-`third_party/benchmarks/benchmarks/<design>/` 放入 `<design>.def` 或
-`<design>.def.gz`、`<design>.v`、`<design>.sdc` 和 `metrics.csv`；所有新 design
-共用 `artifact_evaluation/lineage/openroad_power/p0/source` 的源码快照。
+测量 p0，`experiments/<design>/evolve.json` 启动多轮进化。新 design 在运行前需要创建：
+
+```text
+third_party/benchmarks/benchmarks/my_design/
+├── my_design.def 或 my_design.def.gz  # 放置后的起始 design
+├── my_design.v                        # Verilog netlist
+├── my_design.sdc                      # 时序约束
+└── metrics.csv                        # 必需的 benchmark metadata
+experiments/my_design/
+├── baseline.json                      # 测量 p0，生成 baseline evidence
+└── evolve.json                        # 固化 baseline、target 和 campaign gate
+```
+
+技术文件已经由 `third_party/benchmarks/asap7/` 共享，不能为每个 design 重复复制。
 
 从模板建立两个 profile：
 
@@ -71,8 +80,29 @@ cp config/templates/design.evolve.example.json \
   experiments/my_design/evolve.json
 ```
 
-将两个文件中的所有 `replace_design` 改为实际 design 名称。保持
-`campaign_ready: false`，baseline profile 中的 placeholder 指标可暂时保留，然后运行：
+将两个文件中的所有 `replace_design` 改为实际 design 名称。baseline 前需要配置：
+
+| 字段 | `baseline.json` | `evolve.json` | baseline 前填写方式 |
+| --- | --- | --- | --- |
+| `design` | 必填 | 必填 | benchmark 目录/设计的精确名称，例如 `my_design` |
+| `source_root` | 可选 | 可选 | `null` 即共享 p0；若覆盖，两个文件必须填写相同路径 |
+| `state_root` | 模板已填写 | 省略 | `outputs/baseline/my_design`；evolve 默认 `outputs/ae3/my_design` |
+| `baseline_evaluation_root` | 省略 | 模板已填写 | `../../outputs/baseline/my_design` |
+| `baseline_metrics` | 可保留 placeholder | 测量后替换 | 三项决策指标名必须与 target 完全相同 |
+| `target_metrics` | 可保留 placeholder | 测量后替换 | 手工设置的绝对 QoR 阈值 |
+| `campaign_ready` | `false` | `false` | 审阅后只将 evolve 改为 `true` |
+
+`source_root` 省略或为 `null` 时，两个 profile 均使用共享 p0 OpenROAD 源码
+`artifact_evaluation/lineage/openroad_power/p0/source`。用户也可在终端设置
+`GOALEVOLVE_OPENROAD_SEED=/absolute/path/to/openroad/source`，无需改 profile。
+若只想为一个 design 指定起点，将两个 profile 的 `null` 都换为同一个相对或绝对
+OpenROAD 源码根目录，且该目录必须包含 `CMakeLists.txt`：
+
+```json
+"source_root": "../../artifact_evaluation/lineage/my_openroad/source"
+```
+
+保持 `campaign_ready: false`，baseline profile 中的 placeholder 指标可暂时保留，然后运行：
 
 ```bash
 PYTHONPATH=. python3 -m goalevolve.cli baseline \
@@ -105,7 +135,8 @@ OpenROAD checkout 或预编译 binary。将其中的 `tns_abs_ns`、`dynamic_pow
 
 上面的数值仅为示例。两个 map 的指标名必须完全一致；target 是手工设定的绝对 QoR
 门槛，不能填写比例，也不能混用不同 OpenROAD 源码、不同 flow 阶段或 pre-route 的
-结果。完成审阅后启动：
+结果。`run` 会从 `evolve.json` 读取冻结的 baseline/target，并在创建 Student
+workspace 前验证 `baseline_evaluation_root` 的 evidence。完成审阅后启动：
 
 ```bash
 PYTHONPATH=. python3 -m goalevolve.cli run \

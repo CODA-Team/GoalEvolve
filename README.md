@@ -182,11 +182,22 @@ The profile controls source scope, build jobs, per-command timeout, absolute obj
 
 ## Starting a different design
 
-Every design follows the same two-profile process. A new design needs a
-project-owned benchmark directory at
-`third_party/benchmarks/benchmarks/<design>/` containing `<design>.def` or
-`<design>.def.gz`, `<design>.v`, `<design>.sdc`, and `metrics.csv`, and uses
-the shared p0 source in `artifact_evaluation/lineage/openroad_power/p0/source`.
+Every design follows the same two-profile process. Create these project files
+before running a new design:
+
+```text
+third_party/benchmarks/benchmarks/my_design/
+├── my_design.def or my_design.def.gz   # Placed starting design
+├── my_design.v                         # Verilog netlist
+├── my_design.sdc                       # Timing constraints
+└── metrics.csv                         # Required benchmark metadata
+experiments/my_design/
+├── baseline.json                       # Measures p0 and writes baseline evidence
+└── evolve.json                         # Holds frozen baseline, targets, and campaign gate
+```
+
+The required technology data is already shared at
+`third_party/benchmarks/asap7/`; do not copy it into each design directory.
 
 Create the two profiles from the committed templates:
 
@@ -198,9 +209,32 @@ cp config/templates/design.evolve.example.json \
   experiments/my_design/evolve.json
 ```
 
-In both files, replace every `replace_design` with `my_design`. Leave
-`campaign_ready` as `false` and leave the placeholder metric values in place
-for the baseline command. Then measure p0:
+In both files, replace every `replace_design` with `my_design`. Configure the
+following fields before the baseline command:
+
+| Field | `baseline.json` | `evolve.json` | Value before baseline |
+| --- | --- | --- | --- |
+| `design` | required | required | Exact benchmark directory/name, for example `my_design` |
+| `source_root` | optional | optional | `null` means the shared p0 source; use the same explicit path in both files to override it |
+| `state_root` | required by template | omit | `outputs/baseline/my_design`; evolve defaults to `outputs/ae3/my_design` |
+| `baseline_evaluation_root` | omit | required by template | `../../outputs/baseline/my_design` |
+| `baseline_metrics` | placeholder permitted | replace after measurement | Three decision-metric names must match target names |
+| `target_metrics` | placeholder permitted | replace after measurement | Manual, absolute QoR thresholds |
+| `campaign_ready` | `false` | `false` | Change only evolve to `true` after review |
+
+When `source_root` is omitted or `null`, both profiles use the shared p0
+OpenROAD source at `artifact_evaluation/lineage/openroad_power/p0/source`. A
+user can change that default without editing a profile by exporting
+`GOALEVOLVE_OPENROAD_SEED=/absolute/path/to/openroad/source`. To select a
+source for one design only, replace `null` in both profiles with the same
+relative or absolute source root; it must contain `CMakeLists.txt`:
+
+```json
+"source_root": "../../artifact_evaluation/lineage/my_openroad/source"
+```
+
+Leave `campaign_ready` as `false` and leave the placeholder metric values in
+place for the baseline command. Then measure p0:
 
 ```bash
 PYTHONPATH=. python3 -m goalevolve.cli baseline \
@@ -233,8 +267,10 @@ This writes `outputs/baseline/my_design/baseline.json`. Copy the measured
 The values above are examples only. The baseline and target maps must contain
 the same metric names; targets are manual, absolute QoR limits, never ratios.
 Do not combine pre-route values, measurements from a different OpenROAD source,
-or another Tcl schedule with a full-flow campaign contract. Start the campaign
-after the review:
+or another Tcl schedule with a full-flow campaign contract. `run` reads the
+frozen metric maps from `evolve.json` and verifies the evidence at
+`baseline_evaluation_root` before it creates a Student workspace. Start the
+campaign after the review:
 
 ```bash
 PYTHONPATH=. python3 -m goalevolve.cli run \

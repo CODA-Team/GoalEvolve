@@ -4,6 +4,14 @@
 
 Each profile supplies `baseline_metrics` and absolute `target_metrics`; the runtime never derives a target by multiplying a ratio. `state_root` is optional and defaults to `outputs/ae3/<design>/`.
 
+`source_root` is optional. When it is omitted or `null`, a `contest_openroad`
+profile uses the shared source snapshot
+`artifact_evaluation/lineage/openroad_power/p0/source`; set
+`GOALEVOLVE_OPENROAD_SEED` to replace that machine-wide default. To use a
+design-specific source, set the same `source_root` in both that design's
+`baseline.json` and `evolve.json`. The path must name an OpenROAD source root
+containing `CMakeLists.txt`, not a built `openroad` executable.
+
 For a new design, copy both `templates/design.baseline.example.json` and
 `templates/design.evolve.example.json` into `experiments/<design>/`. Run the
 baseline profile first; it writes `outputs/baseline/<design>/baseline.json`.
