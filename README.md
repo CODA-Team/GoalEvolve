@@ -1,8 +1,10 @@
 # GoalEvolve: From Handcrafted Algorithm Priors to Goal-Driven Evolution of Physical Design Algorithms
 
-An open-source goal-driven framework for evolving bounded OpenROAD C++ mechanisms under post-route QoR evaluation and validity checks.
+An open-source goal-driven framework for evolving bounded OpenROAD C++ algorithms toward specified QoR targets. It integrates post-route QoR evaluation and validity checks into a traceable source-level search workflow.
 
-The accompanying paper is [GoalEvolve.pdf](paper/GoalEvolve.pdf): *GoalEvolve: From Handcrafted Algorithm Priors to Goal-Driven Evolution of Physical Design Algorithms*.
+The accompanying paper is [GoalEvolve.pdf](paper/GoalEvolve.pdf).
+
+A demonstration video is available at [Demo Video](images/video.mp4).
 
 <p align="center">
   <img src="images/goalevolve_overview_v3.png" alt="GoalEvolve overview: frozen QoR targets guide checkpoint diagnosis, bounded OpenROAD source evolution, full-flow evaluation, and evidence-based promotion." width="100%">
@@ -10,18 +12,20 @@ The accompanying paper is [GoalEvolve.pdf](paper/GoalEvolve.pdf): *GoalEvolve: F
 
 ```text
 Frozen QoR contract
-  -> checkpoint diagnosis and retrieval
-  -> Teacher plan and bounded Student C++ edit
-  -> isolated OpenROAD build
-  -> post-placement optimization + global routing
-  -> official metric parsing + 4/4 validity check
-  -> evidence database and promotion
+  -> bottleneck diagnosis and mechanism-card retrieval
+  -> Teacher planning and Student task distribution
+  -> bounded C++ editing and isolated OpenROAD builds
+  -> post-placement optimization and global routing
+  -> final QoR parsing and validity checks
+  -> EPD evidence recording and improvement promotion
 ```
 
-## Repository layout
+## Code Structure
 
 ```text
 GoalEvolve/
+├── Makefile                    # Environment doctor, setup, and AE-1 check entry points
+├── scripts/human/              # Implementations for Makefile environment commands
 ├── goalevolve/                 # GoalEvolve Python implementation and CLI
 │   ├── agents/                  # Teacher/Student Codex workers
 │   ├── planning/                # Diagnosis, retrieval, and evidence memory
@@ -51,49 +55,57 @@ GoalEvolve separates a deterministic artifact claim from a fresh LLM-driven expe
 | AE-2 | Rebuild and replay the frozen AES R54 Student 1 artifact | No | Deterministic within manifest tolerances |
 | AE-3 | Launch a new Teacher/Student source-evolution campaign | Yes | Workflow completion; QoR is stochastic |
 
-Use AE-1 and AE-2 to reproduce the released artifact. Use AE-3 only when a Codex-capable environment and an independent API credential are available.
+Use AE-1 and AE-2 to reproduce the released artifact. With a Codex-capable environment and an independent API credential, use AE-3 to evolve a design toward predefined QoR goals.
 
 ## Environment
 
-### Reference environment
+### Install the environment
 
-The paper's eight-design experiment was run on Rocky Linux 8.10 with two Intel Xeon Platinum 8462Y+ processors and 314 GiB RAM, using ASAP7 7 nm data and an OpenROAD source base reported as commit `08f67ee5`. That is the paper experiment environment, not a promise that every host will obtain bit-identical results.
-
-This release locks the replay artifact separately in [toolchain/lock.json](toolchain/lock.json): the frozen source snapshot is identified by OpenROAD revision `d231bd8f98d2a0adb8369002b2c1e7aa8e7877ed`; the observed host used Python 3.12.13, CMake 3.31.9, and GCC 13.3.1. AE-2 rebuilds that shipped source rather than using a system `openroad` binary.
-
-### Required software
-
-For AE-1 and AE-2, use a Linux host with:
-
-- Python 3.11 or newer.
-- CMake, a C++ compiler compatible with the frozen OpenROAD source, GNU Make or the CMake-selected build tool, and standard Unix utilities.
-- The native libraries required by the shipped OpenROAD source. These are host build prerequisites; the project does not vendor system packages.
-- `pytest` only when running the test suite.
-
-For AE-3, additionally install the `codex` command-line client and provide a valid provider/API credential. The release intentionally does not install, download, or configure Codex for the user.
-
-AES replay builds a full OpenROAD executable and runs a complete physical-design flow. Disk, memory, and wall time are design- and host-dependent. Start with a conservative build parallelism such as `--jobs 8`; do not assume that `nproc` is an appropriate build-job count on a shared machine.
-
-### Python setup
-
-GoalEvolve itself has no runtime Python package dependency beyond the standard library. A virtual environment is still recommended for test tooling:
+Use a Linux host. The fixed source and toolchain provenance remain recorded in
+[`toolchain/lock.json`](toolchain/lock.json); AE-2 rebuilds the shipped
+OpenROAD source and does not require a system `openroad` binary.
 
 ```bash
-cd /path/to/GoalEvolve
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip pytest
+git clone --branch artifact https://github.com/Liu7541/GOAL_EVOLVE.git
+cd GOAL_EVOLVE
 
-# The package is intentionally run in-tree; no editable install is required.
-PYTHONPATH=. python -m pytest
+# Inspect host commands, frozen source, and dependency installer.
+make doctor
+
+# Create .venv and install pytest. This command does not use sudo.
+make setup
+
+# Explicitly install the frozen OpenROAD system/common dependencies when needed.
+make setup INSTALL_SYSTEM_DEPS=1 JOBS=8
+
+# Run the host check and AE-1 preflight.
+make check
 ```
 
-Confirm the host tools before a replay:
+`make doctor` checks required host commands: `git`, `make`, Python 3.11+,
+CMake, GCC/G++, Bison, Flex, SWIG, and `pkg-config`. It exits nonzero when a
+prerequisite is missing. `make setup INSTALL_SYSTEM_DEPS=1` explicitly invokes
+the frozen OpenROAD `DependencyInstaller.sh -all` through `sudo`; review that
+upstream script before running it. `JOBS` limits its parallel dependency builds.
+
+`make check` uses `.venv/bin/python` when available, otherwise `python3`; it
+runs the read-only host check followed by AE-1. It does not build OpenROAD.
+
+For AE-3, additionally install the `codex` command-line client and configure a
+provider credential. The project intentionally does not install or configure
+Codex automatically.
+
+AES replay builds a full OpenROAD executable and runs a complete physical-design
+flow. Disk, memory, and wall time are design- and host-dependent. Start with a
+conservative `--jobs 8`; do not assume that `nproc` is appropriate on a shared
+machine.
+
+### Manual alternative
 
 ```bash
-python3 --version
-cmake --version
-c++ --version
+python3 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip pytest
+PYTHONPATH=. .venv/bin/python -m artifact_evaluation.runner ae1
 ```
 
 ## Inputs and data boundaries

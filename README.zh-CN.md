@@ -12,6 +12,8 @@ Goal contract → 诊断 → 检索 / Teacher 规划 → Student C++ 修改
 ```text
 goalevolve/                可执行实现
   core/ planning/ agents/ execution/ evaluation/ testing/
+Makefile                   环境 doctor、setup 和 AE-1 check 入口
+scripts/human/             Makefile 环境命令的实现
 config/                    schema 与可移植模板
 experiments/               design 专用的受审 profile 和预期 QoR
 artifact_evaluation/       AE-1/AE-2 manifest、冻结源码和预期证据
@@ -45,6 +47,47 @@ PYTHONPATH=. python3 -m artifact_evaluation.runner ae2 --artifact aes_r54_studen
 ```
 
 AE-2 会重建 `artifact_evaluation/lineage/aes_cipher_top/r054_student1/source`，执行可移植的已捕获 Tcl、官方 parser 与 4/4 checker，然后与 `artifact_evaluation/expected/aes_cipher_top/r054_student1/metrics.json` 对比 TNS、dynamic power、leakage。该结果的阶段是 `global_route + estimate_parasitics`，不是 detailed routing。
+
+## 环境安装
+
+使用 Linux 主机。固定源码和工具链 provenance 保存在
+[`toolchain/lock.json`](toolchain/lock.json)；AE-2 会重建仓库内 OpenROAD 源码，
+不需要系统预装 `openroad` 二进制。
+
+```bash
+git clone --branch artifact https://github.com/Liu7541/GOAL_EVOLVE.git
+cd GOAL_EVOLVE
+
+# 检查主机命令、冻结源码和依赖安装器。
+make doctor
+
+# 创建 .venv 并安装 pytest；该命令不使用 sudo。
+make setup
+
+# 需要时显式安装冻结 OpenROAD 的系统/通用依赖。
+make setup INSTALL_SYSTEM_DEPS=1 JOBS=8
+
+# 执行主机检查和 AE-1 预检。
+make check
+```
+
+`make doctor` 检查 `git`、`make`、Python 3.11+、CMake、GCC/G++、Bison、Flex、
+SWIG 和 `pkg-config`，缺失任一依赖会以非零状态退出。只有显式传入
+`INSTALL_SYSTEM_DEPS=1` 时，`make setup` 才会通过 `sudo` 调用冻结 OpenROAD 的
+`DependencyInstaller.sh -all`；执行前应审阅该上游脚本。`JOBS` 用于限制其依赖
+构建并行度。
+
+`make check` 优先使用 `.venv/bin/python`，否则使用 `python3`；它运行只读主机检查
+和 AE-1，但不会 build OpenROAD。AE-3 另需自行安装 `codex` CLI 并配置 provider
+credential，项目不会自动安装或配置 Codex。
+
+手动方式：
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip pytest
+PYTHONPATH=. .venv/bin/python -m artifact_evaluation.runner ae1
+```
 
 ## AE-3：新鲜进化
 
