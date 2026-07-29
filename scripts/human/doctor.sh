@@ -83,6 +83,8 @@ if [[ -f "${SNAPSHOT_VERIFIER}" ]]; then
     else
         warn 'shared OpenROAD p0 content digest differs from the release manifest'
         printf '%s\n' "${snapshot_report}" >&2
+        printf '%s\n' '  Restore only the immutable p0 source with:' >&2
+        printf '%s\n' '  git restore --source=HEAD --worktree -- artifact_evaluation/lineage/openroad_power/p0/source' >&2
     fi
 else
     warn "shared OpenROAD p0 verifier: ${SNAPSHOT_VERIFIER}"

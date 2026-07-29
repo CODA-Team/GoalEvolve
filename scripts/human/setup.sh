@@ -25,7 +25,7 @@ eigen_version() {
 }
 
 prepare_debian_compatibility_dependencies() {
-    is_debian_family || return
+    is_debian_family || return 0
 
     run_privileged() {
         if [[ ${EUID} -eq 0 ]]; then
@@ -54,6 +54,8 @@ prepare_debian_compatibility_dependencies() {
     else
         printf '%s\n' '[WARN] System Eigen 3.4 was not found; the frozen installer will attempt its upstream GitLab download.' >&2
     fi
+
+    return 0
 }
 
 ensure_python_venv_support() {
@@ -74,7 +76,7 @@ ensure_python_venv_support() {
 }
 
 remove_stale_p0_dependency_prefixes() {
-    [[ -e "${P0_GENERATED_DEPS_FILE}" ]] || return
+    [[ -e "${P0_GENERATED_DEPS_FILE}" ]] || return 0
     printf '[INFO] Removing generated dependency-prefix file from the immutable p0 snapshot.\n'
     if [[ ${EUID} -eq 0 ]]; then
         rm -f "${P0_GENERATED_DEPS_FILE}"
