@@ -137,11 +137,16 @@ if [[ ${INSTALL_SYSTEM_DEPS} -eq 1 ]]; then
     fi
     prepare_debian_compatibility_dependencies
     remove_stale_p0_dependency_prefixes
+    # The frozen installer runs through sudo and writes this file at the end.
+    # A unique user-created path avoids a stale root-owned /tmp file from a
+    # previous setup attempt blocking the redirection.
+    DEPS_PREFIXES_FILE="$(mktemp "${TMPDIR:-/tmp}/goalevolve_openroad_deps_prefixes.XXXXXX")"
     if [[ ${EUID} -eq 0 ]]; then
-        "${INSTALLER}" -all "-threads=${JOBS}" -save-deps-prefixes="/tmp/goalevolve_openroad_deps_prefixes.txt"
+        "${INSTALLER}" -all "-threads=${JOBS}" -save-deps-prefixes="${DEPS_PREFIXES_FILE}"
     else
-        sudo "${INSTALLER}" -all "-threads=${JOBS}" -save-deps-prefixes="/tmp/goalevolve_openroad_deps_prefixes.txt"
+        sudo "${INSTALLER}" -all "-threads=${JOBS}" -save-deps-prefixes="${DEPS_PREFIXES_FILE}"
     fi
+    rm -f "${DEPS_PREFIXES_FILE}"
 fi
 
 if [[ ${INSTALL_CODEX_CLI} -eq 1 ]]; then
