@@ -78,6 +78,9 @@ make setup
 # Explicitly install the frozen OpenROAD system/common dependencies when needed.
 make setup INSTALL_SYSTEM_DEPS=1 JOBS=8
 
+# Install or update the Codex CLI for AE-3. This does not configure an API key.
+make setup INSTALL_CODEX_CLI=1
+
 # Run the host check and AE-1 preflight.
 make check
 ```
@@ -88,12 +91,16 @@ prerequisite is missing. `make setup INSTALL_SYSTEM_DEPS=1` explicitly invokes
 the frozen OpenROAD `DependencyInstaller.sh -all` through `sudo`; review that
 upstream script before running it. `JOBS` limits its parallel dependency builds.
 
-`make check` uses `.venv/bin/python` when available, otherwise `python3`; it
-runs the read-only host check followed by AE-1. It does not build OpenROAD.
+`make setup INSTALL_CODEX_CLI=1` installs or updates the `@openai/codex` npm
+package. It changes neither `config/credentials/` nor any API-key setting. Set
+`CODEX_NPM_BIN=/path/to/npm` when npm is installed but not on `PATH`.
 
-For AE-3, additionally install the `codex` command-line client and configure a
-provider credential. The project intentionally does not install or configure
-Codex automatically.
+`make check` uses `.venv/bin/python` when available, otherwise `python3`; it
+runs the read-only host check followed by AE-1 and reports Codex CLI
+availability. It does not build OpenROAD.
+
+For AE-3, configure a provider credential after installing the CLI. The project
+does not create, read, or configure API keys automatically.
 
 AES replay builds a full OpenROAD executable and runs a complete physical-design
 flow. Disk, memory, and wall time are design- and host-dependent. Start with a

@@ -59,6 +59,15 @@ else
 fi
 
 printf '\n'
+note 'Optional AE-3 command'
+if command -v codex >/dev/null 2>&1; then
+    ok "codex: $(command -v codex)"
+else
+    note 'codex is not installed; AE-1/AE-2 remain available.'
+    printf '  Install it with: make setup INSTALL_CODEX_CLI=1\n'
+fi
+
+printf '\n'
 if [[ ${missing} -ne 0 ]]; then
     note 'Install missing system prerequisites, then run:'
     printf '  make setup INSTALL_SYSTEM_DEPS=1 JOBS=8\n'

@@ -7,14 +7,17 @@ INSTALLER="${PROJECT_ROOT}/artifact_evaluation/lineage/openroad_power/p0/source/
 VENV_ROOT="${PROJECT_ROOT}/.venv"
 JOBS=8
 INSTALL_SYSTEM_DEPS=0
+INSTALL_CODEX_CLI=0
 
 usage() {
     cat <<'EOF'
-Usage: scripts/human/setup.sh [--jobs N] [--install-system-deps]
+Usage: scripts/human/setup.sh [--jobs N] [--install-system-deps] [--install-codex-cli]
 
 Creates the project Python virtual environment and installs pytest.
 --install-system-deps explicitly permits sudo execution of the frozen
 OpenROAD DependencyInstaller.sh -all command.
+--install-codex-cli installs or updates @openai/codex with npm. It does not
+create, read, or configure any API key.
 EOF
 }
 
@@ -27,6 +30,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --install-system-deps)
             INSTALL_SYSTEM_DEPS=1
+            shift
+            ;;
+        --install-codex-cli)
+            INSTALL_CODEX_CLI=1
             shift
             ;;
         -h|--help)
@@ -52,6 +59,21 @@ if [[ ${INSTALL_SYSTEM_DEPS} -eq 1 ]]; then
         command -v sudo >/dev/null 2>&1 || { printf '%s\n' 'sudo is required for --install-system-deps' >&2; exit 1; }
         sudo "${INSTALLER}" -all "-threads=${JOBS}"
     fi
+fi
+
+if [[ ${INSTALL_CODEX_CLI} -eq 1 ]]; then
+    NPM_BIN="${CODEX_NPM_BIN:-npm}"
+    command -v "${NPM_BIN}" >/dev/null 2>&1 || {
+        printf 'npm is required to install the Codex CLI; set CODEX_NPM_BIN if npm is not on PATH.\n' >&2
+        exit 1
+    }
+    printf '%s\n' '[INFO] Installing or updating the Codex CLI package.'
+    "${NPM_BIN}" install --global @openai/codex
+    command -v codex >/dev/null 2>&1 || {
+        printf '%s\n' 'Codex CLI installed but is not on PATH; add npm bin -g to PATH.' >&2
+        exit 1
+    }
+    printf '[OK] Codex CLI: %s\n' "$(command -v codex)"
 fi
 
 command -v python3 >/dev/null 2>&1 || { printf '%s\n' 'python3 is required' >&2; exit 1; }

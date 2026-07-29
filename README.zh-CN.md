@@ -67,6 +67,9 @@ make setup
 # 需要时显式安装冻结 OpenROAD 的系统/通用依赖。
 make setup INSTALL_SYSTEM_DEPS=1 JOBS=8
 
+# 为 AE-3 安装或更新 Codex CLI；该命令不会配置 API key。
+make setup INSTALL_CODEX_CLI=1
+
 # 执行主机检查和 AE-1 预检。
 make check
 ```
@@ -77,9 +80,13 @@ SWIG 和 `pkg-config`，缺失任一依赖会以非零状态退出。只有显�
 `DependencyInstaller.sh -all`；执行前应审阅该上游脚本。`JOBS` 用于限制其依赖
 构建并行度。
 
+`make setup INSTALL_CODEX_CLI=1` 会通过 npm 安装或更新 `@openai/codex`，不会
+修改 `config/credentials/`，也不会创建、读取或配置 API key。若 npm 已安装但不在
+`PATH` 中，可设置 `CODEX_NPM_BIN=/path/to/npm`。
+
 `make check` 优先使用 `.venv/bin/python`，否则使用 `python3`；它运行只读主机检查
-和 AE-1，但不会 build OpenROAD。AE-3 另需自行安装 `codex` CLI 并配置 provider
-credential，项目不会自动安装或配置 Codex。
+和 AE-1，并报告 Codex CLI 是否可用于 AE-3；它不会 build OpenROAD。安装 CLI 后，
+仍需单独配置 provider credential；项目不会自动创建、读取或配置 API key。
 
 手动方式：
 
