@@ -18,10 +18,15 @@ parser/checker、全部八个 design 的 `.def(.gz)`/Verilog/SDC/metrics、ASAP7
 ```bash
 make build-tools JOBS=8
 PYTHONPATH=. python3 -m artifact_evaluation.runner ae2 \
-  --artifact aes_r54_student1 --rebuild --jobs 8
+  --artifact aes_r54_student1 --rebuild --jobs 8 --verbose
 ```
 
 该命令绝不启动 Teacher、Student、retrieval、Codex 或 API 调用。它 build 不可变的 `lineage/aes_cipher_top/r054_student1/source`，在 `outputs/ae2/` 执行路径归一化后的 R54 Tcl，解析指标，运行官方 4/4 checker，并按 `release_manifest.json` 的容差对比三项决策指标。
+
+执行完整重建前，可运行 `make ae2-preflight`。该命令检查 `make build-tools`
+生成的本机 Boost 1.87 前缀，并执行与 AE-2 完全相同的 CMake 配置，但不编译
+OpenROAD。完整 AE-2 带 `--verbose` 时会将编译和 flow 日志持续输出到终端，日志
+仍会保存在 `outputs/ae2/`。
 
 固定结果的阶段是 post-route `global_route + estimate_parasitics`，不是 detailed routing。AE-2 通过证明发布的源码 artifact、benchmark、checker 和 flow 可以产生报告结果；它不证明新鲜 LLM 进化一定会再次找到同一个 patch。
 

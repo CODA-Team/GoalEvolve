@@ -75,8 +75,8 @@ on ARM64. An ARM64 failure or QoR difference is therefore unsupported rather
 than an artifact regression. `make doctor` reports this distinction.
 
 ```bash
-git clone --branch artifact https://github.com/Liu7541/GOAL_EVOLVE.git
-cd GOAL_EVOLVE
+git clone https://github.com/CODA-Team/GoalEvolve.git
+cd GoalEvolve
 
 # Inspect host commands, frozen source, and dependency installer.
 make doctor
@@ -89,6 +89,9 @@ make setup INSTALL_SYSTEM_DEPS=1 JOBS=8
 
 # Build the isolated CMake dependency prefix required by AE-2.
 make build-tools JOBS=8
+
+# Confirm the frozen source and local dependency prefix can configure together.
+make ae2-preflight
 
 # Install or update the Codex CLI for AE-3. This does not configure an API key.
 make setup INSTALL_CODEX_CLI=1
@@ -162,8 +165,15 @@ Then rebuild and replay the frozen AES artifact:
 ```bash
 make build-tools JOBS=8
 PYTHONPATH=. python3 -m artifact_evaluation.runner ae2 \
-  --artifact aes_r54_student1 --rebuild --jobs 8
+  --artifact aes_r54_student1 --rebuild --jobs 8 --verbose
 ```
+
+`make ae2-preflight` does not compile OpenROAD: it verifies the generated
+Boost 1.87 prefix and runs the same CMake configuration that AE-2 will use.
+For the full replay, `--verbose` streams CMake, compilation, and OpenROAD flow
+output to the terminal while preserving logs under `outputs/ae2/`. A successful
+AE-2 report additionally proves that the rebuilt `build/bin/openroad` ran the
+captured flow and passed the official validity check.
 
 AE-2 performs the following steps:
 

@@ -60,12 +60,30 @@ def _path(relative: str) -> Path:
     return (PROJECT_ROOT / relative).resolve()
 
 
-def _run(command: list[str], *, cwd: Path, env: dict[str, str], log: Path) -> int:
+def _run(command: list[str], *, cwd: Path, env: dict[str, str], log: Path, live: bool = False) -> int:
     log.parent.mkdir(parents=True, exist_ok=True)
     with log.open("w", encoding="utf-8") as stream:
         stream.write("$ " + " ".join(command) + "\n")
-        process = subprocess.run(command, cwd=cwd, env=env, stdout=stream, stderr=subprocess.STDOUT, check=False)
-    return process.returncode
+        stream.flush()
+        if not live:
+            process = subprocess.run(command, cwd=cwd, env=env, stdout=stream, stderr=subprocess.STDOUT, check=False)
+            return process.returncode
+        process = subprocess.Popen(
+            command,
+            cwd=cwd,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            errors="replace",
+        )
+        assert process.stdout is not None
+        for line in process.stdout:
+            stream.write(line)
+            stream.flush()
+            sys.stdout.write(line)
+            sys.stdout.flush()
+        return process.wait()
 
 
 def _toolchain_cmake_args() -> list[str]:
@@ -79,6 +97,14 @@ def _toolchain_cmake_args() -> list[str]:
     if not arguments or any(not argument.startswith("-D") for argument in arguments):
         raise RuntimeError(f"invalid OpenROAD dependency prefix record: {TOOLCHAIN_PREFIX_RECORD}")
     return arguments
+
+
+def _cmake_definition(arguments: list[str], name: str) -> Path | None:
+    prefix = f"-D{name}="
+    for argument in arguments:
+        if argument.startswith(prefix):
+            return Path(argument.removeprefix(prefix)).expanduser()
+    return None
 
 
 def ae1(*, artifact: dict[str, Any]) -> dict[str, Any]:
@@ -159,7 +185,67 @@ def ae1(*, artifact: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _build_openroad(*, source: Path, build: Path, jobs: int, report: Path) -> Path:
+def ae2_preflight(*, artifact: dict[str, Any], verbose: bool) -> dict[str, Any]:
+    """Validate the local AE-2 build prerequisites without compiling OpenROAD."""
+    source = _path(str(artifact["source_root"]))
+    report = PROJECT_ROOT / "outputs" / "ae2" / str(artifact["artifact_id"]) / "report"
+    report.mkdir(parents=True, exist_ok=True)
+    checks: dict[str, bool] = {"cmake": shutil.which("cmake") is not None}
+    arguments: list[str] = []
+    try:
+        arguments = _toolchain_cmake_args()
+    except RuntimeError:
+        checks["toolchain_prefix_record"] = False
+    else:
+        checks["toolchain_prefix_record"] = True
+        boost_dir = _cmake_definition(arguments, "Boost_DIR")
+        boost_root = _cmake_definition(arguments, "Boost_ROOT")
+        checks["boost_config"] = boost_dir is not None and (boost_dir / "BoostConfig.cmake").is_file()
+        checks["boost_iostreams_config"] = (
+            boost_root is not None
+            and any((boost_root / "lib" / "cmake").glob("boost_iostreams-*/boost_iostreams-config.cmake"))
+        )
+
+    configure_rc: int | None = None
+    configure_log = report / "preflight_configure.log"
+    if all(checks.values()):
+        build = report.parent / "preflight-build"
+        if build.exists():
+            shutil.rmtree(build)
+        configure = [
+            "cmake",
+            "-S",
+            str(source),
+            "-B",
+            str(build),
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DENABLE_TESTS=OFF",
+            *arguments,
+        ]
+        print(f"[AE-2 preflight] Configuring frozen OpenROAD. Log: {configure_log}", flush=True)
+        configure_rc = _run(
+            configure,
+            cwd=PROJECT_ROOT,
+            env=os.environ.copy(),
+            log=configure_log,
+            live=verbose,
+        )
+    checks["cmake_configure"] = configure_rc == 0
+    result = {
+        "schema": "goalevolve.artifact-ae2-preflight.v1",
+        "artifact_id": artifact["artifact_id"],
+        "source": str(source),
+        "toolchain_prefix_record": str(TOOLCHAIN_PREFIX_RECORD),
+        "configure_log": str(configure_log),
+        "configure_returncode": configure_rc,
+        "checks": checks,
+    }
+    result["passed"] = all(checks.values())
+    (report / "ae2_preflight.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return result
+
+
+def _build_openroad(*, source: Path, build: Path, jobs: int, report: Path, verbose: bool) -> Path:
     # OpenROAD's top-level CMake install layout puts the executable in
     # ``bin/openroad``.  Keep this path explicit: AE-2 must validate the
     # binary just built from the frozen artifact, rather than falling back to
@@ -179,17 +265,19 @@ def _build_openroad(*, source: Path, build: Path, jobs: int, report: Path) -> Pa
         "-DENABLE_TESTS=OFF",
         *_toolchain_cmake_args(),
     ]
-    if _run(configure, cwd=PROJECT_ROOT, env=os.environ.copy(), log=report / "configure.log") != 0:
+    print(f"[AE-2] Configuring OpenROAD. Log: {report / 'configure.log'}", flush=True)
+    if _run(configure, cwd=PROJECT_ROOT, env=os.environ.copy(), log=report / "configure.log", live=verbose) != 0:
         raise RuntimeError(f"CMake configure failed; see {report / 'configure.log'}")
     build_command = ["cmake", "--build", str(build), "--target", "openroad", "-j", str(jobs)]
-    if _run(build_command, cwd=PROJECT_ROOT, env=os.environ.copy(), log=report / "build.log") != 0:
+    print(f"[AE-2] Building OpenROAD with {jobs} jobs. Log: {report / 'build.log'}", flush=True)
+    if _run(build_command, cwd=PROJECT_ROOT, env=os.environ.copy(), log=report / "build.log", live=verbose) != 0:
         raise RuntimeError(f"OpenROAD build failed; see {report / 'build.log'}")
     if not binary.is_file():
         raise RuntimeError(f"build completed without expected binary {binary}")
     return binary
 
 
-def ae2(*, artifact: dict[str, Any], openroad: Path | None, jobs: int, rebuild: bool) -> dict[str, Any]:
+def ae2(*, artifact: dict[str, Any], openroad: Path | None, jobs: int, rebuild: bool, verbose: bool) -> dict[str, Any]:
     """Build/replay one fixed source artifact and compare its official evidence."""
     source = _path(str(artifact["source_root"]))
     expected_root = _path(str(artifact["expected_root"]))
@@ -200,7 +288,7 @@ def ae2(*, artifact: dict[str, Any], openroad: Path | None, jobs: int, rebuild: 
     report.mkdir(parents=True, exist_ok=True)
     build_dir = output.parent / "build"
     if openroad is None:
-        openroad = _build_openroad(source=source, build=build_dir, jobs=jobs, report=report) if rebuild else build_dir / "bin" / "openroad"
+        openroad = _build_openroad(source=source, build=build_dir, jobs=jobs, report=report, verbose=verbose) if rebuild else build_dir / "bin" / "openroad"
     openroad = openroad.resolve()
     if not openroad.is_file():
         raise RuntimeError("no OpenROAD executable: use --rebuild or pass --openroad /path/to/openroad")
@@ -211,15 +299,27 @@ def ae2(*, artifact: dict[str, Any], openroad: Path | None, jobs: int, rebuild: 
         "GOALEVOLVE_AE_OUTPUT": str(output),
     })
     tcl = expected_root / "evaluate.tcl"
-    flow_rc = _run([str(openroad), "-exit", str(tcl)], cwd=output, env=environment, log=output / "evaluation.log")
+    print(f"[AE-2] Running post-route flow. Log: {output / 'evaluation.log'}", flush=True)
+    flow_rc = _run([str(openroad), "-exit", str(tcl)], cwd=output, env=environment, log=output / "evaluation.log", live=verbose)
     metrics_csv = output / "metrics.csv"
     if metrics_csv.exists():
         metrics_csv.unlink()
     parser = PROJECT_ROOT / "third_party/official_checker/evaluation/parse_log.py"
-    parser_rc = _run([sys.executable, str(parser), "--csv", str(metrics_csv), str(output / "evaluation.log")], cwd=output, env=environment, log=report / "parse.log") if flow_rc == 0 else -1
+    if flow_rc == 0:
+        print(f"[AE-2] Parsing metrics. Log: {report / 'parse.log'}", flush=True)
+        parser_rc = _run(
+            [sys.executable, str(parser), "--csv", str(metrics_csv), str(output / "evaluation.log")],
+            cwd=output,
+            env=environment,
+            log=report / "parse.log",
+            live=verbose,
+        )
+    else:
+        parser_rc = -1
     official_rc = -1
     official_detail = "flow_failed"
     if flow_rc == 0 and parser_rc == 0:
+        print(f"[AE-2] Running official 4/4 validity check. Log: {output / 'official_4of4.log'}", flush=True)
         from goalevolve.evaluation.contest2026 import official_four_check
         from goalevolve.execution.execution import ExecutionPolicy
         passed, official_detail = official_four_check(pre_opt=benchmark_root, post_opt=output, output_log=output / "official_4of4.log", policy=ExecutionPolicy(timeout_s=3600, retries=1))
@@ -256,14 +356,26 @@ def ae2(*, artifact: dict[str, Any], openroad: Path | None, jobs: int, rebuild: 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="GoalEvolve artifact evaluation")
-    parser.add_argument("mode", choices=("ae1", "ae2"))
+    parser.add_argument("mode", choices=("ae1", "ae2", "ae2-preflight"))
     parser.add_argument("--artifact", default="aes_r54_student1")
     parser.add_argument("--openroad", type=Path)
     parser.add_argument("--rebuild", action="store_true", help="configure and build the frozen AE-2 source before replay")
     parser.add_argument("--jobs", type=int, default=2)
+    parser.add_argument("--verbose", action="store_true", help="stream CMake, build, parser, and flow logs to the terminal")
     args = parser.parse_args()
     artifact = _artifact(args.artifact)
-    result = ae1(artifact=artifact) if args.mode == "ae1" else ae2(artifact=artifact, openroad=args.openroad, jobs=args.jobs, rebuild=args.rebuild)
+    if args.mode == "ae1":
+        result = ae1(artifact=artifact)
+    elif args.mode == "ae2-preflight":
+        result = ae2_preflight(artifact=artifact, verbose=args.verbose)
+    else:
+        result = ae2(
+            artifact=artifact,
+            openroad=args.openroad,
+            jobs=args.jobs,
+            rebuild=args.rebuild,
+            verbose=args.verbose,
+        )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0 if bool(result["passed"]) else 1
 
