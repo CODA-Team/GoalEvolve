@@ -17,6 +17,7 @@ build the frozen source. The JSON result is the authoritative preflight record.
 ## AE-2: deterministic fixed-artifact replay
 
 ```bash
+make build-tools JOBS=8
 PYTHONPATH=. python3 -m artifact_evaluation.runner ae2 \
   --artifact aes_r54_student1 --rebuild --jobs 8
 ```

@@ -16,6 +16,7 @@ parser/checker、全部八个 design 的 `.def(.gz)`/Verilog/SDC/metrics、ASAP7
 ## AE-2：固定 artifact 的确定性复验
 
 ```bash
+make build-tools JOBS=8
 PYTHONPATH=. python3 -m artifact_evaluation.runner ae2 \
   --artifact aes_r54_student1 --rebuild --jobs 8
 ```

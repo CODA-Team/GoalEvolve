@@ -5,6 +5,11 @@
   "source_hash": "d826c042107b7498eb652c8f8c5e2c4fa71b2dda1dad9c49a4a1d28304e0f3bc",
   "source_commit": "157457b7971ddd12e6b5a1bb63e008f28470f510ae5a2ec8795270f92762e52d",
   "frozen_source_root": "../../../lineage/aes_cipher_top/r054_student1/source",
+  "content_sha256": "42e6a675d25ed5e1b531987baa675eb43a4a59a0e4409b122d3617734fc97215",
+  "regular_file_count": 11935,
+  "symlink_count": 372,
+  "directory_count": 682,
+  "verified_no_external_symlinks": true,
   "r54_changed_files": {
     "src/rsz/src/policy/RepairPowerPolicy.cc": "59008911ef93b8d9322773daaf4a45603ddcb34cc1a62850125925f513758ef6",
     "src/rsz/src/policy/RepairPowerPolicy.hh": "ccccd901bcc0499eb4e128ab8906da6448df39c4a321b6864b14223deef6b9a1"

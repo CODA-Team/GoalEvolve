@@ -43,6 +43,7 @@ PYTHONPATH=. python3 -m artifact_evaluation.runner ae1
 运行确定性的 AE-2（build 会消耗较长时间和较大磁盘）：
 
 ```bash
+make build-tools JOBS=8
 PYTHONPATH=. python3 -m artifact_evaluation.runner ae2 --artifact aes_r54_student1 --rebuild --jobs 8
 ```
 
@@ -53,6 +54,10 @@ AE-2 会重建 `artifact_evaluation/lineage/aes_cipher_top/r054_student1/source`
 使用 Linux 主机。固定源码和工具链 provenance 保存在
 [`toolchain/lock.json`](toolchain/lock.json)；AE-2 会重建仓库内 OpenROAD 源码，
 不需要系统预装 `openroad` 二进制。
+
+AE-2 还需执行 `make build-tools JOBS=8`。该命令参考 DPLEvolve-AE 的分层方式，在
+`outputs/toolchain/` 创建用户可写的本地 CMake 工具链，并固定使用与随附 OR-Tools
+9.14 兼容的 Boost 1.87；AE-2 显式读取该前缀，不依赖宿主的 Boost 搜索顺序。
 
 ### 平台支持
 

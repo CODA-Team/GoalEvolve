@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import shutil
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -20,6 +21,7 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = PROJECT_ROOT / "artifact_evaluation" / "release_manifest.json"
+TOOLCHAIN_PREFIX_RECORD = PROJECT_ROOT / "outputs" / "toolchain" / "ae2_cmake_args.txt"
 SHIPPED_CONTEST_DESIGNS = (
     "aes_cipher_top",
     "ariane",
@@ -66,6 +68,19 @@ def _run(command: list[str], *, cwd: Path, env: dict[str, str], log: Path) -> in
     return process.returncode
 
 
+def _toolchain_cmake_args() -> list[str]:
+    """Read the machine-local AE-2 CMake prefix record made by `make build-tools`."""
+    if not TOOLCHAIN_PREFIX_RECORD.is_file():
+        raise RuntimeError(
+            "AE-2 toolchain prefixes are unavailable; run "
+            "'make build-tools JOBS=8' before AE-2"
+        )
+    arguments = shlex.split(TOOLCHAIN_PREFIX_RECORD.read_text(encoding="utf-8"))
+    if not arguments or any(not argument.startswith("-D") for argument in arguments):
+        raise RuntimeError(f"invalid OpenROAD dependency prefix record: {TOOLCHAIN_PREFIX_RECORD}")
+    return arguments
+
+
 def ae1(*, artifact: dict[str, Any]) -> dict[str, Any]:
     expected_root = _path(str(artifact["expected_root"]))
     source = _path(str(artifact["source_root"]))
@@ -110,6 +125,25 @@ def ae1(*, artifact: dict[str, Any]) -> dict[str, Any]:
         )
     else:
         checks["shared_openroad_p0"] = False
+    aes_source_manifest = expected_root / "source_manifest.json"
+    checks["frozen_aes_source_manifest"] = aes_source_manifest.is_file()
+    if checks["frozen_aes_source_manifest"]:
+        from artifact_evaluation.verify_openroad_snapshot import snapshot_metadata
+
+        manifest = _json(aes_source_manifest)
+        observed = snapshot_metadata(source)
+        checks["frozen_aes_source"] = all(
+            observed[name] == manifest.get(name)
+            for name in (
+                "content_sha256",
+                "regular_file_count",
+                "symlink_count",
+                "directory_count",
+                "verified_no_external_symlinks",
+            )
+        )
+    else:
+        checks["frozen_aes_source"] = False
     tools = {name: shutil.which(name) is not None for name in ("cmake", "python3")}
     # A release need not ship a prebuilt binary: AE-2 builds the frozen source
     # when requested.  A PATH OpenROAD is reported for convenience only.
@@ -133,7 +167,18 @@ def _build_openroad(*, source: Path, build: Path, jobs: int, report: Path) -> Pa
     binary = build / "bin" / "openroad"
     if binary.is_file():
         return binary
-    configure = ["cmake", "-S", str(source), "-B", str(build), "-DCMAKE_BUILD_TYPE=Release"]
+    if build.exists():
+        shutil.rmtree(build)
+    configure = [
+        "cmake",
+        "-S",
+        str(source),
+        "-B",
+        str(build),
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DENABLE_TESTS=OFF",
+        *_toolchain_cmake_args(),
+    ]
     if _run(configure, cwd=PROJECT_ROOT, env=os.environ.copy(), log=report / "configure.log") != 0:
         raise RuntimeError(f"CMake configure failed; see {report / 'configure.log'}")
     build_command = ["cmake", "--build", str(build), "--target", "openroad", "-j", str(jobs)]

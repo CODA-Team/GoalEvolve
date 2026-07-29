@@ -87,6 +87,9 @@ make setup
 # Explicitly install the frozen OpenROAD system/common dependencies when needed.
 make setup INSTALL_SYSTEM_DEPS=1 JOBS=8
 
+# Build the isolated CMake dependency prefix required by AE-2.
+make build-tools JOBS=8
+
 # Install or update the Codex CLI for AE-3. This does not configure an API key.
 make setup INSTALL_CODEX_CLI=1
 
@@ -102,7 +105,11 @@ upstream script before running it. On Ubuntu/Debian, it also installs
 `python3-venv` and reuses a distribution Eigen 3.4 package through the
 installer's `/usr/local` compatibility path, avoiding an unnecessary GitLab
 download. Dependency-prefix output is redirected outside the immutable p0
-snapshot so that setup cannot change the AE-1 source digest. `JOBS` limits
+snapshot so that setup cannot change the AE-1 source digest. `make build-tools`
+uses the same separation as DPLEvolve-AE: it builds a machine-local, user-writable
+toolchain under `outputs/toolchain/`, whose explicit CMake prefix is consumed by
+AE-2. The isolated Boost 1.87 prefix is required by the shipped OR-Tools 9.14
+binary and prevents a conflict with host Boost installations. `JOBS` limits
 upstream dependency builds.
 
 `make setup INSTALL_CODEX_CLI=1` installs or updates the `@openai/codex` npm
@@ -153,6 +160,7 @@ AE-1 verifies the release manifest, frozen source, AES benchmark, ASAP7 files, o
 Then rebuild and replay the frozen AES artifact:
 
 ```bash
+make build-tools JOBS=8
 PYTHONPATH=. python3 -m artifact_evaluation.runner ae2 \
   --artifact aes_r54_student1 --rebuild --jobs 8
 ```

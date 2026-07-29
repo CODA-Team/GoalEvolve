@@ -5,6 +5,8 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 INSTALLER="${PROJECT_ROOT}/artifact_evaluation/lineage/openroad_power/p0/source/etc/DependencyInstaller.sh"
 P0_GENERATED_DEPS_FILE="${PROJECT_ROOT}/artifact_evaluation/lineage/openroad_power/p0/source/etc/openroad_deps_prefixes.txt"
+TOOLCHAIN_ROOT="${PROJECT_ROOT}/outputs/toolchain"
+TOOLCHAIN_DEPS_FILE="${TOOLCHAIN_ROOT}/openroad_deps_prefixes.txt"
 VENV_ROOT="${PROJECT_ROOT}/.venv"
 JOBS=8
 INSTALL_SYSTEM_DEPS=0
@@ -137,18 +139,20 @@ if [[ ${INSTALL_SYSTEM_DEPS} -eq 1 ]]; then
     fi
     prepare_debian_compatibility_dependencies
     remove_stale_p0_dependency_prefixes
-    # The frozen installer runs through sudo and writes this file at the end.
-    # Give it a fresh directory and a non-existent output file. In particular,
-    # do not hand sudo a user-owned mode-0600 file, which fails on some WSL
-    # configurations even though the command itself is privileged.
-    DEPS_PREFIXES_DIR="$(mktemp -d "${TMPDIR:-/tmp}/goalevolve_openroad_deps_prefixes.XXXXXX")"
-    DEPS_PREFIXES_FILE="${DEPS_PREFIXES_DIR}/prefixes.txt"
+    # Keep upstream dependency provenance in the machine-local state directory,
+    # outside the immutable p0 source snapshot. AE-2 uses the separate,
+    # compatible prefix created by make build-tools.
+    mkdir -p "${TOOLCHAIN_ROOT}"
     if [[ ${EUID} -eq 0 ]]; then
-        "${INSTALLER}" -all "-threads=${JOBS}" -save-deps-prefixes="${DEPS_PREFIXES_FILE}"
+        "${INSTALLER}" -all "-threads=${JOBS}" -save-deps-prefixes="${TOOLCHAIN_DEPS_FILE}"
     else
-        sudo "${INSTALLER}" -all "-threads=${JOBS}" -save-deps-prefixes="${DEPS_PREFIXES_FILE}"
+        sudo "${INSTALLER}" -all "-threads=${JOBS}" -save-deps-prefixes="${TOOLCHAIN_DEPS_FILE}"
     fi
-    rm -rf "${DEPS_PREFIXES_DIR}"
+    [[ -s "${TOOLCHAIN_DEPS_FILE}" ]] || {
+        printf 'OpenROAD dependency prefix record was not created: %s\n' "${TOOLCHAIN_DEPS_FILE}" >&2
+        exit 1
+    }
+    printf '[OK] OpenROAD CMake prefix record: %s\n' "${TOOLCHAIN_DEPS_FILE}"
 fi
 
 if [[ ${INSTALL_CODEX_CLI} -eq 1 ]]; then
