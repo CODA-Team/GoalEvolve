@@ -65,6 +65,15 @@ Use a Linux host. The fixed source and toolchain provenance remain recorded in
 [`toolchain/lock.json`](toolchain/lock.json); AE-2 rebuilds the shipped
 OpenROAD source and does not require a system `openroad` binary.
 
+### Platform support
+
+Linux `x86_64` is the validated platform for AE-1, AE-2, and AE-3. The frozen
+OpenROAD dependency installer has `aarch64` support, so Linux ARM64 hosts may
+run the installation commands and AE-1. However, the AE-2 source rebuild,
+post-route flow, official checks, and AE-3 campaigns have not been validated
+on ARM64. An ARM64 failure or QoR difference is therefore unsupported rather
+than an artifact regression. `make doctor` reports this distinction.
+
 ```bash
 git clone --branch artifact https://github.com/Liu7541/GOAL_EVOLVE.git
 cd GOAL_EVOLVE
@@ -89,7 +98,12 @@ make check
 CMake, GCC/G++, Bison, Flex, SWIG, and `pkg-config`. It exits nonzero when a
 prerequisite is missing. `make setup INSTALL_SYSTEM_DEPS=1` explicitly invokes
 the frozen OpenROAD `DependencyInstaller.sh -all` through `sudo`; review that
-upstream script before running it. `JOBS` limits its parallel dependency builds.
+upstream script before running it. On Ubuntu/Debian, it also installs
+`python3-venv` and reuses a distribution Eigen 3.4 package through the
+installer's `/usr/local` compatibility path, avoiding an unnecessary GitLab
+download. Dependency-prefix output is redirected outside the immutable p0
+snapshot so that setup cannot change the AE-1 source digest. `JOBS` limits
+upstream dependency builds.
 
 `make setup INSTALL_CODEX_CLI=1` installs or updates the `@openai/codex` npm
 package. It changes neither `config/credentials/` nor any API-key setting. Set

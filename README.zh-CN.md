@@ -54,6 +54,14 @@ AE-2 会重建 `artifact_evaluation/lineage/aes_cipher_top/r054_student1/source`
 [`toolchain/lock.json`](toolchain/lock.json)；AE-2 会重建仓库内 OpenROAD 源码，
 不需要系统预装 `openroad` 二进制。
 
+### 平台支持
+
+Linux `x86_64` 是 AE-1、AE-2 和 AE-3 的已验证平台。冻结的 OpenROAD 依赖安装器
+包含 `aarch64` 支持，因此 Linux ARM64 主机可以尝试运行安装命令和 AE-1；但 AE-2
+源码重建、post-route flow、官方检查和 AE-3 campaign 尚未在 ARM64 上验证。因此，
+ARM64 上的 build/flow 失败或 QoR 差异属于未支持平台行为，不应判定为 artifact
+regression。`make doctor` 会报告这一状态。
+
 ```bash
 git clone --branch artifact https://github.com/Liu7541/GOAL_EVOLVE.git
 cd GOAL_EVOLVE
@@ -78,7 +86,9 @@ make check
 SWIG 和 `pkg-config`，缺失任一依赖会以非零状态退出。只有显式传入
 `INSTALL_SYSTEM_DEPS=1` 时，`make setup` 才会通过 `sudo` 调用冻结 OpenROAD 的
 `DependencyInstaller.sh -all`；执行前应审阅该上游脚本。`JOBS` 用于限制其依赖
-构建并行度。
+构建并行度。在 Ubuntu/Debian 上，该命令还会安装 `python3-venv`，并复用发行版的
+Eigen 3.4 包建立安装器所需的 `/usr/local` 兼容路径，避免非必要的 GitLab 下载。
+依赖前缀输出会写入 p0 快照外部，确保 setup 不会修改 AE-1 的源码 digest。
 
 `make setup INSTALL_CODEX_CLI=1` 会通过 npm 安装或更新 `@openai/codex`，不会
 修改 `config/credentials/`，也不会创建、读取或配置 API key。若 npm 已安装但不在

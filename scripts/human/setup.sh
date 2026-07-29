@@ -4,10 +4,84 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 INSTALLER="${PROJECT_ROOT}/artifact_evaluation/lineage/openroad_power/p0/source/etc/DependencyInstaller.sh"
+P0_GENERATED_DEPS_FILE="${PROJECT_ROOT}/artifact_evaluation/lineage/openroad_power/p0/source/etc/openroad_deps_prefixes.txt"
 VENV_ROOT="${PROJECT_ROOT}/.venv"
 JOBS=8
 INSTALL_SYSTEM_DEPS=0
 INSTALL_CODEX_CLI=0
+
+is_debian_family() {
+    [[ -f /etc/os-release ]] || return 1
+    . /etc/os-release
+    [[ "${ID:-}" == "ubuntu" || "${ID:-}" == "debian" || "${ID_LIKE:-}" == *debian* ]]
+}
+
+eigen_version() {
+    local macros=$1
+    local world major
+    world=$(awk '/#define EIGEN_WORLD_VERSION/{print $3}' "${macros}")
+    major=$(awk '/#define EIGEN_MAJOR_VERSION/{print $3}' "${macros}")
+    printf '%s.%s' "${world}" "${major}"
+}
+
+prepare_debian_compatibility_dependencies() {
+    is_debian_family || return
+
+    run_privileged() {
+        if [[ ${EUID} -eq 0 ]]; then
+            "$@"
+        else
+            sudo "$@"
+        fi
+    }
+
+    # Ubuntu installs Eigen to /usr/include, while the frozen OpenROAD
+    # installer checks /usr/local/include before trying GitLab. Reuse the
+    # distribution package when it supplies the required 3.4 headers.
+    if [[ ! -f /usr/include/eigen3/Eigen/src/Core/util/Macros.h ]]; then
+        printf '%s\n' '[INFO] Installing Ubuntu/Debian Eigen headers for the frozen OpenROAD dependency check.'
+        run_privileged apt-get update
+        run_privileged apt-get install -y libeigen3-dev
+    fi
+
+    local system_eigen=/usr/include/eigen3/Eigen/src/Core/util/Macros.h
+    if [[ -f "${system_eigen}" && "$(eigen_version "${system_eigen}")" == "3.4" ]]; then
+        if [[ ! -e /usr/local/include/eigen3 ]]; then
+            printf '%s\n' '[INFO] Exposing system Eigen 3.4 at /usr/local/include for the frozen OpenROAD installer.'
+            run_privileged mkdir -p /usr/local/include
+            run_privileged ln -s /usr/include/eigen3 /usr/local/include/eigen3
+        fi
+    else
+        printf '%s\n' '[WARN] System Eigen 3.4 was not found; the frozen installer will attempt its upstream GitLab download.' >&2
+    fi
+}
+
+ensure_python_venv_support() {
+    python3 -c 'import ensurepip' >/dev/null 2>&1 && return
+    if [[ ${INSTALL_SYSTEM_DEPS} -eq 1 ]] && is_debian_family; then
+        printf '%s\n' '[INFO] Installing Python venv support.'
+        if [[ ${EUID} -eq 0 ]]; then
+            apt-get update
+            apt-get install -y python3-venv
+        else
+            sudo apt-get update
+            sudo apt-get install -y python3-venv
+        fi
+        python3 -c 'import ensurepip' >/dev/null 2>&1 && return
+    fi
+    printf '%s\n' 'Python venv support is unavailable. On Ubuntu/Debian run: sudo apt-get install -y python3-venv' >&2
+    exit 1
+}
+
+remove_stale_p0_dependency_prefixes() {
+    [[ -e "${P0_GENERATED_DEPS_FILE}" ]] || return
+    printf '[INFO] Removing generated dependency-prefix file from the immutable p0 snapshot.\n'
+    if [[ ${EUID} -eq 0 ]]; then
+        rm -f "${P0_GENERATED_DEPS_FILE}"
+    else
+        sudo rm -f "${P0_GENERATED_DEPS_FILE}"
+    fi
+}
 
 usage() {
     cat <<'EOF'
@@ -50,14 +124,21 @@ done
 
 [[ "${JOBS}" =~ ^[1-9][0-9]*$ ]] || { printf '%s\n' '--jobs must be a positive integer' >&2; exit 2; }
 
+command -v python3 >/dev/null 2>&1 || { printf '%s\n' 'python3 is required' >&2; exit 1; }
+ensure_python_venv_support
+
 if [[ ${INSTALL_SYSTEM_DEPS} -eq 1 ]]; then
     [[ -x "${INSTALLER}" ]] || { printf 'Missing dependency installer: %s\n' "${INSTALLER}" >&2; exit 1; }
     printf '%s\n' '[INFO] Installing frozen OpenROAD system and common dependencies.'
-    if [[ ${EUID} -eq 0 ]]; then
-        "${INSTALLER}" -all "-threads=${JOBS}"
-    else
+    if [[ ${EUID} -ne 0 ]]; then
         command -v sudo >/dev/null 2>&1 || { printf '%s\n' 'sudo is required for --install-system-deps' >&2; exit 1; }
-        sudo "${INSTALLER}" -all "-threads=${JOBS}"
+    fi
+    prepare_debian_compatibility_dependencies
+    remove_stale_p0_dependency_prefixes
+    if [[ ${EUID} -eq 0 ]]; then
+        "${INSTALLER}" -all "-threads=${JOBS}" -save-deps-prefixes="/tmp/goalevolve_openroad_deps_prefixes.txt"
+    else
+        sudo "${INSTALLER}" -all "-threads=${JOBS}" -save-deps-prefixes="/tmp/goalevolve_openroad_deps_prefixes.txt"
     fi
 fi
 
@@ -76,7 +157,10 @@ if [[ ${INSTALL_CODEX_CLI} -eq 1 ]]; then
     printf '[OK] Codex CLI: %s\n' "$(command -v codex)"
 fi
 
-command -v python3 >/dev/null 2>&1 || { printf '%s\n' 'python3 is required' >&2; exit 1; }
+if [[ -x "${VENV_ROOT}/bin/python" ]] && ! "${VENV_ROOT}/bin/python" -m pip --version >/dev/null 2>&1; then
+    printf '[INFO] Recreating incomplete Python virtual environment: %s\n' "${VENV_ROOT}"
+    rm -rf "${VENV_ROOT}"
+fi
 if [[ ! -x "${VENV_ROOT}/bin/python" ]]; then
     printf '[INFO] Creating Python virtual environment: %s\n' "${VENV_ROOT}"
     python3 -m venv "${VENV_ROOT}"
