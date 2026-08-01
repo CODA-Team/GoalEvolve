@@ -157,7 +157,19 @@ def _round_snapshot(round_root: Path, contract: GoalContract) -> tuple[dict[str,
     plan = _payload(round_root / "teacher_plan.json")
     committed = _payload(round_root / "round.json")
     diagnosis = dict(plan.get("diagnosis") or committed.get("diagnosis") or {})
-    ideas = [_idea(item) for item in list(plan.get("hypotheses") or ()) if isinstance(item, Mapping)]
+    assignments = {
+        str(row.get("hypothesis_id")): str(row.get("student_id"))
+        for row in list(committed.get("results") or ())
+        if isinstance(row, Mapping) and row.get("hypothesis_id") and row.get("student_id")
+    }
+    ideas: list[dict[str, Any]] = []
+    for raw in list(plan.get("hypotheses") or ()):
+        if not isinstance(raw, Mapping):
+            continue
+        idea = _idea(raw)
+        if not idea["student_id"]:
+            idea["student_id"] = assignments.get(str(idea["hypothesis_id"]), "")
+        ideas.append(idea)
     ideas_by_student = {str(item["student_id"]): item for item in ideas if item["student_id"]}
     students_root = round_root / "students"
     student_ids = set(ideas_by_student)

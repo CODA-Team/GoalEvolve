@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import threading
 from pathlib import Path
@@ -93,6 +94,12 @@ def _write_campaign(root: Path) -> None:
             "round": 1,
             "promoted_student": "student_1",
             "parent_after": {"parent_id": "round_001:student_1"},
+            "results": [
+                {
+                    "student_id": "student_1",
+                    "hypothesis_id": "timing_hypothesis",
+                }
+            ],
         },
     )
 
@@ -165,6 +172,21 @@ def test_campaign_snapshot_exposes_ideas_progress_and_qor_history() -> None:
     assert snapshot["qor_history"][1]["goal_distance"] < snapshot["qor_history"][0]["goal_distance"]
     assert snapshot["top_results"][0]["result_id"] == "round_001:student_1"
     assert snapshot["top_results"][0]["evidence_state"] == "validated"
+
+
+def test_campaign_snapshot_recovers_student_assignment_from_committed_round() -> None:
+    from goalevolve.dashboard import campaign_snapshot
+
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary) / "campaign"
+        _write_campaign(root)
+        plan = root / "rounds" / "round_001" / "teacher_plan.json"
+        payload = json.loads(plan.read_text(encoding="utf-8"))
+        payload["hypotheses"][0].pop("student_id")
+        plan.write_text(json.dumps(payload), encoding="utf-8")
+        snapshot = campaign_snapshot(root)
+
+    assert snapshot["rounds"][0]["teacher"]["ideas"][0]["student_id"] == "student_1"
 
 
 def test_campaign_snapshot_rejects_a_missing_campaign_root() -> None:
