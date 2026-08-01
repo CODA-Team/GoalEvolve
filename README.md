@@ -409,15 +409,15 @@ ssh -N -L 8080:127.0.0.1:8080 USER@SERVER
 
 ### Paper Authors
 
-- **Haixu Liu** — College of Integrated Circuits and Nano-Micro Electronics, Fudan University
+- **Haixu Liu** — Fudan University
   ([22307130026@m.fudan.edu.cn](mailto:22307130026@m.fudan.edu.cn))
-- **Lei Zhou** — College of Integrated Circuits and Nano-Micro Electronics, Fudan University
+- **Lei Zhou** — Fudan University
   ([zhoulei26@m.fudan.edu.cn](mailto:zhoulei26@m.fudan.edu.cn))
-- **Yuhao Ren** — College of Integrated Circuits and Nano-Micro Electronics, Fudan University
+- **Yuhao Ren** — Fudan University
   ([24112020153@m.fudan.edu.cn](mailto:24112020153@m.fudan.edu.cn))
-- **Yumao Wu** — School of Future Information Innovation, Fudan University
+- **Yumao Wu** — Fudan University
   ([yumaowu@fudan.edu.cn](mailto:yumaowu@fudan.edu.cn))
-- **Zhiang Wang** — College of Integrated Circuits and Nano-Micro Electronics, Fudan University
+- **Zhiang Wang** — Fudan University
   ([zhiangwang@fudan.edu.cn](mailto:zhiangwang@fudan.edu.cn))
 
 ### Artifact Evaluation Contributor
