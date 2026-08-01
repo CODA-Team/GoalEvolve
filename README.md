@@ -71,263 +71,155 @@ GoalEvolve/
     Bison 3.8.2, Flex 2.6.4, SWIG 4.3.0, Boost 1.89.0, Eigen 3.4, spdlog
     1.15.0, and host Tcl/Tk, zlib, and libffi.
 
-- [Codex CLI](https://www.npmjs.com/package/@openai/codex) 0.146.0 (validated)
+- [Codex CLI](https://www.npmjs.com/package/@openai/codex) 0.146.0
 
   - Requires Node.js 16 or newer. Install it into project-generated state with
     `make setup INSTALL_CODEX_CLI=1`.
 
 ## Reproduction tracks
 
-GoalEvolve separates a deterministic artifact claim from a fresh LLM-driven experiment.
+| Track | Purpose |
+|---|---|
+| AE-1 | Set up the project environment and check the release interfaces. |
+| AE-2 | Rebuild the released evolved OpenROAD source and replay the AES result in Table 1. |
+| AE-3 | Launch a GoalEvolve campaign for a supplied design or rerun full source evolution. |
 
-| Track | Purpose | Network/API key | Expected result |
-|---|---|---:|---|
-| AE-1 | Check that the release, benchmark, checker, and host interfaces are present | No | Deterministic pass/fail |
-| AE-2 | Replay the frozen AES R54 Student 1 artifact | No | Deterministic within manifest tolerances |
-| AE-3 | Launch a new Teacher/Student source-evolution campaign | Yes | Workflow completion; QoR is stochastic |
+Use AE-1 and AE-2 to set up the release and reproduce its Table 1 AES artifact.
 
-Use AE-1 and AE-2 to reproduce the released artifact. With a Codex-capable environment and an independent API credential, use AE-3 to evolve a design toward predefined QoR goals.
+Use AE-3 to evolve a design toward predefined QoR goals.
 
-## Environment
+## AE-1: Environment setup
 
-### Install the environment
-
-Use a Linux host. `make setup` bootstraps a project-local Python environment
-and optionally the Codex CLI; it never uses `sudo` or writes system packages.
-Prepare OpenROAD/ORFS separately, using its own supported build instructions.
-AE-2 and AE-3 inherit that active environment: OpenROAD, compiler, CMake, and
-all linked libraries must come from one compatible workspace.
-
-### Platform support
-
-Linux `x86_64` is the validated platform for AE-1, AE-2, and AE-3. Linux ARM64
-can run the Python setup and AE-1, but its OpenROAD build, post-route flow,
-official checks, and AE-3 campaign results are unvalidated. An ARM64 failure or
-QoR difference is therefore unsupported rather than an artifact regression.
+The validated platform is Linux `x86_64`. Start in the repository root:
 
 ```bash
 git clone https://github.com/CODA-Team/GoalEvolve.git
 cd GoalEvolve
 
-# Inspect the host and immutable release inputs.
+# Inspect host tools, release inputs, and the project-local environment.
 make doctor
 
 # Create the project-local Python environment.
 make setup
 
-# Install or update the Codex CLI for AE-3. This does not configure an API key.
+# Install the project-local Codex CLI, needed by AE-3.
 make setup INSTALL_CODEX_CLI=1
+```
 
-# Run the project check and AE-1 preflight.
+Copy and build p0 to prepare the matching OpenROAD executable. This keeps the
+frozen source snapshot unchanged; the dependency installer uses `sudo` only for
+host packages, while `-local` keeps downloaded build dependencies under the
+current user.
+
+```bash
+P0_INPUT="$PWD/artifact_evaluation/lineage/openroad_power/p0/source"
+P0_BUILD="$PWD/outputs/toolchain/openroad-p0"
+rm -rf "$P0_BUILD"
+mkdir -p "$(dirname "$P0_BUILD")"
+cp -a "$P0_INPUT" "$P0_BUILD"
+cd "$P0_BUILD"
+sudo ./etc/DependencyInstaller.sh -base
+./etc/DependencyInstaller.sh -common -local
+./etc/Build.sh
+cd -
+
+export OPENROAD_EXE="$P0_BUILD/build/bin/openroad"
 make check
 ```
 
-Before AE-2 or AE-3, activate a prepared OpenROAD/ORFS workspace and export
-its matching executable. Do not mix a binary from one build with libraries or
-source from another. `make doctor` reports whether the selected executable can
-start in the current shell.
+`make check` runs the AE-1 preflight. It verifies the release manifest, p0 and
+fixed-source snapshots, benchmark inputs, ASAP7 data, official parser/checker,
+and Python interface. A separately prepared compatible OpenROAD environment can
+be used instead by setting `OPENROAD_EXE` to its executable.
 
-```bash
-# Example only: use the activation command documented by your OpenROAD/ORFS workspace.
-source /path/to/prepared/openroad-environment.sh
-export OPENROAD_EXE=/path/to/prepared/OpenROAD/build/bin/openroad
-make doctor
-```
+## AE-2: Reproduce Table 1 with evolved OpenROAD
 
-`make setup INSTALL_CODEX_CLI=1` installs or updates the `@openai/codex` npm
-package inside `outputs/toolchain/codex-cli`. It changes neither
-`config/credentials/` nor any API-key setting.
+AE-2 rebuilds the released evolved AES OpenROAD source, runs the captured
+post-route flow, and compares its metrics and official 4/4 validity result with
+the fixed Table 1 evidence. Required AES inputs, ASAP7 data, the checker, and
+the frozen evolved source are included in the repository.
 
-`make check` loads `outputs/toolchain/activate.sh`, runs the environment doctor
-and AE-1, and reports Codex CLI availability. It does not install or build
-OpenROAD.
-
-For AE-3, configure a provider credential after installing the CLI. The project
-does not create, read, or configure API keys automatically.
-
-AES replay runs a complete physical-design flow. Disk, memory, and wall time
-are design- and host-dependent. Start with a conservative OpenROAD thread/job
-count; do not assume that `nproc` is appropriate on a shared machine. To place
-the generated Python environment elsewhere, set `GOALEVOLVE_CONDA_HOME`,
-`GOALEVOLVE_CONDA_PREFIX`, and `GOALEVOLVE_CONDA_PACKAGES_DIR` before
-`make setup`.
-
-## Inputs and data boundaries
-
-The release includes the material required for the fixed AES artifact:
-
-- `third_party/benchmarks/`: AES benchmark inputs and ASAP7 technology files used by AE-2.
-- `third_party/official_checker/`: the official log parser and 4/4 validity checker snapshot.
-- `artifact_evaluation/lineage/aes_cipher_top/r054_student1/source/`: the frozen OpenROAD source for the fixed replay.
-
-The repository also carries AE-3 profiles for `aes_cipher_top`, `ariane`, `jpeg_encoder`, `mempool_group`, `nvdla_a`, `nvdla_c`, `nvdla_m`, and `nvdla_p`. Availability of a profile does not replace any license or access requirement for benchmark data on a separate deployment. See [experiments/README.md](experiments/README.md) before starting a new design.
-
-## Quick start: fixed artifact
-
-Run the release preflight first:
+First confirm that the p0 executable prepared by AE-1 starts in the current
+environment, then rebuild and replay the evolved source:
 
 ```bash
 source outputs/toolchain/activate.sh
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae1
-```
+export OPENROAD_EXE="$PWD/outputs/toolchain/openroad-p0/build/bin/openroad"
 
-AE-1 verifies the release manifest, frozen source, AES benchmark, ASAP7 files,
-official parser/checker, and Python. It does not require a working OpenROAD
-installation.
-
-Then replay the frozen AES artifact:
-
-```bash
-export OPENROAD_EXE=/path/to/prepared/OpenROAD/bin/openroad
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2-preflight \
   --artifact aes_r54_student1 --openroad "$OPENROAD_EXE" --verbose
+
+unset OPENROAD_EXE
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2 \
-  --artifact aes_r54_student1 --openroad "$OPENROAD_EXE" --verbose
+  --artifact aes_r54_student1 --rebuild --jobs 8 --verbose
 ```
 
-`ae2-preflight` verifies that the prepared executable starts with the active
-host toolchain. Use `--rebuild` only when that host toolchain is already known
-to build the frozen source revision.
-For the full replay, `--verbose` streams OpenROAD flow output to the terminal
-while preserving logs under `outputs/ae2/`. A successful AE-2 report proves
-that the prepared OpenROAD executable ran the captured flow and passed the
-official validity check. `--rebuild` is available only when the active host
-toolchain is already known to build the frozen source revision.
+`--verbose` streams configure, build, and flow logs to the terminal. The replay
+endpoint is `global_route + estimate_parasitics`; its numerical tolerances and
+expected evidence are versioned in [release_manifest.json](artifact_evaluation/release_manifest.json).
 
-AE-2 performs the following steps:
+## AE-3: Run a new source-evolution campaign
 
-1. Runs the captured, path-portable `evaluate.tcl` from the original placed AES inputs.
-2. Executes repair, legalizes placement, performs global routing, and estimates routing parasitics.
-3. Parses post-route TNS, dynamic power, and leakage power.
-4. Runs the official reference 4/4 validity checker.
-5. Compares the observed metrics to [the frozen manifest](artifact_evaluation/release_manifest.json) within the declared tolerances.
+AE-3 runs the complete Teacher/Student source-evolution workflow. It is
+non-deterministic and is evaluated by valid workflow completion and measured
+QoR, not by reproducing the released AES patch.
 
-The fixed claim is the `global_route + estimate_parasitics` endpoint, not detailed routing. Review [artifact_evaluation/README.md](artifact_evaluation/README.md) for the exact replay contract and report locations.
+### Configure Codex access
 
-## Fixed AES result
-
-The released artifact `aes_r54_student1` corresponds to `round_054:student_1`. Its expected post-route evidence is:
-
-| Metric | Expected value |
-|---|---:|
-| TNS | `15.79 ns` |
-| Dynamic power | `335.9714B pW` |
-| Leakage power | `28.6M pW` |
-| DRV | `0` |
-| Official validity | `4/4 pass` |
-
-SPPA and Sfinal are retained as observer-only reports. They never participate in retrieval, source selection, or promotion. AE-2's authoritative output is `outputs/ae2/aes_r54_student1/report/ae2_report.json`; its flow log, metrics, Tcl, and official-check log are under `outputs/ae2/aes_r54_student1/contest_output/`.
-
-## Fresh evolution (AE-3)
-
-AE-3 uses Codex Teacher and Student workers to create new C++ edits. It is not deterministic and should not be expected to rediscover the released R54 patch.
-
-Create the project-local credential file from the committed template:
+Create the ignored project-local credential file and set its provider fields
+and API key. Model, reasoning, retry, and timeout policy is shared by all
+designs in [`config/codex.json`](config/codex.json).
 
 ```bash
-cd /path/to/GoalEvolve
 cp config/credentials/goalevolve_codex.env.example \
   config/credentials/goalevolve_codex.env
 chmod 600 config/credentials/goalevolve_codex.env
-```
-
-Set the provider fields and API key in `config/credentials/goalevolve_codex.env`. Do not commit this file. GoalEvolve reads this project-local dotenv file, creates isolated Teacher/Student homes under `outputs/`, and does not inherit credentials from `~/.codex`.
-
-The shared Teacher/Student model, reasoning effort, retry, and timeout policy is versioned in [`config/codex.json`](config/codex.json). It applies to every design; API keys remain only in the ignored credential file.
-
-Verify that the Codex client is available, then start a normal multi-round AES
-campaign:
-
-```bash
-cd /path/to/GoalEvolve
 source outputs/toolchain/activate.sh
 codex --version
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli run \
-  --config experiments/aes_cipher_top/evolve.json --rounds 10
 ```
 
-The profile controls source scope, build jobs, per-command timeout, absolute objective targets, and campaign state path. Model and reasoning policy is shared by all designs through `config/codex.json`. `state_root` is optional; when omitted, a campaign writes to `outputs/ae3/<design>/`. The supplied global policy uses `gpt-5.6-terra` with `xhigh` reasoning; this setting is not a claim that another model/provider will behave equivalently.
+### Add a design and profiles
 
-`run` is the only public command that starts a Teacher/Student evolution campaign. `baseline` measures a fixed p0 before preparing a new profile; `official-check` validates an existing post-flow result; `sfinal-observe` and `leaderboard` generate observer-only reports; `import-legacy` imports explicit metadata; and `smoke` is a mock-only test helper.
-
-## Starting a different design
-
-Every design follows the same two-profile process. Create these project files
-before running a new design:
+Place the design inputs and create the two profiles below. ASAP7 technology data
+is already shared at `third_party/benchmarks/asap7/`.
 
 ```text
 third_party/benchmarks/benchmarks/my_design/
-├── my_design.def or my_design.def.gz   # Placed starting design
+├── my_design.def or my_design.def.gz   # Placed input
 ├── my_design.v                         # Verilog netlist
 ├── my_design.sdc                       # Timing constraints
-└── metrics.csv                         # Required benchmark metadata
+└── metrics.csv                         # Benchmark metadata
 experiments/my_design/
-├── baseline.json                       # Measures p0 and writes baseline evidence
-└── evolve.json                         # Holds frozen baseline, targets, and campaign gate
+├── baseline.json                       # p0 measurement profile
+└── evolve.json                         # Multi-round evolution profile
 ```
-
-The required technology data is already shared at
-`third_party/benchmarks/asap7/`; do not copy it into each design directory.
-
-Create the two profiles from the committed templates:
 
 ```bash
 mkdir -p experiments/my_design
-cp config/templates/design.baseline.example.json \
-  experiments/my_design/baseline.json
-cp config/templates/design.evolve.example.json \
-  experiments/my_design/evolve.json
+cp config/templates/design.baseline.example.json experiments/my_design/baseline.json
+cp config/templates/design.evolve.example.json experiments/my_design/evolve.json
 ```
 
-In both files, replace every `replace_design` with `my_design`. Configure the
-following fields before the baseline command:
+Replace every `replace_design` with `my_design`. Leave `source_root` as `null`
+to use repository p0, or set both profiles' `source_root` and `build_seed_root`
+to a compatible OpenROAD workspace. `baseline.json` writes to
+`outputs/baseline/my_design/`; `evolve.json` automatically writes to
+`outputs/ae3/my_design/` unless `state_root` is explicitly set.
 
-| Field | `baseline.json` | `evolve.json` | Value before baseline |
-| --- | --- | --- | --- |
-| `design` | required | required | Exact benchmark directory/name, for example `my_design` |
-| `source_root` | optional | optional | `null` means the shared p0 source; for a host-backed AE-3 build, use the same matching OpenROAD source workspace in both files |
-| `build_seed_root` | optional | optional | `null` starts a fresh build; set this to the same workspace when it contains a matching `build/` or `build_power/` cache |
-| `state_root` | required by template | omit | `outputs/baseline/my_design`; evolve defaults to `outputs/ae3/my_design` |
-| `baseline_evaluation_root` | omit | required by template | `../../outputs/baseline/my_design` |
-| `baseline_metrics` | placeholder permitted | replace after measurement | Three decision-metric names must match target names |
-| `target_metrics` | placeholder permitted | replace after measurement | Manual, absolute QoR thresholds |
-| `campaign_ready` | `false` | `false` | Change only evolve to `true` after review |
+### Set the QoR contract
 
-When `source_root` is omitted or `null`, both profiles use the shared p0
-OpenROAD source at `artifact_evaluation/lineage/openroad_power/p0/source`. A
-user can change that default without editing a profile by exporting
-`GOALEVOLVE_OPENROAD_SEED=/absolute/path/to/openroad/source`. For an actual
-AE-3 campaign, point it to the source checkout that matches the activated host
-toolchain. To select a source for one design only, replace `null` in both
-profiles with the same relative or absolute source root; it must contain
-`CMakeLists.txt`. Set `build_seed_root` to that workspace as well when it has
-a matching `build/` or `build_power/` directory, so candidate builds can use a
-relocated copy-on-write cache:
-
-```json
-"source_root": "/path/to/prepared/OpenROAD",
-"build_seed_root": "/path/to/prepared/OpenROAD"
-```
-
-Leave `campaign_ready` as `false` and leave the placeholder metric values in
-place for the baseline command. Then measure p0:
+Run the baseline profile, then copy its measured metrics into
+`evolve.json` `baseline_metrics`. Set `target_metrics` to the absolute TNS,
+dynamic-power, and leakage-power limits for the new design, and set
+`campaign_ready` to `true`. Both metric maps must use the same names.
 
 ```bash
-# First activate the matching OpenROAD/ORFS environment in this shell.
-source /path/to/prepared/openroad-environment.sh
-source outputs/toolchain/activate.sh
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli baseline \
   --config experiments/my_design/baseline.json
 ```
 
-This writes `outputs/baseline/my_design/baseline.json`. Copy the measured
-`tns_abs_ns`, `dynamic_power_pw`, and `leakage_power_pw` into
-`experiments/my_design/evolve.json` `baseline_metrics`, choose absolute
-`target_metrics`, and set `campaign_ready` to `true`:
-
 ```json
 {
-  "design": "my_design",
   "campaign_ready": true,
   "baseline_evaluation_root": "../../outputs/baseline/my_design",
   "baseline_metrics": {
@@ -343,63 +235,51 @@ This writes `outputs/baseline/my_design/baseline.json`. Copy the measured
 }
 ```
 
-The values above are examples only. The baseline and target maps must contain
-the same metric names; targets are manual, absolute QoR limits, never ratios.
-Do not combine pre-route values, measurements from a different OpenROAD source,
-or another Tcl schedule with a full-flow campaign contract. `run` reads the
-frozen metric maps from `evolve.json` and verifies the evidence at
-`baseline_evaluation_root` before it creates a Student workspace. Start the
-campaign after the review:
+### Start or resume the campaign
 
 ```bash
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli run \
   --config experiments/my_design/evolve.json --rounds 10
 ```
 
-AES and JPEG have reviewed targets and are launchable. The other supplied
-designs intentionally stop at the baseline step until their own measured p0
-record is frozen. Every `evolve.json` omits `state_root`, so it automatically
-writes to `outputs/ae3/<design>/`; repeating a `run --rounds N` command resumes
-there and appends rounds. See [experiments/README.md](experiments/README.md)
-for the complete uniform workflow.
+Run the same command again to append rounds to the same campaign. The shipped
+AES and JPEG profiles already have reviewed targets; see
+[experiments/README.md](experiments/README.md) for the other supplied designs.
 
 ## Outputs and result inspection
 
-GoalEvolve keeps generated state out of version control:
-
 ```text
 outputs/
-  ae2/<artifact>/
-    contest_output/                Tcl, log, DEF/ODB, metrics, 4/4 report
-    report/ae2_report.json         executable, preflight, and artifact comparison
-  ae3/<campaign>/
-    rounds/round_XXX/
-      diagnosis.json               dominant target gap and checkpoint evidence
-      students/<student>/artifacts/
-        candidate.json             QoR, checks, source provenance
-        evidence.json              mechanism attribution and verdict
-        contest_output/            flow outputs, metrics, 4/4 report
-    parent.json                    promoted execution champion
+├── toolchain/                         # Project-local Python and Codex CLI
+├── baseline/
+│   └── <design>/                      # Measured p0 baseline evidence
+├── ae2/
+│   └── aes_r54_student1/
+│       ├── report/                    # Rebuild, preflight, and manifest comparison
+│       └── contest_output/            # Flow logs, QoR metrics, and 4/4 result
+└── ae3/
+    └── <design>/
+        ├── rounds/                    # Teacher plans and Student evaluations
+        ├── knowledge/                 # Persisted evolution evidence
+        └── parent.json                # Current promoted source parent
 ```
 
-A result is eligible for promotion only after its build, flow, metrics, placement, and official 4/4 checks pass. Checkpoint records distinguish immediate power/timing effects from the post-route result. A candidate that improves a local checkpoint but fails the final contract is retained as negative mechanism evidence rather than promoted.
+For AE-2, inspect `report/ae2_report.json` for the Table 1 comparison and
+`contest_output/` for the underlying flow. For AE-3, inspect the design's
+`rounds/` and `parent.json` for candidate history and the current result.
 
 ## Testing and validation
 
-Run the in-tree test suite:
+Run the in-tree test suite after AE-1 setup:
 
 ```bash
 source outputs/toolchain/activate.sh
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m pytest
 ```
 
-For a reproducibility claim, report all three of the following separately:
-
-1. AE-1 environment/interface preflight.
-2. AE-2 fixed-source replay, including the manifest comparison and official 4/4 result.
-3. AE-3 workflow status, model/provider configuration, token usage, and verified QoR for every valid full-flow candidate.
-
-AE-3 workflow completion is not evidence of a fixed QoR result. Conversely, a successful AE-2 replay validates the released artifact, not the stochastic rediscovery of its source edit.
+Report AE-1 preflight, AE-2 replay/4/4 result, and AE-3 measured valid
+candidates separately. A successful AE-2 replay validates the fixed artifact;
+AE-3 validates a new stochastic evolution run.
 
 ## Further documentation
 
