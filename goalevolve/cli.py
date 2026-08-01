@@ -16,6 +16,7 @@ from .evaluation.sfinal import observe_sfinal
 from .execution.execution import ExecutionPolicy
 from .planning.epd import EvolutionProgramDatabase
 from .evaluation.leaderboard import update_unified_leaderboard
+from .dashboard import main as dashboard_main
 
 
 def _engine(config_path: Path) -> tuple[GoalEvolveEngine, object]:
@@ -237,6 +238,13 @@ def command_leaderboard(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_dashboard(args: argparse.Namespace) -> int:
+    dashboard_args = ["--state-root", args.state_root, "--host", args.host, "--port", str(args.port)]
+    if args.once:
+        dashboard_args.append("--once")
+    return dashboard_main(dashboard_args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="goalevolve-v2")
     subs = parser.add_subparsers(dest="command", required=True)
@@ -275,6 +283,12 @@ def build_parser() -> argparse.ArgumentParser:
     leaderboard.add_argument("--output-root", default="runtime/leaderboard")
     leaderboard.add_argument("--top-k", type=int, default=5)
     leaderboard.set_defaults(func=command_leaderboard)
+    dashboard = subs.add_parser("dashboard", help="serve a read-only local AE-3 campaign dashboard")
+    dashboard.add_argument("--state-root", required=True, help="AE-3 campaign state root")
+    dashboard.add_argument("--host", default="127.0.0.1")
+    dashboard.add_argument("--port", type=int, default=8080)
+    dashboard.add_argument("--once", action="store_true", help="print one dashboard snapshot and exit")
+    dashboard.set_defaults(func=command_dashboard)
     return parser
 
 

@@ -50,6 +50,11 @@ _PLACEMENT_FAILURE = re.compile(
 _GENERATED_SOURCE_METADATA = frozenset({Path("include/ord/Version.hh")})
 
 
+def _project_toolchain() -> tuple[dict[str, str] | None, tuple[str, ...]]:
+    """Use the matching OpenROAD/ORFS environment activated by the caller."""
+    return dict(os.environ), ()
+
+
 @dataclass(frozen=True)
 class Contest2026Config:
     design: str
@@ -69,6 +74,8 @@ class Contest2026Config:
     power_reclaim_max_moves: int = 0
     power_stage_tns_ceiling_ns: float = 30.0
     execution_policy: ExecutionPolicy = ExecutionPolicy()
+    toolchain_environment: dict[str, str] | None = None
+    toolchain_cmake_args: tuple[str, ...] = ()
 
     @property
     def benchmark_dir(self) -> Path:
@@ -537,7 +544,14 @@ def _power_timing_cell_tradeoff(output: Path) -> dict[str, object]:
     return result
 
 
-def official_four_check(*, pre_opt: Path, post_opt: Path, output_log: Path, policy: ExecutionPolicy) -> tuple[bool, str]:
+def official_four_check(
+    *,
+    pre_opt: Path,
+    post_opt: Path,
+    output_log: Path,
+    policy: ExecutionPolicy,
+    environment: dict[str, str] | None = None,
+) -> tuple[bool, str]:
     runner = ResilientCommandRunner(policy)
     report = runner.run(
         command=[
@@ -551,6 +565,7 @@ def official_four_check(*, pre_opt: Path, post_opt: Path, output_log: Path, poli
             str(OFFICIAL_EQUIV_CELLS),
         ],
         cwd=post_opt,
+        environment=environment,
     )
     output_log.write_text(report.stdout_tail + "\n" + report.stderr_tail, encoding="utf-8")
     passed = report.ok and "SUMMARY: 4/4 checks passed" in report.stdout_tail
@@ -691,10 +706,10 @@ class Contest2026OpenROADEvaluator:
         if metrics_csv.exists():
             metrics_csv.unlink()
         runner = ResilientCommandRunner(self.config.execution_policy)
-        flow = runner.run(command=[str(binary), "-exit", str(tcl)], cwd=output, output_log=log)
+        flow = runner.run(command=[str(binary), "-exit", str(tcl)], cwd=output, output_log=log, environment=self.config.toolchain_environment)
         checkpoint_path = output / "checkpoint_metrics.json"
         checkpoint_path.write_text(json.dumps(_checkpoint_metrics(log), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        parsed = runner.run(command=["python3", str(OFFICIAL_PARSE_LOG), str(log), "--csv", str(metrics_csv)], cwd=output)
+        parsed = runner.run(command=["python3", str(OFFICIAL_PARSE_LOG), str(log), "--csv", str(metrics_csv)], cwd=output, environment=self.config.toolchain_environment)
         metrics = _read_metrics(metrics_csv) if parsed.ok and metrics_csv.is_file() else {}
         required = {spec.name for spec in contract.metrics}
         metrics_ok = parsed.ok and required.issubset(metrics)
@@ -702,7 +717,7 @@ class Contest2026OpenROADEvaluator:
         lec_detail = "flow_or_metrics_failed"
         official_log = output / "official_4of4.log"
         if flow.ok and metrics_ok:
-            lec_ok, lec_detail = official_four_check(pre_opt=self.config.benchmark_dir, post_opt=output, output_log=official_log, policy=self.config.execution_policy)
+            lec_ok, lec_detail = official_four_check(pre_opt=self.config.benchmark_dir, post_opt=output, output_log=official_log, policy=self.config.execution_policy, environment=self.config.toolchain_environment)
         checks = [
             {"name": "build", "passed": True, "detail": str(binary)},
             {"name": "flow", "passed": flow.ok, "detail": flow.resource_error or "official_openroad_flow"},
@@ -776,13 +791,13 @@ class Contest2026OpenROADEvaluator:
 
         with self._measurement_lock:
             runner = ResilientCommandRunner(self.config.execution_policy)
-            flow = runner.run(command=[str(binary), "-exit", str(tcl)], cwd=output, output_log=log)
+            flow = runner.run(command=[str(binary), "-exit", str(tcl)], cwd=output, output_log=log, environment=self.config.toolchain_environment)
             checkpoint_path = output / "checkpoint_metrics.json"
             checkpoint_path.write_text(
                 json.dumps(_checkpoint_metrics(log), ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
             )
-            parsed = runner.run(command=["python3", str(OFFICIAL_PARSE_LOG), str(log), "--csv", str(metrics_csv)], cwd=output)
+            parsed = runner.run(command=["python3", str(OFFICIAL_PARSE_LOG), str(log), "--csv", str(metrics_csv)], cwd=output, environment=self.config.toolchain_environment)
             metrics = _read_metrics(metrics_csv) if parsed.ok and metrics_csv.is_file() else {}
             required = {spec.name for spec in contract.metrics}
             metrics_ok = parsed.ok and required.issubset(metrics)
@@ -795,6 +810,7 @@ class Contest2026OpenROADEvaluator:
                     post_opt=output,
                     output_log=official_log,
                     policy=self.config.execution_policy,
+                    environment=self.config.toolchain_environment,
                 )
             checks = [
                 {"name": "build", "passed": True, "detail": str(binary)},
@@ -905,14 +921,14 @@ class Contest2026OpenROADEvaluator:
         with self._measurement_lock:
             try:
                 runner = ResilientCommandRunner(self.config.execution_policy)
-                flow = runner.run(command=[str(binary), "-exit", str(tcl)], cwd=output, output_log=log)
+                flow = runner.run(command=[str(binary), "-exit", str(tcl)], cwd=output, output_log=log, environment=self.config.toolchain_environment)
                 checkpoint_path = output / "checkpoint_metrics.json"
                 atomic = _checkpoint_metrics(log)
                 checkpoint_path.write_text(json.dumps(atomic, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
                 tradeoff_path = output / "power_timing_cell_tradeoff.json"
                 tradeoff_path.write_text(json.dumps(_power_timing_cell_tradeoff(output), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
                 metrics_csv = output / "metrics.csv"
-                parsed = runner.run(command=["python3", str(OFFICIAL_PARSE_LOG), str(log), "--csv", str(metrics_csv)], cwd=output)
+                parsed = runner.run(command=["python3", str(OFFICIAL_PARSE_LOG), str(log), "--csv", str(metrics_csv)], cwd=output, environment=self.config.toolchain_environment)
                 metrics = _read_metrics(metrics_csv) if parsed.ok and metrics_csv.is_file() else {}
                 required = {spec.name for spec in contract.metrics}
                 metrics_ok = required.issubset(metrics)
@@ -937,6 +953,7 @@ class Contest2026OpenROADEvaluator:
                     post_opt=output,
                     output_log=output / "official_4of4.log",
                     policy=self.config.execution_policy,
+                    environment=self.config.toolchain_environment,
                 )
                 checks.append(CheckResult("lec", lec_ok, lec_detail))
                 observed_signals = tuple(
@@ -1140,14 +1157,16 @@ class Contest2026OpenROADEvaluator:
                     str(build),
                     "-DCMAKE_BUILD_TYPE=Release",
                     "-DCMAKE_SUPPRESS_REGENERATION=ON",
+                    *self.config.toolchain_cmake_args,
                 ],
                 cwd=workspace,
                 output_log=configure_log,
+                environment=self.config.toolchain_environment,
             )
             if not configure.ok:
                 raise RuntimeError(f"candidate_configure_failed:{configure.resource_error or configure.returncode}")
         if not reused_seed:
-            built = runner.run(command=["cmake", "--build", str(build), "--target", "openroad", "--parallel", str(self.config.build_jobs)], cwd=workspace, output_log=build_log)
+            built = runner.run(command=["cmake", "--build", str(build), "--target", "openroad", "--parallel", str(self.config.build_jobs)], cwd=workspace, output_log=build_log, environment=self.config.toolchain_environment)
             if not built.ok:
                 raise RuntimeError(f"candidate_build_failed:{built.resource_error or built.returncode}")
         binary = build / "bin" / "openroad"
@@ -1219,6 +1238,7 @@ class Contest2026OpenROADEvaluator:
                 # target, so unrelated source is not rebuilt.
                 command=["make", "-C", str(directory), "-B", f"-j{self.config.build_jobs}", *targets],
                 cwd=directory,
+                environment=self.config.toolchain_environment,
             )
             reports.append(report)
             if not report.ok:
@@ -1235,6 +1255,7 @@ class Contest2026OpenROADEvaluator:
             report = runner.run(
                 command=["cmake", "-E", "cmake_link_script", str(script), "--verbose"],
                 cwd=script.parent.parent.parent,
+                environment=self.config.toolchain_environment,
             )
             reports.append(report)
             if not report.ok:
@@ -1245,6 +1266,7 @@ class Contest2026OpenROADEvaluator:
         report = runner.run(
             command=["cmake", "-E", "cmake_link_script", str(executable_link), "--verbose"],
             cwd=executable_link.parent.parent.parent,
+            environment=self.config.toolchain_environment,
         )
         reports.append(report)
         self._write_build_reports(build_log, reports, objects)

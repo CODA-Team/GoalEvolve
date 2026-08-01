@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>GoalEvolve AE-3 Dashboard</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">GOALEVOLVE / AE-3</p>
+        <h1 id="campaignTitle">Campaign dashboard</h1>
+        <p class="subtitle" id="campaignSubtitle">Loading persisted campaign state...</p>
+      </div>
+      <div class="headerControls">
+        <label class="autoRefresh" for="autoRefresh">
+          <input id="autoRefresh" type="checkbox" checked>
+          <span>Auto refresh</span>
+        </label>
+        <button id="refreshButton" type="button" title="Refresh dashboard data">Refresh</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="summaryGrid" aria-label="Campaign summary">
+        <article class="summaryItem">
+          <span>Campaign status</span>
+          <strong id="campaignStatus">-</strong>
+        </article>
+        <article class="summaryItem">
+          <span>Current parent</span>
+          <strong id="currentParent">-</strong>
+        </article>
+        <article class="summaryItem">
+          <span>Current distance</span>
+          <strong id="currentDistance">-</strong>
+        </article>
+        <article class="summaryItem">
+          <span>Rounds observed</span>
+          <strong id="roundCount">-</strong>
+        </article>
+        <article class="summaryItem">
+          <span>Verified results</span>
+          <strong id="verifiedCount">-</strong>
+        </article>
+      </section>
+
+      <section class="dashboardGrid primaryGrid">
+        <article class="panel chartPanel">
+          <div class="panelHeader">
+            <div>
+              <p class="eyebrow">QOR TRAJECTORY</p>
+              <h2 id="chartTitle">Goal distance</h2>
+            </div>
+            <div class="metricTabs" id="metricTabs" aria-label="QoR metric selector"></div>
+          </div>
+          <div class="chartLegend" id="chartLegend"></div>
+          <div class="chartFrame">
+            <svg id="qorChart" viewBox="0 0 760 290" role="img" aria-label="QoR iteration chart"></svg>
+          </div>
+          <p class="chartNote">Points represent complete candidate measurements. The solid line is the best valid result reached so far.</p>
+        </article>
+
+        <article class="panel targetPanel">
+          <div class="panelHeader">
+            <div>
+              <p class="eyebrow">FROZEN CONTRACT</p>
+              <h2>QoR targets</h2>
+            </div>
+            <span class="muted" id="contractId"></span>
+          </div>
+          <div class="contractList" id="contractList"></div>
+        </article>
+      </section>
+
+      <section class="dashboardGrid secondaryGrid">
+        <article class="panel roundsPanel">
+          <div class="panelHeader">
+            <div>
+              <p class="eyebrow">TEACHER</p>
+              <h2>Round plans</h2>
+            </div>
+          </div>
+          <div id="roundList" class="roundList" aria-label="Campaign rounds"></div>
+        </article>
+
+        <article class="panel ideasPanel">
+          <div class="panelHeader">
+            <div>
+              <p class="eyebrow">SELECTED ROUND</p>
+              <h2 id="selectedRoundTitle">Teacher ideas</h2>
+            </div>
+            <span id="selectedRoundStatus" class="statusTag">-</span>
+          </div>
+          <p class="bottleneck" id="roundBottleneck"></p>
+          <div id="ideaList" class="ideaList"></div>
+        </article>
+      </section>
+
+      <section class="dashboardGrid secondaryGrid">
+        <article class="panel studentsPanel">
+          <div class="panelHeader">
+            <div>
+              <p class="eyebrow">STUDENTS</p>
+              <h2>Execution progress</h2>
+            </div>
+          </div>
+          <div class="tableWrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>State</th>
+                  <th>Checks</th>
+                  <th>QoR distance</th>
+                  <th>Evidence</th>
+                </tr>
+              </thead>
+              <tbody id="studentTable"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel resultsPanel">
+          <div class="panelHeader">
+            <div>
+              <p class="eyebrow">LEADERBOARD</p>
+              <h2>Top-3 verified QoR</h2>
+            </div>
+          </div>
+          <div class="tableWrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Result</th>
+                  <th>Distance</th>
+                  <th>TNS</th>
+                  <th>Dynamic</th>
+                  <th>Leakage</th>
+                </tr>
+              </thead>
+              <tbody id="topResultsTable"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <template id="emptyTemplate">
+      <p class="empty">No persisted data is available yet.</p>
+    </template>
+    <script src="/app.js"></script>
+  </body>
+</html>

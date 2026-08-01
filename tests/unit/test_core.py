@@ -4,6 +4,8 @@ import inspect
 import json
 import os
 import tempfile
+import threading
+import time
 import unittest
 import shutil
 from pathlib import Path
@@ -330,6 +332,33 @@ class GoalEvolveV2Tests(unittest.TestCase):
         self.assertLessEqual(len(report.stdout_tail), 4000)
         self.assertIn("tns max -7.84", text)
         self.assertIn("Total 0.1 0.2 0.03 0.23", text)
+
+    def test_executor_writes_output_log_while_command_is_running(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            log = root / "live.log"
+            result: list[object] = []
+
+            def run() -> None:
+                result.append(
+                    ResilientCommandRunner(ExecutionPolicy(timeout_s=5, retries=0, min_free_gb=0)).run(
+                        command=["python3", "-c", "import time; print('first', flush=True); time.sleep(1); print('last', flush=True)"],
+                        cwd=root,
+                        output_log=log,
+                    )
+                )
+
+            worker = threading.Thread(target=run)
+            worker.start()
+            for _ in range(20):
+                if log.is_file() and "first" in log.read_text(encoding="utf-8"):
+                    break
+                time.sleep(0.05)
+            self.assertTrue(log.is_file())
+            self.assertIn("first", log.read_text(encoding="utf-8"))
+            worker.join(timeout=5)
+            self.assertFalse(worker.is_alive())
+            self.assertTrue(result[0].ok)
 
     def test_four_of_four_gate_and_mechanism_attribution(self) -> None:
         checks = [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")]

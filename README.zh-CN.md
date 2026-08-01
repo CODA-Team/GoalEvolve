@@ -30,55 +30,55 @@ outputs/                   被忽略的 build、session 与 campaign
 | 类型 | 证明内容 | 是否使用 API key | 是否有稳定 pass/fail |
 |---|---|---:|---:|
 | AE-1 | 源码、benchmark、checker、manifest 与本机接口完整 | 否 | 是 |
-| AE-2 | 固定 AES R54 Student 1 源码可重新 build 并 post-route replay | 否 | 是，使用明确容差 |
+| AE-2 | 固定 AES R54 Student 1 artifact 的 post-route replay | 否 | 是，使用明确容差 |
 | AE-3 | 用户能启动新的 Teacher/Student 源码进化 campaign | 是 | 只检查流程；QoR 本身随机 |
 
 立即运行 AE-1：
 
 ```bash
 cd /path/to/GoalEvolve
-PYTHONPATH=. python3 -m artifact_evaluation.runner ae1
+source outputs/toolchain/activate.sh
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae1
 ```
 
-运行确定性的 AE-2（build 会消耗较长时间和较大磁盘）：
+运行确定性的 AE-2：
 
 ```bash
-make build-tools JOBS=8
-PYTHONPATH=. python3 -m artifact_evaluation.runner ae2 --artifact aes_r54_student1 --rebuild --jobs 8
+source outputs/toolchain/activate.sh
+export OPENROAD_EXE=/path/to/prepared/OpenROAD/build/bin/openroad
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2-preflight \
+  --artifact aes_r54_student1 --openroad "$OPENROAD_EXE"
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2 \
+  --artifact aes_r54_student1 --openroad "$OPENROAD_EXE"
 ```
 
-AE-2 会重建 `artifact_evaluation/lineage/aes_cipher_top/r054_student1/source`，执行可移植的已捕获 Tcl、官方 parser 与 4/4 checker，然后与 `artifact_evaluation/expected/aes_cipher_top/r054_student1/metrics.json` 对比 TNS、dynamic power、leakage。该结果的阶段是 `global_route + estimate_parasitics`，不是 detailed routing。
+AE-2 使用版本匹配、且在当前 shell 已激活的 OpenROAD 执行可移植的已捕获 Tcl、官方 parser 与 4/4 checker，然后与 `artifact_evaluation/expected/aes_cipher_top/r054_student1/metrics.json` 对比 TNS、dynamic power、leakage。该结果的阶段是 `global_route + estimate_parasitics`，不是 detailed routing。
 
 ## 环境安装
 
 使用 Linux 主机。固定源码和工具链 provenance 保存在
-[`toolchain/lock.json`](toolchain/lock.json)；AE-2 会重建仓库内 OpenROAD 源码，
-不需要系统预装 `openroad` 二进制。
-
-AE-2 还需执行 `make build-tools JOBS=8`。该命令参考 DPLEvolve-AE 的分层方式，在
-`outputs/toolchain/` 创建用户可写的本地 CMake 工具链，并固定使用与随附 OR-Tools
-9.14 兼容的 Boost 1.87；AE-2 显式读取该前缀，不依赖宿主的 Boost 搜索顺序。
+[`toolchain/lock.json`](toolchain/lock.json)。`make setup` 只负责项目内 Python
+环境和可选的 Codex CLI：没有 Conda 时会自举 Miniforge，不会使用 `sudo`，也不会写入
+`/usr`、`/opt` 或系统包管理器。OpenROAD/ORFS 必须由用户按该工作区自身的说明准备，
+并在 AE-2 或 AE-3 前激活。OpenROAD、编译器、CMake 与全部动态库必须来自同一个兼容
+workspace，不能由 GoalEvolve 在不同宿主机上临时拼装。
 
 ### 平台支持
 
-Linux `x86_64` 是 AE-1、AE-2 和 AE-3 的已验证平台。冻结的 OpenROAD 依赖安装器
-包含 `aarch64` 支持，因此 Linux ARM64 主机可以尝试运行安装命令和 AE-1；但 AE-2
-源码重建、post-route flow、官方检查和 AE-3 campaign 尚未在 ARM64 上验证。因此，
-ARM64 上的 build/flow 失败或 QoR 差异属于未支持平台行为，不应判定为 artifact
-regression。`make doctor` 会报告这一状态。
+Linux `x86_64` 是 AE-1、AE-2 和 AE-3 的已验证平台。Linux ARM64 可以运行 Python
+安装和 AE-1；但 OpenROAD build、post-route flow、官方检查和 AE-3 campaign 尚未在
+ARM64 上验证。因此 ARM64 上的 build/flow 失败或 QoR 差异属于未支持平台行为，不能
+判定为 artifact regression。`make doctor` 会报告这一状态。
 
 ```bash
-git clone --branch artifact https://github.com/Liu7541/GOAL_EVOLVE.git
-cd GOAL_EVOLVE
+git clone https://github.com/CODA-Team/GoalEvolve.git
+cd GoalEvolve
 
-# 检查主机命令、冻结源码和依赖安装器。
+# 检查宿主机和冻结输入。
 make doctor
 
-# 创建 .venv 并安装 pytest；该命令不使用 sudo。
+# 创建项目内 Python 环境。
 make setup
-
-# 需要时显式安装冻结 OpenROAD 的系统/通用依赖。
-make setup INSTALL_SYSTEM_DEPS=1 JOBS=8
 
 # 为 AE-3 安装或更新 Codex CLI；该命令不会配置 API key。
 make setup INSTALL_CODEX_CLI=1
@@ -87,29 +87,31 @@ make setup INSTALL_CODEX_CLI=1
 make check
 ```
 
-`make doctor` 检查 `git`、`make`、Python 3.11+、CMake、GCC/G++、Bison、Flex、
-SWIG 和 `pkg-config`，缺失任一依赖会以非零状态退出。只有显式传入
-`INSTALL_SYSTEM_DEPS=1` 时，`make setup` 才会通过 `sudo` 调用冻结 OpenROAD 的
-`DependencyInstaller.sh -all`；执行前应审阅该上游脚本。`JOBS` 用于限制其依赖
-构建并行度。在 Ubuntu/Debian 上，该命令还会安装 `python3-venv`，并复用发行版的
-Eigen 3.4 包建立安装器所需的 `/usr/local` 兼容路径，避免非必要的 GitLab 下载。
-依赖前缀输出会写入 p0 快照外部，确保 setup 不会修改 AE-1 的源码 digest。
-
-`make setup INSTALL_CODEX_CLI=1` 会通过 npm 安装或更新 `@openai/codex`，不会
-修改 `config/credentials/`，也不会创建、读取或配置 API key。若 npm 已安装但不在
-`PATH` 中，可设置 `CODEX_NPM_BIN=/path/to/npm`。
-
-`make check` 优先使用 `.venv/bin/python`，否则使用 `python3`；它运行只读主机检查
-和 AE-1，并报告 Codex CLI 是否可用于 AE-3；它不会 build OpenROAD。安装 CLI 后，
-仍需单独配置 provider credential；项目不会自动创建、读取或配置 API key。
-
-手动方式：
+准备 OpenROAD/ORFS 后，按该 workspace 自身的说明先激活环境，再指向其二进制：
 
 ```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install --upgrade pip pytest
-PYTHONPATH=. .venv/bin/python -m artifact_evaluation.runner ae1
+# 示例：实际激活命令由你的 OpenROAD/ORFS workspace 提供。
+source /path/to/prepared/openroad-environment.sh
+export OPENROAD_EXE=/path/to/prepared/OpenROAD/build/bin/openroad
+make doctor
 ```
+
+`make doctor` 可在未准备环境的主机上运行，检查 Git、Make、Python bootstrap 与冻结
+输入；设置 `OPENROAD_EXE` 后还会验证该 binary 能否在当前 shell 启动。`make check`
+加载项目 Python 环境、运行 doctor 和 AE-1，不安装或编译 OpenROAD。
+
+`make setup INSTALL_CODEX_CLI=1` 会通过 npm 安装或更新 `@openai/codex`，不会
+修改 `config/credentials/`，也不会创建、读取或配置 API key；CLI 会安装在
+`outputs/toolchain/codex-cli`。
+
+`make check` 会加载 `outputs/toolchain/activate.sh`，运行 environment doctor 和 AE-1，
+并报告 Codex CLI 是否可用于 AE-3；它不会 build OpenROAD。安装 CLI 后，仍需单独配置
+provider credential；项目不会自动创建、读取或配置 API key。若需要在当前用户 home
+中的其他目录保存生成环境，可在 `make setup` 前设置 `GOALEVOLVE_CONDA_HOME`、
+`GOALEVOLVE_CONDA_PREFIX` 和 `GOALEVOLVE_CONDA_PACKAGES_DIR`。
+
+`make setup` 成功后会生成 `outputs/toolchain/activate.sh`。AE-2 和 AE-3 所需的
+OpenROAD 构建依赖、环境脚本和动态库由用户准备的 workspace 负责维护。
 
 ## AE-3：新鲜进化
 
@@ -150,7 +152,8 @@ cp config/templates/design.evolve.example.json \
 | 字段 | `baseline.json` | `evolve.json` | baseline 前填写方式 |
 | --- | --- | --- | --- |
 | `design` | 必填 | 必填 | benchmark 目录/设计的精确名称，例如 `my_design` |
-| `source_root` | 可选 | 可选 | `null` 即共享 p0；若覆盖，两个文件必须填写相同路径 |
+| `source_root` | 可选 | 可选 | `null` 即共享 p0；实际 AE-3 build 时，两个文件必须填写同一个与宿主环境匹配的 OpenROAD 源码路径 |
+| `build_seed_root` | 可选 | 可选 | `null` 时 fresh build；若该 workspace 有匹配的 `build/` 或 `build_power/` cache，则填写同一路径 |
 | `state_root` | 模板已填写 | 省略 | `outputs/baseline/my_design`；evolve 默认 `outputs/ae3/my_design` |
 | `baseline_evaluation_root` | 省略 | 模板已填写 | `../../outputs/baseline/my_design` |
 | `baseline_metrics` | 可保留 placeholder | 测量后替换 | 三项决策指标名必须与 target 完全相同 |
@@ -158,24 +161,31 @@ cp config/templates/design.evolve.example.json \
 | `campaign_ready` | `false` | `false` | 审阅后只将 evolve 改为 `true` |
 
 `source_root` 省略或为 `null` 时，两个 profile 均使用共享 p0 OpenROAD 源码
-`artifact_evaluation/lineage/openroad_power/p0/source`。用户也可在终端设置
+`artifact_evaluation/lineage/openroad_power/p0/source`。对于 AE-3 实际 build，应将它
+设为与已激活 OpenROAD/ORFS 环境匹配的源码工作区；用户也可在终端设置
 `GOALEVOLVE_OPENROAD_SEED=/absolute/path/to/openroad/source`，无需改 profile。
 若只想为一个 design 指定起点，将两个 profile 的 `null` 都换为同一个相对或绝对
-OpenROAD 源码根目录，且该目录必须包含 `CMakeLists.txt`：
+OpenROAD 源码根目录，且该目录必须包含 `CMakeLists.txt`。该 workspace 有匹配的
+`build/` 或 `build_power/` cache 时，也将 `build_seed_root` 设为同一路径，以便候选
+使用隔离、重定位后的 copy-on-write cache：
 
 ```json
-"source_root": "../../artifact_evaluation/lineage/my_openroad/source"
+"source_root": "/path/to/prepared/OpenROAD",
+"build_seed_root": "/path/to/prepared/OpenROAD"
 ```
 
 保持 `campaign_ready: false`，baseline profile 中的 placeholder 指标可暂时保留，然后运行：
 
 ```bash
-PYTHONPATH=. python3 -m goalevolve.cli baseline \
+# 先按宿主 OpenROAD/ORFS workspace 的说明激活环境。
+source /path/to/prepared/openroad-environment.sh
+source outputs/toolchain/activate.sh
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli baseline \
   --config experiments/my_design/baseline.json
 ```
 
-该命令在 `outputs/baseline/my_design/baseline.json` 产生实测结果，不依赖外部
-OpenROAD checkout 或预编译 binary。将其中的 `tns_abs_ns`、`dynamic_power_pw`、
+该命令在 `outputs/baseline/my_design/baseline.json` 产生实测结果，需要已激活且与
+`source_root` 匹配的 OpenROAD/ORFS build 环境。将其中的 `tns_abs_ns`、`dynamic_power_pw`、
 `leakage_power_pw` 写入 `experiments/my_design/evolve.json` 的
 `baseline_metrics`；再手工设定绝对 `target_metrics`，最后将 `campaign_ready`
 改为 `true`：
@@ -204,14 +214,14 @@ OpenROAD checkout 或预编译 binary。将其中的 `tns_abs_ns`、`dynamic_pow
 workspace 前验证 `baseline_evaluation_root` 的 evidence。完成审阅后启动：
 
 ```bash
-PYTHONPATH=. python3 -m goalevolve.cli run \
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli run \
   --config experiments/my_design/evolve.json --rounds 10
 ```
 
 已审核目标的 AES 可直接启动：
 
 ```bash
-PYTHONPATH=. python3 -m goalevolve.cli run \
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli run \
   --config experiments/aes_cipher_top/evolve.json --rounds 10
 ```
 
@@ -231,10 +241,57 @@ PYTHONPATH=. python3 -m goalevolve.cli run \
 | 检查 | 结果 |
 |---|---|
 | Unit/artifact tests | `101 passed` |
-| AE-1 预检 | passed；`openroad_on_path=false` 可接受，因为 AE-2 会 build 冻结源码 |
-| AE-2 固定复验 | passed；使用重建的 `outputs/ae2/aes_r54_student1/build/bin/openroad`，TNS `15.79 ns`、dynamic `335.9714B pW`、leakage `28.6M pW`、官方 4/4 pass |
+| AE-1 预检 | passed；所有发布输入与 Python 接口存在 |
+| AE-2 固定复验 | passed；使用版本匹配的 OpenROAD，TNS `15.79 ns`、dynamic `335.9714B pW`、leakage `28.6M pW`、官方 4/4 pass |
 | AE-3 smoke campaign | 完成一轮真实 `gpt-5.6-terra` Teacher/Student，包括同一 Student telemetry repair、rebuild、flow、metrics、官方 4/4 与 Teacher review |
 
 AE-3 smoke 候选被正确 refute，而不是 promote：它激活了目标机制（`rmp_path_cone_examined=6`、`rmp_timing_examined=8`）并通过完整性检查，但结果为 TNS `15.80 ns`、dynamic `340.9712B pW`、leakage `28.8M pW`，normalized goal distance 略差。这是流程通过，不是固定 QoR 声明。
 
-复现结论前先阅读 [artifact_evaluation/README.zh-CN.md](artifact_evaluation/README.zh-CN.md)；变更版本前阅读 [toolchain/README.zh-CN.md](toolchain/README.zh-CN.md)；实现导图见 [goalevolve/README.zh-CN.md](goalevolve/README.zh-CN.md)。
+## Further documentation
+
+- [Artifact evaluation](artifact_evaluation/README.md)：AE-1、AE-2、AE-3 语义和证据清单。
+- [Toolchain lock](toolchain/README.md)：版本锁策略和 artifact 边界。
+- [Implementation map](goalevolve/README.md)：planning、execution、evaluation 和 agents 的代码归属。
+- [Configuration guide](config/README.md)：profile、路径解析和 credential 策略。
+- `PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli --help`：公共命令参考。
+- [Paper](paper/GoalEvolve.pdf)：框架、实验设置和 AES case study。
+- 复现结论前先阅读 [artifact_evaluation/README.zh-CN.md](artifact_evaluation/README.zh-CN.md)；变更版本前阅读 [toolchain/README.zh-CN.md](toolchain/README.zh-CN.md)；实现导图见 [goalevolve/README.zh-CN.md](goalevolve/README.zh-CN.md)。
+
+## Web Demo
+
+本地 Web Demo 以只读方式展示一个已持久化的 AE-3 campaign：每轮 Teacher 已记录的 idea、Student 执行状态、QoR 迭代曲线、冻结目标和 Top-3 已验证结果。它只读取写入 `outputs/` 的 artifact，不显示隐藏模型推理，也不会启动、修改或停止 campaign。
+
+在 campaign 已创建 `outputs/ae3/<design>/` state root 后运行：
+
+```bash
+cd /path/to/GoalEvolve
+source outputs/toolchain/activate.sh
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli dashboard \
+  --state-root outputs/ae3/aes_cipher_top --port 8080
+```
+
+在浏览器打开 `http://127.0.0.1:8080`。远程服务器上运行时，可在本机建立隧道：
+
+```bash
+ssh -N -L 8080:127.0.0.1:8080 USER@SERVER
+```
+
+## Authors and Artifact Evaluation Contributor
+
+### Paper Authors
+
+- **Haixu Liu** — College of Integrated Circuits and Nano-Micro Electronics, Fudan University
+  ([22307130026@m.fudan.edu.cn](mailto:22307130026@m.fudan.edu.cn))
+- **Lei Zhou** — College of Integrated Circuits and Nano-Micro Electronics, Fudan University
+  ([zhoulei26@m.fudan.edu.cn](mailto:zhoulei26@m.fudan.edu.cn))
+- **Yuhao Ren** — College of Integrated Circuits and Nano-Micro Electronics, Fudan University
+  ([24112020153@m.fudan.edu.cn](mailto:24112020153@m.fudan.edu.cn))
+- **Yumao Wu** — School of Future Information Innovation, Fudan University
+  ([yumaowu@fudan.edu.cn](mailto:yumaowu@fudan.edu.cn))
+- **Zhiang Wang** — College of Integrated Circuits and Nano-Micro Electronics, Fudan University
+  ([zhiangwang@fudan.edu.cn](mailto:zhiangwang@fudan.edu.cn))
+
+### Artifact Evaluation Contributor
+
+- **Haixu Liu** — Fudan University
+  ([22307130026@m.fudan.edu.cn](mailto:22307130026@m.fudan.edu.cn))

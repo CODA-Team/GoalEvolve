@@ -5,6 +5,7 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 INSTALLER="${PROJECT_ROOT}/artifact_evaluation/lineage/openroad_power/p0/source/etc/DependencyInstaller.sh"
 SNAPSHOT_VERIFIER="${PROJECT_ROOT}/artifact_evaluation/verify_openroad_snapshot.py"
+ACTIVATION_SCRIPT="${PROJECT_ROOT}/outputs/toolchain/activate.sh"
 missing=0
 
 note() {
@@ -54,15 +55,43 @@ case "${architecture}" in
 esac
 
 note 'Required host commands'
-for command in git make python3 cmake gcc g++ c++ bison flex swig pkg-config; do
+for command in git make; do
     require_command "${command}"
 done
-if command -v python3 >/dev/null 2>&1; then
-    if python3 -c 'import ensurepip' >/dev/null 2>&1; then
-        ok 'python3 venv support'
+
+if command -v conda >/dev/null 2>&1 || [[ -x "${PROJECT_ROOT}/outputs/toolchain/miniforge3/bin/conda" ]]; then
+    ok 'conda: available or project-local Miniforge present'
+elif command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1; then
+    advisory 'conda is not installed; make setup will bootstrap project-local Miniforge.'
+else
+    warn 'conda is unavailable and neither curl nor wget can bootstrap Miniforge'
+fi
+
+if [[ -f "${ACTIVATION_SCRIPT}" ]]; then
+    # shellcheck source=/dev/null
+    source "${ACTIVATION_SCRIPT}"
+    printf '\n'
+    note 'Project-local Python environment'
+    require_command python
+else
+    advisory 'Project-local Python environment is not created yet; run make setup.'
+fi
+
+printf '\n'
+note 'Prepared OpenROAD/ORFS environment (required for AE-2/AE-3)'
+if [[ -n "${OPENROAD_EXE:-}" ]]; then
+    if [[ -x "${OPENROAD_EXE}" ]]; then
+        ok "OPENROAD_EXE: ${OPENROAD_EXE}"
+        if "${OPENROAD_EXE}" -version >/dev/null 2>&1; then
+            ok 'prepared OpenROAD executable starts'
+        else
+            warn 'prepared OpenROAD executable does not start in the current shell environment'
+        fi
     else
-        warn 'python3-venv (ensurepip unavailable)'
+        warn "OPENROAD_EXE is not executable: ${OPENROAD_EXE}"
     fi
+else
+    advisory 'OPENROAD_EXE is unset; AE-1 is available, while AE-2/AE-3 require an activated matching OpenROAD/ORFS workspace.'
 fi
 
 printf '\n'
@@ -78,7 +107,11 @@ else
     warn 'shared OpenROAD p0 source'
 fi
 if [[ -f "${SNAPSHOT_VERIFIER}" ]]; then
-    if snapshot_report=$(python3 "${SNAPSHOT_VERIFIER}" --verify 2>&1); then
+    verifier_python=python3
+    if [[ -x "${GOALEVOLVE_CONDA_PREFIX:-}/bin/python" ]]; then
+        verifier_python="${GOALEVOLVE_CONDA_PREFIX}/bin/python"
+    fi
+    if snapshot_report=$("${verifier_python}" "${SNAPSHOT_VERIFIER}" --verify 2>&1); then
         ok 'shared OpenROAD p0 content digest'
     else
         warn 'shared OpenROAD p0 content digest differs from the release manifest'
@@ -106,10 +139,10 @@ fi
 
 printf '\n'
 if [[ ${missing} -ne 0 ]]; then
-    note 'Install missing system prerequisites, then run:'
-    printf '  make setup INSTALL_SYSTEM_DEPS=1 JOBS=8\n'
+    note 'Install Git/Make and a bootstrap downloader on the host, then run:'
+    printf '  make setup\n'
     exit 1
 fi
 
-ok 'host prerequisite commands are available'
-printf 'Next: make setup, then make check\n'
+ok 'host prerequisites are available'
+printf 'Next: make setup, then make check (or activate OpenROAD/ORFS and set OPENROAD_EXE for AE-2/AE-3)\n'

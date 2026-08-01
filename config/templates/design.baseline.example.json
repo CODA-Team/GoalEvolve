@@ -4,6 +4,7 @@
   "state_root": "../../outputs/baseline/replace_design",
   "campaign_ready": false,
   "source_root": null,
+  "build_seed_root": null,
   "baseline_metrics": {
     "tns_abs_ns": 1.0,
     "dynamic_power_pw": 1.0,

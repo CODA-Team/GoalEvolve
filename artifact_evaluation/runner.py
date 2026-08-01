@@ -13,7 +13,6 @@ import hashlib
 import json
 import os
 import shutil
-import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -21,7 +20,6 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = PROJECT_ROOT / "artifact_evaluation" / "release_manifest.json"
-TOOLCHAIN_PREFIX_RECORD = PROJECT_ROOT / "outputs" / "toolchain" / "ae2_cmake_args.txt"
 SHIPPED_CONTEST_DESIGNS = (
     "aes_cipher_top",
     "ariane",
@@ -86,25 +84,17 @@ def _run(command: list[str], *, cwd: Path, env: dict[str, str], log: Path, live:
         return process.wait()
 
 
-def _toolchain_cmake_args() -> list[str]:
-    """Read the machine-local AE-2 CMake prefix record made by `make build-tools`."""
-    if not TOOLCHAIN_PREFIX_RECORD.is_file():
-        raise RuntimeError(
-            "AE-2 toolchain prefixes are unavailable; run "
-            "'make build-tools JOBS=8' before AE-2"
-        )
-    arguments = shlex.split(TOOLCHAIN_PREFIX_RECORD.read_text(encoding="utf-8"))
-    if not arguments or any(not argument.startswith("-D") for argument in arguments):
-        raise RuntimeError(f"invalid OpenROAD dependency prefix record: {TOOLCHAIN_PREFIX_RECORD}")
-    return arguments
+def _toolchain_environment(base: dict[str, str] | None = None) -> dict[str, str]:
+    """Preserve the OpenROAD/ORFS environment selected by the caller."""
+    return dict(base or os.environ)
 
 
-def _cmake_definition(arguments: list[str], name: str) -> Path | None:
-    prefix = f"-D{name}="
-    for argument in arguments:
-        if argument.startswith(prefix):
-            return Path(argument.removeprefix(prefix)).expanduser()
-    return None
+def _stage_source(*, source: Path, workspace: Path) -> Path:
+    """Copy immutable lineage input before CMake writes generated version files."""
+    if workspace.exists():
+        shutil.rmtree(workspace)
+    shutil.copytree(source, workspace, symlinks=True)
+    return workspace
 
 
 def ae1(*, artifact: dict[str, Any]) -> dict[str, Any]:
@@ -171,13 +161,11 @@ def ae1(*, artifact: dict[str, Any]) -> dict[str, Any]:
     else:
         checks["frozen_aes_source"] = False
     tools = {name: shutil.which(name) is not None for name in ("cmake", "python3")}
-    # A release need not ship a prebuilt binary: AE-2 builds the frozen source
-    # when requested.  A PATH OpenROAD is reported for convenience only.
     tools["openroad_on_path"] = shutil.which("openroad") is not None
     return {
         "schema": "goalevolve.artifact-ae1.v1",
         "artifact_id": artifact["artifact_id"],
-        "passed": all(checks.values()) and tools["cmake"] and tools["python3"],
+        "passed": all(checks.values()) and tools["python3"],
         "paths": {name: str(path) for name, path in required.items()},
         "checks": checks,
         "tools": tools,
@@ -185,59 +173,31 @@ def ae1(*, artifact: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def ae2_preflight(*, artifact: dict[str, Any], verbose: bool) -> dict[str, Any]:
-    """Validate the local AE-2 build prerequisites without compiling OpenROAD."""
+def ae2_preflight(*, artifact: dict[str, Any], openroad: Path | None, verbose: bool) -> dict[str, Any]:
+    """Validate the frozen source and a prepared host OpenROAD executable."""
     source = _path(str(artifact["source_root"]))
     report = PROJECT_ROOT / "outputs" / "ae2" / str(artifact["artifact_id"]) / "report"
     report.mkdir(parents=True, exist_ok=True)
-    checks: dict[str, bool] = {"cmake": shutil.which("cmake") is not None}
-    arguments: list[str] = []
-    try:
-        arguments = _toolchain_cmake_args()
-    except RuntimeError:
-        checks["toolchain_prefix_record"] = False
-    else:
-        checks["toolchain_prefix_record"] = True
-        boost_dir = _cmake_definition(arguments, "Boost_DIR")
-        boost_root = _cmake_definition(arguments, "Boost_ROOT")
-        checks["boost_config"] = boost_dir is not None and (boost_dir / "BoostConfig.cmake").is_file()
-        checks["boost_iostreams_config"] = (
-            boost_root is not None
-            and any((boost_root / "lib" / "cmake").glob("boost_iostreams-*/boost_iostreams-config.cmake"))
-        )
-
-    configure_rc: int | None = None
-    configure_log = report / "preflight_configure.log"
-    if all(checks.values()):
-        build = report.parent / "preflight-build"
-        if build.exists():
-            shutil.rmtree(build)
-        configure = [
-            "cmake",
-            "-S",
-            str(source),
-            "-B",
-            str(build),
-            "-DCMAKE_BUILD_TYPE=Release",
-            "-DENABLE_TESTS=OFF",
-            *arguments,
-        ]
-        print(f"[AE-2 preflight] Configuring frozen OpenROAD. Log: {configure_log}", flush=True)
-        configure_rc = _run(
-            configure,
-            cwd=PROJECT_ROOT,
-            env=os.environ.copy(),
-            log=configure_log,
-            live=verbose,
-        )
-    checks["cmake_configure"] = configure_rc == 0
+    environment = _toolchain_environment()
+    configured = openroad or (Path(os.environ["OPENROAD_EXE"]) if os.environ.get("OPENROAD_EXE") else None)
+    checks: dict[str, bool] = {
+        "frozen_source": source.is_dir(),
+        "openroad_executable": configured is not None and configured.is_file() and os.access(configured, os.X_OK),
+    }
+    version_rc: int | None = None
+    version_log = report / "preflight_openroad_version.log"
+    if checks["openroad_executable"]:
+        assert configured is not None
+        print(f"[AE-2 preflight] Checking prepared OpenROAD. Log: {version_log}", flush=True)
+        version_rc = _run([str(configured), "-version"], cwd=PROJECT_ROOT, env=environment, log=version_log, live=verbose)
+    checks["openroad_runs"] = version_rc == 0
     result = {
         "schema": "goalevolve.artifact-ae2-preflight.v1",
         "artifact_id": artifact["artifact_id"],
         "source": str(source),
-        "toolchain_prefix_record": str(TOOLCHAIN_PREFIX_RECORD),
-        "configure_log": str(configure_log),
-        "configure_returncode": configure_rc,
+        "openroad": str(configured) if configured is not None else None,
+        "version_log": str(version_log),
+        "version_returncode": version_rc,
         "checks": checks,
     }
     result["passed"] = all(checks.values())
@@ -255,22 +215,22 @@ def _build_openroad(*, source: Path, build: Path, jobs: int, report: Path, verbo
         return binary
     if build.exists():
         shutil.rmtree(build)
+    staged_source = _stage_source(source=source, workspace=build.parent / "source")
     configure = [
         "cmake",
         "-S",
-        str(source),
+        str(staged_source),
         "-B",
         str(build),
         "-DCMAKE_BUILD_TYPE=Release",
         "-DENABLE_TESTS=OFF",
-        *_toolchain_cmake_args(),
     ]
     print(f"[AE-2] Configuring OpenROAD. Log: {report / 'configure.log'}", flush=True)
-    if _run(configure, cwd=PROJECT_ROOT, env=os.environ.copy(), log=report / "configure.log", live=verbose) != 0:
+    if _run(configure, cwd=PROJECT_ROOT, env=_toolchain_environment(), log=report / "configure.log", live=verbose) != 0:
         raise RuntimeError(f"CMake configure failed; see {report / 'configure.log'}")
     build_command = ["cmake", "--build", str(build), "--target", "openroad", "-j", str(jobs)]
     print(f"[AE-2] Building OpenROAD with {jobs} jobs. Log: {report / 'build.log'}", flush=True)
-    if _run(build_command, cwd=PROJECT_ROOT, env=os.environ.copy(), log=report / "build.log", live=verbose) != 0:
+    if _run(build_command, cwd=PROJECT_ROOT, env=_toolchain_environment(), log=report / "build.log", live=verbose) != 0:
         raise RuntimeError(f"OpenROAD build failed; see {report / 'build.log'}")
     if not binary.is_file():
         raise RuntimeError(f"build completed without expected binary {binary}")
@@ -288,11 +248,15 @@ def ae2(*, artifact: dict[str, Any], openroad: Path | None, jobs: int, rebuild: 
     report.mkdir(parents=True, exist_ok=True)
     build_dir = output.parent / "build"
     if openroad is None:
-        openroad = _build_openroad(source=source, build=build_dir, jobs=jobs, report=report, verbose=verbose) if rebuild else build_dir / "bin" / "openroad"
+        configured_openroad = os.environ.get("OPENROAD_EXE")
+        if configured_openroad:
+            openroad = Path(configured_openroad)
+        else:
+            openroad = _build_openroad(source=source, build=build_dir, jobs=jobs, report=report, verbose=verbose) if rebuild else build_dir / "bin" / "openroad"
     openroad = openroad.resolve()
     if not openroad.is_file():
-        raise RuntimeError("no OpenROAD executable: use --rebuild or pass --openroad /path/to/openroad")
-    environment = os.environ.copy()
+        raise RuntimeError("no OpenROAD executable: set OPENROAD_EXE, pass --openroad /path/to/openroad, or use --rebuild with a prepared host toolchain")
+    environment = _toolchain_environment()
     environment.update({
         "GOALEVOLVE_PROJECT_ROOT": str(PROJECT_ROOT),
         "GOALEVOLVE_BENCHMARK_ROOT": str(benchmark_root.parents[1]),
@@ -322,7 +286,13 @@ def ae2(*, artifact: dict[str, Any], openroad: Path | None, jobs: int, rebuild: 
         print(f"[AE-2] Running official 4/4 validity check. Log: {output / 'official_4of4.log'}", flush=True)
         from goalevolve.evaluation.contest2026 import official_four_check
         from goalevolve.execution.execution import ExecutionPolicy
-        passed, official_detail = official_four_check(pre_opt=benchmark_root, post_opt=output, output_log=output / "official_4of4.log", policy=ExecutionPolicy(timeout_s=3600, retries=1))
+        passed, official_detail = official_four_check(
+            pre_opt=benchmark_root,
+            post_opt=output,
+            output_log=output / "official_4of4.log",
+            policy=ExecutionPolicy(timeout_s=3600, retries=1),
+            environment=environment,
+        )
         official_rc = 0 if passed else 1
     expected = dict(_json(expected_root / "candidate.json").get("metrics") or {})
     observed: dict[str, Any] = {}
@@ -367,7 +337,7 @@ def main() -> int:
     if args.mode == "ae1":
         result = ae1(artifact=artifact)
     elif args.mode == "ae2-preflight":
-        result = ae2_preflight(artifact=artifact, verbose=args.verbose)
+        result = ae2_preflight(artifact=artifact, openroad=args.openroad, verbose=args.verbose)
     else:
         result = ae2(
             artifact=artifact,

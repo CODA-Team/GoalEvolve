@@ -21,6 +21,13 @@ metric names. Targets are absolute values; the runtime never calculates a
 target from a ratio. A profile is rejected when either metric map has a missing
 or unexpected decision metric.
 
+Before a real baseline or campaign, activate a separately prepared OpenROAD/ORFS
+workspace. Set `source_root` in both profiles to its matching OpenROAD source.
+When that workspace contains a compatible `build/` or `build_power/` cache, set
+`build_seed_root` to the same path; candidate workspaces then use isolated,
+relocated copies of the cache. The source-only p0 snapshot in this repository is
+portable release input, not a replacement for a host OpenROAD build environment.
+
 ## Reviewed AE-3 targets
 
 All values below are the exact `target_metrics` values in the corresponding
@@ -43,7 +50,9 @@ For a design whose `evolve.json` has `"campaign_ready": false`, first run its
 checked-in baseline profile:
 
 ```bash
-PYTHONPATH=. python3 -m goalevolve.cli baseline \
+# Activate the matching OpenROAD/ORFS environment first.
+source outputs/toolchain/activate.sh
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli baseline \
   --config experiments/mempool_group/baseline.json
 ```
 

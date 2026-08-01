@@ -3,6 +3,7 @@
   "design": "replace_design",
   "campaign_ready": false,
   "source_root": null,
+  "build_seed_root": null,
   "baseline_evaluation_root": "../../outputs/baseline/replace_design",
   "baseline_metrics": {
     "tns_abs_ns": 1.0,

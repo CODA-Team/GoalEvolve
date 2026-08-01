@@ -15,7 +15,7 @@ from .core.provenance import toolchain_fingerprint
 from .evaluation.promotion import PowerFirstPromotion, StrictEvidencePromotion
 from .execution.execution import ExecutionPolicy
 from .planning.scope import SourceScopeResolver
-from .evaluation.contest2026 import Contest2026Config, Contest2026OpenROADEvaluator
+from .evaluation.contest2026 import Contest2026Config, Contest2026OpenROADEvaluator, _project_toolchain
 from .agents.codex_student import CodexStudentConfig, CodexStudentEditor, NoopStudentEditor
 from .agents.teacher import CodexTeacher, CodexTeacherConfig, HeuristicTeacher
 
@@ -247,6 +247,7 @@ def build_runtime(config: ExperimentConfig) -> tuple[GoalContract, PluginRegistr
             )
         )
     )
+    toolchain_environment, toolchain_cmake_args = _project_toolchain()
     registry.register_evaluator(
         Contest2026OpenROADEvaluator(
             Contest2026Config(
@@ -262,6 +263,8 @@ def build_runtime(config: ExperimentConfig) -> tuple[GoalContract, PluginRegistr
                 power_stage_tns_ceiling_ns=config.power_stage_tns_ceiling_ns,
                 build_jobs=config.build_jobs,
                 execution_policy=ExecutionPolicy(config.command_timeout_s, config.command_retries, config.min_free_gb),
+                toolchain_environment=toolchain_environment,
+                toolchain_cmake_args=toolchain_cmake_args,
             )
         )
     )
