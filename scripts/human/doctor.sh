@@ -109,7 +109,7 @@ fi
 if [[ -f "${SNAPSHOT_VERIFIER}" ]]; then
     verifier_python=python3
     if [[ -x "${GOALEVOLVE_CONDA_PREFIX:-}/bin/python" ]]; then
-        verifier_python="${GOALEVOLVE_CONDA_PREFIX}/bin/python"
+        verifier_python="${GOALEVOLVE_CONDA_PREFIX:-}/bin/python"
     fi
     if snapshot_report=$("${verifier_python}" "${SNAPSHOT_VERIFIER}" --verify 2>&1); then
         ok 'shared OpenROAD p0 content digest'
