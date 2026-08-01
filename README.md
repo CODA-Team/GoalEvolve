@@ -64,17 +64,12 @@ GoalEvolve/
   - Use the same CMake installation that configured the prepared OpenROAD
     workspace.
 
-- [OpenROAD](https://github.com/The-OpenROAD-Project/OpenROAD) p0 source snapshot
+- [OpenROAD](https://github.com/The-OpenROAD-Project-staging/OpenROAD/tree/f3f70f5cb24f2b2cebb0371707e03b24ae8312d6)
 
-  - The shared source originates from revision
-    `d231bd8f98d2a0adb8369002b2c1e7aa8e7877ed` and is identified by the
-    shipped content digest. Use ORFS revision
-    `bf8884df3b33d77d4f9cf60ed90f9d57de8997a4` with the standard OpenROAD
-    build stack: Bison 3.8.2, Flex 2.6.4, SWIG 4.3.0, Boost 1.89.0, Eigen
-    3.4, spdlog 1.15.0, Tcl/Tk, zlib, and libffi. Tcl/Tk, zlib, and libffi
-    are supplied by the host distribution. Prepare these components with the snapshot's
-    [`DependencyInstaller.sh`](artifact_evaluation/lineage/openroad_power/p0/source/etc/DependencyInstaller.sh)
-    or a compatible OpenROAD/ORFS installation.
+  - The evolution starts from p0 (`artifact_evaluation/lineage/openroad_power/p0/source/`),
+    which adds initial power-aware files to this OpenROAD version. It requires
+    Bison 3.8.2, Flex 2.6.4, SWIG 4.3.0, Boost 1.89.0, Eigen 3.4, spdlog
+    1.15.0, and host Tcl/Tk, zlib, and libffi.
 
 - [Codex CLI](https://www.npmjs.com/package/@openai/codex) 0.146.0 (validated)
 
