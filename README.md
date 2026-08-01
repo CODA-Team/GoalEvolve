@@ -49,7 +49,37 @@ GoalEvolve/
 
 ## Dependencies
 
-AE-1 requires Linux, Python 3.11+, and the release inputs. AE-2 and AE-3 additionally require a compatible OpenROAD/ORFS build environment with CMake and a C++ compiler; AE-3 also requires the Codex CLI and an independently configured API credential. `make setup` installs the project-local Python environment and can install the Codex CLI. The Web Demo uses only the Python standard library and has no additional dependency.
+- [Python](https://www.python.org/) 3.12 (validated with 3.12.13; 3.11 or newer supported)
+
+  - `make setup` creates the project-local Conda environment from
+    [`toolchain/environment.yml`](toolchain/environment.yml).
+
+- [GCC/G++](https://gcc.gnu.org/) 13.3.1 (9 or newer supported)
+
+  - Required to build OpenROAD source candidates. The compiler must match the
+    prepared OpenROAD workspace.
+
+- [CMake](https://cmake.org/) 3.31.9
+
+  - Use the same CMake installation that configured the prepared OpenROAD
+    workspace.
+
+- [OpenROAD](https://github.com/The-OpenROAD-Project/OpenROAD) p0 source snapshot
+
+  - The shared source originates from revision
+    `d231bd8f98d2a0adb8369002b2c1e7aa8e7877ed` and is identified by the
+    shipped content digest. Use ORFS revision
+    `bf8884df3b33d77d4f9cf60ed90f9d57de8997a4` with the standard OpenROAD
+    build stack: Bison 3.8.2, Flex 2.6.4, SWIG 4.3.0, Boost 1.89.0, Eigen
+    3.4, spdlog 1.15.0, Tcl/Tk, zlib, and libffi. Tcl/Tk, zlib, and libffi
+    are supplied by the host distribution. Prepare these components with the snapshot's
+    [`DependencyInstaller.sh`](artifact_evaluation/lineage/openroad_power/p0/source/etc/DependencyInstaller.sh)
+    or a compatible OpenROAD/ORFS installation.
+
+- [Codex CLI](https://www.npmjs.com/package/@openai/codex) 0.146.0 (validated)
+
+  - Requires Node.js 16 or newer. Install it into project-generated state with
+    `make setup INSTALL_CODEX_CLI=1`.
 
 ## Reproduction tracks
 
