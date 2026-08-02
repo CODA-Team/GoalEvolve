@@ -124,6 +124,6 @@ report_check_types -max_slew -violators
 report_check_types -max_capacitance -violators
 report_check_types -max_fanout -violators
 puts "\[INFO\] Flow running time:   [expr {[clock seconds] - $start}] seconds"
-source [goalevolve_path {/home/haixuliu/MLCAD26/GoalEvolve_v2/vendor/mlcad2026_official/validity_check/OpenROAD_utils.tcl}]
+source [goalevolve_path {/home/haixuliu/MLCAD26/GoalEvolve_v2/vendor/official_checker/validity_check/OpenROAD_utils.tcl}]
 write_node_and_net_files [goalevolve_path {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/ariane_evolution/campaign_r58_lpower_17600000000/rounds/round_011/students/student_3/artifacts/contest_output/node.csv}] [goalevolve_path {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/ariane_evolution/campaign_r58_lpower_17600000000/rounds/round_011/students/student_3/artifacts/contest_output/nets.csv}]
 exit

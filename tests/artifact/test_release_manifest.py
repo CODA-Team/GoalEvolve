@@ -48,6 +48,12 @@ class ReleaseArtifactTests(unittest.TestCase):
             candidate = json.loads((expected / "candidate.json").read_text(encoding="utf-8"))
             self.assertIn("proc goalevolve_path", tcl, artifact_id)
             self.assertIn("GOALEVOLVE_BENCHMARK_ROOT", tcl, artifact_id)
+            self.assertIn(
+                "vendor/official_checker/validity_check/OpenROAD_utils.tcl",
+                tcl,
+                artifact_id,
+            )
+            self.assertNotIn("vendor/mlcad2026_official", tcl, artifact_id)
             self.assertNotIn('""" +', tcl, artifact_id)
             self.assertTrue((expected / "ae2_selection.json").is_file(), artifact_id)
             self.assertEqual(candidate["metrics"], selection["parent"]["metrics"], artifact_id)

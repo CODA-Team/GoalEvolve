@@ -162,6 +162,7 @@ foreach required {GOALEVOLVE_BENCHMARK_ROOT GOALEVOLVE_PROJECT_ROOT GOALEVOLVE_A
 proc goalevolve_path {recorded_path} {
   set substitutions [list \\
     \"__BENCHMARK_ROOT__\" $::env(GOALEVOLVE_BENCHMARK_ROOT) \\
+    \"__PROJECT_VENDOR__/mlcad2026_official\" [file join $::env(GOALEVOLVE_PROJECT_ROOT) third_party official_checker] \\
     \"__PROJECT_VENDOR__\" [file join $::env(GOALEVOLVE_PROJECT_ROOT) third_party] \\
     \"__OUTPUT_ROOT__\" $::env(GOALEVOLVE_AE_OUTPUT)]
   return [string map $substitutions $recorded_path]
