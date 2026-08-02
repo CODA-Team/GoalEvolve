@@ -49,6 +49,17 @@ def _items(value: str) -> tuple[str, ...]:
     return tuple(values)
 
 
+def _source_hook_items(value: str) -> tuple[str, ...]:
+    """Parse source paths with semicolons preferred and comma compatibility."""
+    if not value or value.strip().lower() in {"none", "n/a", "-"}:
+        return ()
+    return tuple(
+        normalized
+        for item in re.split(r"[;,]", value)
+        if (normalized := item.strip().strip("`").strip())
+    )
+
+
 def _source_evidence_items(value: str) -> tuple[str, ...]:
     """Parse source anchors without splitting commas in C++ declarators.
 
@@ -96,7 +107,7 @@ def _evolution_idea_records(section: str) -> tuple[dict[str, object], ...]:
                 "reference": heading,
                 "idea": idea,
                 "predicted_stage_effect": _field(block, "Predicted Stage Effect"),
-                "source_hooks": _items(_field(block, "Source Hooks")),
+                "source_hooks": _source_hook_items(_field(block, "Source Hooks")),
                 "expected_signals": _items(_field(block, "Expected Signals")),
                 "source_evidence": _source_evidence_items(_field(block, "Source Evidence")),
                 "evaluation_recipe": _field(block, "Evaluation Recipe"),
@@ -154,7 +165,7 @@ def parse_teacher_plan(text: str) -> dict[str, object]:
                 "idea_reference": _field(block, "EPD Idea"),
                 "claim": _field(block, "Claim"),
                 "selection_rationale": _field(block, "Selection Rationale"),
-                "source_hooks": _items(_field(block, "Source Hooks")),
+                "source_hooks": _source_hook_items(_field(block, "Source Hooks")),
                 "expected_signals": _items(_field(block, "Expected Signals")),
                 "source_evidence": _source_evidence_items(_field(block, "Source Evidence")),
                 "evaluation_recipe": _field(block, "Evaluation Recipe"),
@@ -315,7 +326,7 @@ def render_teacher_plan(
                 f"### {reference}",
                 f"- Idea: {raw.get('idea') or ''}",
                 f"- Predicted Stage Effect: {raw.get('predicted_stage_effect') or ''}",
-                f"- Source Hooks: {', '.join(str(item) for item in raw.get('source_hooks') or ()) or 'none'}",
+                f"- Source Hooks: {'; '.join(str(item) for item in raw.get('source_hooks') or ()) or 'none'}",
                 f"- Expected Signals: {', '.join(str(item) for item in raw.get('expected_signals') or ()) or 'none'}",
                 f"- Source Evidence: {'; '.join(str(item) for item in raw.get('source_evidence') or ()) or 'none'}",
                 f"- Evaluation Recipe: {raw.get('evaluation_recipe') or ''}",
@@ -345,7 +356,7 @@ def render_teacher_plan(
                 f"- EPD Idea: {assignment.get('idea_reference') or 'none'}",
                 f"- Claim: {assignment.get('claim') or ''}",
                 f"- Selection Rationale: {assignment.get('selection_rationale') or 'Controller-provided source-verified candidate.'}",
-                f"- Source Hooks: {', '.join(str(item) for item in assignment.get('source_hooks') or ()) or 'none'}",
+                f"- Source Hooks: {'; '.join(str(item) for item in assignment.get('source_hooks') or ()) or 'none'}",
                 f"- Expected Signals: {', '.join(str(item) for item in assignment.get('expected_signals') or ()) or 'none'}",
                 f"- Source Evidence: {'; '.join(str(item) for item in assignment.get('source_evidence') or ()) or 'none'}",
                 f"- Evaluation Recipe: {assignment.get('evaluation_recipe') or ''}",

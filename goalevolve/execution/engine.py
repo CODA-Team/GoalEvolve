@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -17,6 +18,7 @@ from ..planning.observations import ObservationMemory
 from ..planning.repository_graph import RepositoryGraphIndex
 from ..planning.search_policy import SearchPolicyBuilder
 from ..core.plugins import Evaluator, Planner, PromotionPolicy, StudentEditor, Teacher, WorkspaceProvider
+from ..agents.markdown_protocol import parse_teacher_plan
 from ..agents.prompting import review_packet, student_packet, teacher_packet
 from .preflight import preflight_candidate
 from ..token_ledger import record_round_token_usage
@@ -296,6 +298,131 @@ class GoalEvolveEngine:
             parent=parent,
         )
         atomic_json(round_root / "epd_role_portfolio.json", epd_portfolio)
+        recovered_markdown = (
+            self._controller_repair_markdown(teacher_plan_payload)
+            if saved_teacher_plan is not None
+            else ""
+        )
+        if recovered_markdown:
+            # The old parser accepted semicolon-separated hooks as one path,
+            # so the first persisted hypothesis list still contains the
+            # Teacher's placeholder envelopes. Reparse the already completed
+            # repair turn and run the normal deterministic controller checks;
+            # never ask the Teacher to plan a second time for this round.
+            role_templates, role_schedule = self._teacher_role_schedule(
+                round_index=round_index,
+                diagnosis=round_diagnosis,
+                portfolio=epd_portfolio,
+                decision_context=decision_context,
+            )
+            parent_source = self.state_root / "parents" / parent.source_hash / "source"
+            allowed_patch_roots = tuple(
+                getattr(self.evaluator, "config", object()).allowed_patch_roots
+            ) if hasattr(getattr(self.evaluator, "config", object()), "allowed_patch_roots") else ()
+            repository_graph = RepositoryGraphIndex(state_root=self.state_root).build_parent(
+                source_root=parent_source,
+                source_hash=parent.source_hash,
+                allowed_patch_roots=allowed_patch_roots,
+            )
+            parsed_plan = parse_teacher_plan(recovered_markdown)
+            materialized = materialize_teacher_assignments(
+                assignments=tuple(
+                    item for item in list(parsed_plan.get("assignments") or ()) if isinstance(item, Mapping)
+                ),
+                evolution_ideas=tuple(
+                    item for item in list(parsed_plan.get("evolution_idea_records") or ()) if isinstance(item, Mapping)
+                ),
+                templates=role_templates,
+                source_root=parent_source,
+                allowed_patch_roots=allowed_patch_roots,
+                historical_ideas=epd_database.ideas(),
+                paper_card_ids=tuple(
+                    str(row.get("card_id") or "")
+                    for row in list(teacher_plan_payload.get("paper_cards") or ())
+                    if isinstance(row, Mapping)
+                ),
+                repository_graph=repository_graph,
+                teacher_context={
+                    "diagnosis_summary": parsed_plan.get("diagnosis_summary"),
+                    "parent_policy": parsed_plan.get("parent_policy"),
+                },
+            )
+            recovery_repairs = list(
+                teacher_plan_payload.get("controller_assignment_repairs") or ()
+            )
+            if materialized.errors:
+                repair = self.teacher.repair_plan_after_controller_validation(
+                    state_root=self.state_root,
+                    round_root=round_root,
+                    round_index=round_index,
+                    prior_markdown=recovered_markdown,
+                    errors=materialized.errors,
+                    role_templates=role_templates,
+                    repair_index=len(recovery_repairs) + 1,
+                )
+                recovery_repairs.append(repair)
+                teacher_plan_payload["controller_assignment_repair"] = repair
+                teacher_plan_payload["controller_assignment_repairs"] = recovery_repairs
+                format_errors = tuple(
+                    str(item) for item in list(repair.get("format_errors") or ())
+                )
+                if not bool(repair.get("teacher_ok")) or format_errors:
+                    teacher_plan_payload["controller_assignment_errors"] = list(
+                        format_errors or ("teacher_assignment_recovery_turn_failed",)
+                    )
+                    atomic_json(round_root / "teacher_plan.json", teacher_plan_payload)
+                    raise RuntimeError("incomplete_round_controller_repair_turn_failed")
+                recovered_markdown = str(repair.get("teacher_markdown") or "").strip()
+                parsed_plan = parse_teacher_plan(recovered_markdown)
+                materialized = materialize_teacher_assignments(
+                    assignments=tuple(
+                        item for item in list(parsed_plan.get("assignments") or ()) if isinstance(item, Mapping)
+                    ),
+                    evolution_ideas=tuple(
+                        item for item in list(parsed_plan.get("evolution_idea_records") or ()) if isinstance(item, Mapping)
+                    ),
+                    templates=role_templates,
+                    source_root=parent_source,
+                    allowed_patch_roots=allowed_patch_roots,
+                    historical_ideas=epd_database.ideas(),
+                    paper_card_ids=tuple(
+                        str(row.get("card_id") or "")
+                        for row in list(teacher_plan_payload.get("paper_cards") or ())
+                        if isinstance(row, Mapping)
+                    ),
+                    repository_graph=repository_graph,
+                    teacher_context={
+                        "diagnosis_summary": parsed_plan.get("diagnosis_summary"),
+                        "parent_policy": parsed_plan.get("parent_policy"),
+                    },
+                )
+            if materialized.errors:
+                teacher_plan_payload["controller_assignment_errors"] = list(materialized.errors)
+                atomic_json(round_root / "teacher_plan.json", teacher_plan_payload)
+                raise RuntimeError(
+                    "incomplete_round_controller_repair_still_invalid:"
+                    + ";".join(materialized.errors)
+                )
+            hypotheses = list(materialized.hypotheses)
+            teacher_plan_payload["teacher_markdown"] = recovered_markdown
+            teacher_plan_payload["parsed_markdown"] = parsed_plan
+            teacher_plan_payload["hypotheses"] = [item.to_dict() for item in hypotheses]
+            teacher_plan_payload["role_schedule"] = role_schedule
+            teacher_plan_payload["source_index"] = repository_graph.compact_index()
+            teacher_plan_payload["recovery"] = {
+                "kind": "semicolon_source_hook_parser_migration",
+                "source": "controller_assignment_repair",
+                "teacher_reinvoked": False,
+            }
+            teacher_plan_payload.pop("controller_assignment_errors", None)
+            atomic_json(round_root / "teacher_plan.json", teacher_plan_payload)
+            atomic_json(round_root / "teacher_plan.parsed.json", parsed_plan)
+            saved_teacher_plan = (hypotheses, teacher_plan_payload)
+            print(
+                f"[GoalEvolve][round={round_index:03d}][recovery] "
+                "revalidated_controller_repair=true teacher_reinvoked=false",
+                flush=True,
+            )
         if saved_teacher_plan is None:
             if getattr(self.teacher, "name", "") == "codex_teacher":
                 role_templates, role_schedule = self._teacher_role_schedule(
@@ -928,6 +1055,20 @@ class GoalEvolveEngine:
         return updated
 
     @staticmethod
+    def _controller_repair_markdown(payload: Mapping[str, object]) -> str:
+        """Return only the narrow, parser-compatible controller repair payload."""
+        errors = tuple(str(item) for item in list(payload.get("controller_assignment_errors") or ()))
+        if not errors or not all("missing_source_hook:" in error and ";" in error for error in errors):
+            return ""
+        repair = payload.get("controller_assignment_repair")
+        if not isinstance(repair, Mapping) or not bool(repair.get("teacher_ok")):
+            return ""
+        if list(repair.get("format_errors") or ()):
+            return ""
+        markdown = str(repair.get("teacher_markdown") or "").strip()
+        return markdown
+
+    @staticmethod
     def _incomplete_teacher_plan(
         round_root: Path,
     ) -> tuple[list[Hypothesis], dict[str, object]] | None:
@@ -962,7 +1103,20 @@ class GoalEvolveEngine:
             normalized = dict(raw)
             for field in tuple_fields:
                 if field in normalized:
-                    normalized[field] = tuple(normalized[field] or ())
+                    values = normalized[field] or ()
+                    if field == "source_hooks":
+                        # Plans written before the semicolon-separated source
+                        # hook protocol may have persisted several paths as one
+                        # list element. Normalize only the recovery view; the
+                        # original Teacher artifact remains immutable evidence.
+                        normalized[field] = tuple(
+                            hook.strip().strip("`")
+                            for value in values
+                            for hook in re.split(r"[;,]", str(value))
+                            if hook.strip()
+                        )
+                    else:
+                        normalized[field] = tuple(values)
             if "candidate_options" in normalized:
                 normalized["candidate_options"] = tuple(
                     dict(item) for item in normalized["candidate_options"] or () if isinstance(item, Mapping)

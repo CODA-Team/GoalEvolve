@@ -247,7 +247,7 @@ def materialize_teacher_assignments(
             continue
         claim = str(row.get("claim") or "").strip()
         rationale = str(row.get("selection_rationale") or "").strip()
-        hooks = _items(row.get("source_hooks"))
+        hooks = _source_hook_items(row.get("source_hooks"))
         signals = _items(row.get("expected_signals"))
         evidence = _source_evidence_items(row.get("source_evidence"))
         falsification = str(row.get("falsification_condition") or "").strip()
@@ -378,6 +378,20 @@ def _items(value: object) -> tuple[str, ...]:
     return tuple(dict.fromkeys(str(item).strip().strip("`") for item in values if str(item).strip()))
 
 
+def _source_hook_items(value: object) -> tuple[str, ...]:
+    values = (value,) if isinstance(value, str) else (
+        list(value or ()) if isinstance(value, Iterable) else ()
+    )
+    return tuple(
+        dict.fromkeys(
+            item.strip().strip("`")
+            for value in values
+            for item in re.split(r"[;,]", str(value))
+            if item.strip()
+        )
+    )
+
+
 def _source_evidence_items(value: object) -> tuple[str, ...]:
     if not isinstance(value, str):
         return _items(value)
@@ -473,7 +487,7 @@ def _same_or_compatible_idea(
     expected_signals: Sequence[str],
     idea: Mapping[str, object],
 ) -> bool:
-    same_hooks = set(hooks) == set(_items(idea.get("source_hooks")))
+    same_hooks = set(hooks) == set(_source_hook_items(idea.get("source_hooks")))
     if not same_hooks:
         return False
     same_grounding = (
@@ -486,7 +500,7 @@ def _same_or_compatible_idea(
 def _duplicate_explorer_idea(*, claim: str, hooks: Sequence[str], historical_ideas: Sequence[Mapping[str, object]]) -> bool:
     for previous in historical_ideas:
         previous_text = str(previous.get("idea") or previous.get("claim") or "")
-        previous_hooks = _items(previous.get("source_hooks"))
+        previous_hooks = _source_hook_items(previous.get("source_hooks"))
         if set(hooks) == set(previous_hooks) and _text_similarity(claim, previous_text) >= 0.72:
             return True
     return False

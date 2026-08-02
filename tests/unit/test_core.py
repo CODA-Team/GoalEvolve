@@ -1363,6 +1363,106 @@ Keep the checked parent.
         self.assertEqual(parsed["assignments"][0]["candidate_id"], "")
         self.assertEqual(parsed["assignments"][0]["idea_reference"], "idea_1")
 
+    def test_teacher_markdown_protocol_splits_semicolon_separated_source_hooks(self) -> None:
+        from goalevolve.agents.markdown_protocol import parse_teacher_plan
+
+        parsed = parse_teacher_plan(
+            """## Evolution Ideas
+### idea_1
+- Idea: Guard two source files.
+- Source Hooks: src/rsz/src/RepairPowerPolicy.cc; src/rsz/src/Resizer.cc
+
+## Student Assignments
+### student_1
+- Role: explorer
+- Source Hooks: src/rsz/src/RepairPowerPolicy.cc; src/rsz/src/Resizer.cc
+"""
+        )
+        expected = (
+            "src/rsz/src/RepairPowerPolicy.cc",
+            "src/rsz/src/Resizer.cc",
+        )
+        self.assertEqual(parsed["evolution_idea_records"][0]["source_hooks"], expected)
+        self.assertEqual(parsed["assignments"][0]["source_hooks"], expected)
+
+    def test_incomplete_teacher_plan_normalizes_legacy_combined_source_hooks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            from goalevolve.execution.engine import GoalEvolveEngine
+
+            round_root = Path(temporary) / "round_001"
+            round_root.mkdir()
+            hypothesis = self.hypothesis.to_dict()
+            hypothesis["source_hooks"] = [
+                "src/rsz/src/RepairPowerPolicy.cc; src/rsz/src/Resizer.cc"
+            ]
+            atomic_json(round_root / "teacher_plan.json", {"hypotheses": [hypothesis]})
+            recovered = GoalEvolveEngine._incomplete_teacher_plan(round_root)
+
+        self.assertIsNotNone(recovered)
+        assert recovered is not None
+        self.assertEqual(
+            recovered[0][0].source_hooks,
+            ("src/rsz/src/RepairPowerPolicy.cc", "src/rsz/src/Resizer.cc"),
+        )
+
+    def test_controller_repair_markdown_accepts_only_semicolon_hook_rejections(self) -> None:
+        payload = {
+            "controller_assignment_errors": [
+                "student_2:missing_source_hook:src/rsz/src/One.cc; src/rsz/src/Two.cc"
+            ],
+            "controller_assignment_repair": {
+                "teacher_ok": True,
+                "format_errors": [],
+                "teacher_markdown": "## Student Assignments\n",
+            },
+        }
+        self.assertEqual(
+            GoalEvolveEngine._controller_repair_markdown(payload),
+            "## Student Assignments",
+        )
+        payload["controller_assignment_errors"] = ["student_2:missing_source_hook:src/rsz/src/Missing.cc"]
+        self.assertEqual(GoalEvolveEngine._controller_repair_markdown(payload), "")
+
+    def test_source_hook_materialization_requires_an_executed_policy_recipe(self) -> None:
+        from goalevolve.execution.teacher_assignment import (
+            build_role_templates,
+            materialize_teacher_assignments,
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "source"
+            policy = source / "src/rsz/src/policy/SetupCritVtSwapPolicy.cc"
+            policy.parent.mkdir(parents=True)
+            policy.write_text("namespace rsz { void selectCritVtCell() {} }\n", encoding="utf-8")
+            templates = build_role_templates(
+                student_ids=("student_1",),
+                round_index=1,
+                decision_context={"evaluation_mode": "power_only"},
+                portfolio={},
+                suspend_explorers=False,
+            )
+            result = materialize_teacher_assignments(
+                assignments=({
+                    "student_id": "student_1", "role": "explorer", "idea_reference": "idea_1",
+                    "claim": "Touch a critical-VT policy.", "selection_rationale": "Probe the policy.",
+                    "source_hooks": ("src/rsz/src/policy/SetupCritVtSwapPolicy.cc",),
+                    "source_evidence": ("src/rsz/src/policy/SetupCritVtSwapPolicy.cc::selectCritVtCell",),
+                    "expected_signals": ("crit_vt_probe",), "evaluation_recipe": "legacy_setup",
+                    "falsification_condition": "No official gain.",
+                },),
+                evolution_ideas=({
+                    "reference": "idea_1", "idea": "Touch a critical-VT policy.",
+                    "source_hooks": ("src/rsz/src/policy/SetupCritVtSwapPolicy.cc",),
+                    "source_evidence": ("src/rsz/src/policy/SetupCritVtSwapPolicy.cc::selectCritVtCell",),
+                    "expected_signals": ("crit_vt_probe",), "evaluation_recipe": "legacy_setup",
+                },),
+                templates=templates,
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                historical_ideas=(),
+            )
+        self.assertIn("incompatible_evaluation_recipe:student_1:legacy_setup", result.errors)
+
     def test_teacher_source_inspection_audit_requires_successful_source_reads(self) -> None:
         from goalevolve.agents.teacher import source_inspection_audit
 

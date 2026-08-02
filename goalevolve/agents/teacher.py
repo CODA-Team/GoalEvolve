@@ -633,7 +633,7 @@ class CodexTeacher:
                 "- EPD Idea: idea_1",
                 "- Claim: <bounded executable idea>",
                 "- Selection Rationale: <why this is one of the best experiments now>",
-                "- Source Hooks: <comma-separated real source paths>",
+                "- Source Hooks: <semicolon-separated real source paths>",
                 "- Source Evidence: <semicolon-separated path::symbol anchors; use a full Doc Card declarator for overloads>",
                 "- Evaluation Recipe: <the same controller recipe ID as its referenced idea>",
                 "- Expected Signals: <comma-separated new telemetry signals>",
@@ -666,7 +666,7 @@ class CodexTeacher:
                 "## Prior Markdown",
                 prior_markdown or "<no usable prior Markdown>",
                 "## Required Format",
-                "## Diagnosis Summary\n<text>\n\n## Source Investigation\n### investigation_1\n- Source Evidence: <path::symbol>\n- Observed Control Point: <text>\n\n## Evolution Ideas\n### idea_1\n- Idea: <text>\n- Predicted Stage Effect: <text>\n- Source Hooks: <path>\n- Source Evidence: <path::symbol; another/path::symbol>\n- Evaluation Recipe: <controller recipe ID from the prior plan>\n- Expected Signals: <signal>\n- Falsification Condition: <text>\n- Paper Card References: none\n- Priority: 0\n\n## Parent Policy\n<text>\n- Retire Pending Ideas: none\n\n## Student Assignments\n### student_1\n- Role: explorer\n- Candidate: \n- EPD Idea: idea_1\n- Claim: <text>\n- Selection Rationale: <text>\n- Source Hooks: <path>\n- Source Evidence: <path::symbol; another/path::symbol>\n- Evaluation Recipe: <same controller recipe ID>\n- Expected Signals: <signal>\n- Falsification Condition: <text>\n- EPD References: none",
+                "## Diagnosis Summary\n<text>\n\n## Source Investigation\n### investigation_1\n- Source Evidence: <path::symbol>\n- Observed Control Point: <text>\n\n## Evolution Ideas\n### idea_1\n- Idea: <text>\n- Predicted Stage Effect: <text>\n- Source Hooks: <path; another/path>\n- Source Evidence: <path::symbol; another/path::symbol>\n- Evaluation Recipe: <controller recipe ID from the prior plan>\n- Expected Signals: <signal>\n- Falsification Condition: <text>\n- Paper Card References: none\n- Priority: 0\n\n## Parent Policy\n<text>\n- Retire Pending Ideas: none\n\n## Student Assignments\n### student_1\n- Role: explorer\n- Candidate: \n- EPD Idea: idea_1\n- Claim: <text>\n- Selection Rationale: <text>\n- Source Hooks: <path; another/path>\n- Source Evidence: <path::symbol; another/path::symbol>\n- Evaluation Recipe: <same controller recipe ID>\n- Expected Signals: <signal>\n- Falsification Condition: <text>\n- EPD References: none",
             ]
         )
 
