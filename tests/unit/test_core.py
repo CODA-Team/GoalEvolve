@@ -1582,6 +1582,22 @@ Keep the checked parent.
         )
         self.assertLess(prompt.index("## Source Investigation"), prompt.index("## Evolution Ideas"))
 
+    def test_teacher_repair_prompt_repeats_controller_execution_contract(self) -> None:
+        prompt = CodexTeacher._plan_repair_prompt(
+            prior_markdown="## Prior",
+            errors=("incompatible_evaluation_recipe:student_1:legacy_setup",),
+            required_student_roles={"student_1": "explorer"},
+            require_explorer_ideas=True,
+            allowed_recipe_ids=("legacy_setup", "rmp_area_power"),
+            execution_contracts={
+                "power_only": {
+                    "source_hook_rule": "Do not name Setup* or PowerRecoveryPlusPolicy as Source Hooks.",
+                }
+            },
+        )
+        self.assertIn("## Controller Execution Contracts", prompt)
+        self.assertIn("Do not name Setup* or PowerRecoveryPlusPolicy", prompt)
+
     def test_teacher_prompt_includes_p0_rooted_doc_card_packet(self) -> None:
         prompt = CodexTeacher._plan_prompt(
             parent=self.parent,

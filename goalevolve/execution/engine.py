@@ -399,6 +399,7 @@ class GoalEvolveEngine:
                     prior_markdown=recovered_markdown,
                     errors=materialized.errors,
                     role_templates=role_templates,
+                    execution_contracts=self._teacher_execution_contracts(role_templates),
                     repair_index=len(recovery_repairs) + 1,
                 )
                 recovery_repairs.append(repair)
@@ -571,6 +572,7 @@ class GoalEvolveEngine:
                         prior_markdown=prior_markdown,
                         errors=controller_errors,
                         role_templates=role_templates,
+                        execution_contracts=self._teacher_execution_contracts(role_templates),
                         repair_index=repair_index,
                     )
                     controller_repairs.append(repaired)
@@ -1109,6 +1111,44 @@ class GoalEvolveEngine:
             return ""
         markdown = str(repair.get("teacher_markdown") or "").strip()
         return markdown
+
+    @staticmethod
+    def _teacher_execution_contracts(
+        role_templates: Sequence[Hypothesis],
+    ) -> dict[str, object]:
+        """Describe only source boundaries the active Controller really runs."""
+        contracts: dict[str, object] = {}
+        for mode in sorted({str(item.evaluation_mode or "") for item in role_templates}):
+            if mode == "power_only":
+                contracts[mode] = {
+                    "commands": [
+                        "repair_power -phase <configured power phase>",
+                        "optional restructure -target area only for rmp_area_power",
+                    ],
+                    "executed_source_hooks": [
+                        "src/rsz/src/Resizer.cc::Resizer::repairPower",
+                        "src/rsz/src/Optimizer.cc::Optimizer::makePolicyForPhase(REPAIR_POWER)",
+                        "src/rsz/src/policy/RepairPowerPolicy.cc",
+                        "src/rmp/src/Restructure.cpp only when Evaluation Recipe is rmp_area_power",
+                    ],
+                    "source_hook_rule": (
+                        "Do not name Setup*Policy, Measured*Policy, or "
+                        "PowerRecoveryPlusPolicy as Source Hooks. They are not dispatched "
+                        "by power_only. If adapting their logic, implement the adaptation "
+                        "inside RepairPowerPolicy or another executed hook."
+                    ),
+                }
+            elif mode == "power_then_timing":
+                contracts[mode] = {
+                    "commands": ["repair_power", "recipe-owned repair_timing"],
+                    "source_hook_rule": "Each Source Hook must be reached by its named timing recipe.",
+                }
+            elif mode == "timing_only":
+                contracts[mode] = {
+                    "commands": ["recipe-owned repair_timing"],
+                    "source_hook_rule": "Do not name repair_power-only policies as Source Hooks.",
+                }
+        return contracts
 
     @staticmethod
     def _recoverable_teacher_markdown(payload: Mapping[str, object]) -> str:

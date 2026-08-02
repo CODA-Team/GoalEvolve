@@ -299,6 +299,7 @@ class CodexTeacher:
         prior_markdown: str,
         errors: Sequence[str],
         role_templates: Sequence[Hypothesis],
+        execution_contracts: dict[str, object] | None = None,
         repair_index: int = 1,
     ) -> dict[str, object]:
         """Ask the same Teacher thread to correct deterministic admission errors."""
@@ -322,6 +323,7 @@ class CodexTeacher:
                     }
                 )
             ),
+            execution_contracts=execution_contracts,
         )
         turn = self.runner.run(
             state_root=state_root,
@@ -661,6 +663,7 @@ class CodexTeacher:
         required_student_roles: dict[str, str],
         require_explorer_ideas: bool,
         allowed_recipe_ids: Sequence[str],
+        execution_contracts: dict[str, object] | None = None,
     ) -> str:
         return "\n".join(
             [
@@ -670,6 +673,9 @@ class CodexTeacher:
                 f"Required student roles: {json.dumps(required_student_roles, ensure_ascii=False)}",
                 f"Require at least five Explorer ideas: {str(require_explorer_ideas).lower()}",
                 f"Allowed evaluation recipes: {json.dumps(list(allowed_recipe_ids), ensure_ascii=False)}",
+                "## Controller Execution Contracts",
+                json.dumps(execution_contracts or {}, ensure_ascii=False, indent=2),
+                "These are hard execution facts, not suggestions. For each assignment, choose a recipe from the allowed menu and name only Source Hooks that the corresponding controller execution contract actually reaches. A helper may be copied or specialized into an executed hook, but it is not itself a Source Hook unless the current flow dispatches it.",
                 "## Controller Validation Errors",
                 *[f"- {error}" for error in errors],
                 "## Prior Markdown",
