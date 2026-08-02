@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 import json
+import subprocess
 from pathlib import Path
 
 from artifact_evaluation import runner
@@ -56,6 +57,20 @@ class ReleaseArtifactTests(unittest.TestCase):
             self.assertEqual(artifact["evaluation_mode"], selection["parent"]["evaluation_mode"], artifact_id)
             self.assertTrue(runner._snapshot_matches(source=source, manifest_path=expected / "source_manifest.json"), artifact_id)
             self.assertTrue((benchmark / f"{artifact['design']}.v").is_file(), artifact_id)
+
+    def test_git_index_contains_every_frozen_regular_source_file(self) -> None:
+        for artifact_id, artifact in _artifacts().items():
+            source = runner._path(str(artifact["source_root"]))
+            expected = runner._path(str(artifact["expected_root"]))
+            manifest = json.loads((expected / "source_manifest.json").read_text(encoding="utf-8"))
+            relative_source = source.relative_to(runner.PROJECT_ROOT)
+            output = subprocess.check_output(
+                ["git", "ls-files", "-s", "--", str(relative_source)],
+                cwd=runner.PROJECT_ROOT,
+                text=True,
+            )
+            tracked_regular_files = sum(line.startswith("100") for line in output.splitlines())
+            self.assertEqual(tracked_regular_files, manifest["regular_file_count"], artifact_id)
 
     def test_ae2_accepts_a_prepared_host_toolchain_when_no_private_record_exists(self) -> None:
         environment = runner._toolchain_environment({"PATH": "/host/bin", "LD_LIBRARY_PATH": "/host/lib"})

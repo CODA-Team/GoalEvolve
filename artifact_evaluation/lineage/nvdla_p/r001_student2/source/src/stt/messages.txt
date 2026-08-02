@@ -1,0 +1,7 @@
+STT 0001 SteinerTreeBuilder.tcl:21 The alpha value must be between 0.0 and 1.0. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/stt/src/SteinerTreeBuilder.tcl#L21
+STT 0004 SteinerTreeBuilder.cpp:225 Net {} is connected to unplaced instance {}. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/stt/src/SteinerTreeBuilder.cpp#L225
+STT 0005 SteinerTreeBuilder.cpp:244 Net {} is connected to unplaced pin {}. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/stt/src/SteinerTreeBuilder.cpp#L244
+STT 0006 SteinerTreeBuilder.tcl:59 Clock nets for $cmd command were not found ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/stt/src/SteinerTreeBuilder.tcl#L59
+STT 0007 SteinerTreeBuilder.cpp:306 Invalid driver index {}. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/stt/src/SteinerTreeBuilder.cpp#L306
+STT 0008 pd.cpp:440                x size ({}) != y size ({}) ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/stt/src/pdr/src/pd.cpp#L440
+STT 0009 pd.cpp:445                Invalid request for an empty Steiner tree. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/stt/src/pdr/src/pd.cpp#L445

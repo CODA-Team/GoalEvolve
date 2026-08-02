@@ -1,0 +1,4 @@
+EXA 0001 example.cpp:44            Making an example instance named {} INFO https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/bootstrap/power_guard_v1/source/src/exa/src/example.cpp#L44
+EXA 0002 example.cpp:30            No chip exists. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/bootstrap/power_guard_v1/source/src/exa/src/example.cpp#L30
+EXA 0003 example.cpp:35            No block exists. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/bootstrap/power_guard_v1/source/src/exa/src/example.cpp#L35
+EXA 0004 example.cpp:58            No master found. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/bootstrap/power_guard_v1/source/src/exa/src/example.cpp#L58

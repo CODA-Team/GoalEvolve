@@ -1,0 +1,5 @@
+#define OPENROAD_VERSION "d231bd8f98d2a0adb8369002b2c1e7aa8e7877ed"
+
+#define OPENROAD_GIT_DESCRIBE ""
+
+/* #undef BUILD_OPENPHYSYN */

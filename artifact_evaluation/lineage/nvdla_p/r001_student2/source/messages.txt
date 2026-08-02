@@ -1,0 +1,70 @@
+ORD 0001 OpenRoad.tcl:13           $filename does not exist. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L13
+ORD 0002 OpenRoad.tcl:16           $filename is not readable. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L16
+ORD 0003 OpenRoad.tcl:54           $filename does not exist. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L54
+ORD 0004 OpenRoad.tcl:57           $filename is not readable. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L57
+ORD 0005 OpenRoad.tcl:66           No technology has been read. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L66
+ORD 0006 OpenRoad.tcl:112          DEF versions 5.8, 5.7, 5.6, 5.5, 5.4, 5.3 supported. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L112
+ORD 0007 OpenRoad.tcl:251          $filename does not exist. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L251
+ORD 0008 OpenRoad.tcl:255          $filename is not readable. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L255
+ORD 0011 OpenRoad.cc:620           Hierarchical flow (-hier) is currently in development and may cause  WARN https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.cc#L620
+ORD 0012 OpenRoad.cc:553           Hierarchical flow (-hier) is currently in development and may cause  WARN https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.cc#L553
+ORD 0013 OpenRoad.tcl:526          Command units uninitialized. Use the\      read_liberty or set_cmd_units command to set units. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L526
+ORD 0014 Metrics.tcl:31            both -setup and -hold specified. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/Metrics.tcl#L31
+ORD 0015 OpenRoad.i:457            Unknown tool name {} ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.i#L457
+ORD 0016 OpenRoad.tcl:77           Options -incremental and -floorplan_initialization\      are mutually exclusive. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L77
+ORD 0017 Metrics.tcl:47            both -setup and -hold specified. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/Metrics.tcl#L47
+ORD 0018 Metrics.tcl:63            both -setup and -hold specified. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/Metrics.tcl#L63
+ORD 0019 Metrics.tcl:15            both -setup and -hold specified. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/Metrics.tcl#L15
+ORD 0021 OpenRoad.tcl:83           Chip $keys(-chip) not found. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L83
+ORD 0030 OpenRoad.cc:666           Using {} thread(s). INFO https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.cc#L666
+ORD 0031 OpenRoad.cc:652           Unable to determine maximum number of threads.\n WARN https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.cc#L652
+ORD 0032 OpenRoad.cc:686           Invalid thread number specification: {}. WARN https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.cc#L686
+ORD 0033 OpenRoad.tcl:71           -order_wires is deprecated. WARN https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L71
+ORD 0034 OpenRoad.cc:452           More than one lib exists, multiple files will be written. INFO https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.cc#L452
+ORD 0036 Design.cc:52              A block already exists in the db ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/Design.cc#L52
+ORD 0037 Design.cc:115             No block loaded. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/Design.cc#L115
+ORD 0038 Main.cc:280               -gui is not yet supported with -python WARN https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/Main.cc#L280
+ORD 0039 Main.cc:284               .openroad ignored with -python WARN https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/Main.cc#L284
+ORD 0041 OpenRoad.tcl:369          The flags -power and -ground of the\      add_global_connection command are mutually exclusive. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L369
+ORD 0042 OpenRoad.tcl:374          The -net option of the add_global_connection command is required. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L374
+ORD 0043 OpenRoad.tcl:382          The -pin_pattern option of the add_global_connection command is required. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L382
+ORD 0044 OpenRoad.tcl:389          Net created for $keys(-net), if intended as power\        or ground net add the -power/-ground switch as appropriate. WARN https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L389
+ORD 0045 OpenRoad.tcl:412          Region \ ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L412
+ORD 0046 OpenRoad.tcl:404          -defer_connection has been deprecated. WARN https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L404
+ORD 0047 OpenRoad.cc:569           You can't load a new db file as the db is already populated ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.cc#L569
+ORD 0048 OpenRoad.cc:352           Loading an additional DEF. INFO https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.cc#L352
+ORD 0049 OpenRoad.i:510            No tech is loaded ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.i#L510
+ORD 0050 OpenRoad.i:521            No tech is loaded ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.i#L521
+ORD 0051 OpenRoad.cc:339           Technology {} not found ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.cc#L339
+ORD 0052 OpenRoad.tcl:63           Technology $tech_name not found. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L63
+ORD 0053 OpenRoad.cc:432           No block is loaded. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.cc#L432
+ORD 0054 OpenRoad.cc:549           odb file {} is invalid: {} ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.cc#L549
+ORD 0055 OpenRoad.tcl:427          Design must be loaded before calling place_cell. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L427
+ORD 0056 OpenRoad.tcl:444          Cell $cell_name not loaded into design. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L444
+ORD 0057 OpenRoad.tcl:451          -name is a required argument to the place_cell command. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L451
+ORD 0059 OpenRoad.tcl:470          Origin is $origin, but must be a list of 2 numbers. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L470
+ORD 0060 OpenRoad.tcl:473          Invalid value specified for x value, [lindex $origin 0], $msg. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L473
+ORD 0061 OpenRoad.tcl:476          Invalid value specified for y value, [lindex $origin 1], $msg. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L476
+ORD 0062 OpenRoad.tcl:461          No origin or location specified for $inst_name. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L461
+ORD 0063 OpenRoad.tcl:464          origin and location specified for $inst_name, only one is supported. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L464
+ORD 0065 OpenRoad.tcl:509          Cannot create instance $inst_name of $cell_name. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L509
+ORD 0066 OpenRoad.tcl:484          Invalid value specified for x value, [lindex $location 0], $msg. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L484
+ORD 0067 OpenRoad.tcl:487          Invalid value specified for y value, [lindex $location 1], $msg. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L487
+ORD 0068 OpenRoad.tcl:481          location is $location, but must be a list of 2 numbers. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L481
+ORD 0070 OpenRoad.tcl:177          $filename does not exist. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L177
+ORD 0071 OpenRoad.tcl:180          $filename is not readable. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L180
+ORD 0072 OpenRoad.tcl:208          $filename does not exist. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L208
+ORD 0073 OpenRoad.tcl:211          $filename is not readable. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L211
+ORD 0074 OpenRoad.tcl:223          $filename does not exist. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L223
+ORD 0075 OpenRoad.tcl:226          $filename is not readable. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L226
+ORD 0076 OpenRoad.cc:522           No design loaded. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.cc#L522
+ORD 0101 Design.cc:65              Only one of the options -incremental and ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/Design.cc#L65
+ORD 0102 Design.cc:71              No technology has been read. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/Design.cc#L71
+ORD 0104 Timing.cc:131             STA network is not linked. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/Timing.cc#L131
+ORD 0560 OpenRoad.tcl:583          $cmd $arg_opt missing value. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L583
+ORD 1009 OpenRoad.tcl:273          -name is missing. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L273
+ORD 1010 OpenRoad.tcl:276          Either -net or -all_clocks need to be defined. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L276
+ORD 1011 OpenRoad.tcl:282          No NDR named ${ndrName} found. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L282
+ORD 1012 OpenRoad.tcl:288          No net named ${netName} found. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L288
+ORD 1013 OpenRoad.tcl:160          -masters is required. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L160
+ORD 1050 OpenRoad.tcl:143          Options -bloat and -bloat_occupied_layers are\      both set. At most one should be used. ERROR https://github.com/The-OpenROAD-Project/OpenROAD/tree/master/home/haixuliu/MLCAD26/openroad-power/src/OpenRoad.tcl#L143
