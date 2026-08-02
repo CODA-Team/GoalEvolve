@@ -1336,6 +1336,10 @@ class GoalEvolveEngine:
         for repair_attempt in range(1, max_repairs + 1):
             if not self._repairable_engineering_failure(candidate):
                 break
+            repair_hypothesis = self._repair_hypothesis(
+                hypothesis=hypothesis,
+                candidate=candidate,
+            )
             failure_context = self._failure_context(candidate=candidate, workspace=workspace)
             self._snapshot_failed_evaluation(candidate=candidate, workspace=workspace, repair_attempt=repair_attempt)
             print(
@@ -1348,7 +1352,7 @@ class GoalEvolveEngine:
                 student_id=student_id,
                 workspace=workspace,
                 parent=parent,
-                hypothesis=hypothesis,
+                hypothesis=repair_hypothesis,
                 prompt_path=prompt_path,
                 failure_context=failure_context,
                 repair_attempt=repair_attempt,
@@ -1365,7 +1369,7 @@ class GoalEvolveEngine:
             candidate = self.evaluator.evaluate(
                 contract=self.contract,
                 parent=parent,
-                hypothesis=hypothesis,
+                hypothesis=repair_hypothesis,
                 student_id=student_id,
                 workspace=workspace,
                 round_index=round_index,
@@ -1380,6 +1384,10 @@ class GoalEvolveEngine:
         # regression introduced by this Student.
         if self._repairable_constraint_failure(candidate=candidate, parent=parent):
             constraint_context = self._constraint_failure_context(candidate=candidate, workspace=workspace)
+            repair_hypothesis = self._repair_hypothesis(
+                hypothesis=hypothesis,
+                candidate=candidate,
+            )
             self._snapshot_failed_evaluation(candidate=candidate, workspace=workspace, repair_attempt=1, repair_kind="constraint")
             print(
                 f"[GoalEvolve][round={round_index:03d}][student={student_id}] electrical_constraint repair=1/1",
@@ -1391,7 +1399,7 @@ class GoalEvolveEngine:
                 student_id=student_id,
                 workspace=workspace,
                 parent=parent,
-                hypothesis=hypothesis,
+                hypothesis=repair_hypothesis,
                 prompt_path=prompt_path,
                 failure_context=constraint_context,
                 repair_attempt=1,
@@ -1404,7 +1412,7 @@ class GoalEvolveEngine:
                 candidate = self.evaluator.evaluate(
                     contract=self.contract,
                     parent=parent,
-                    hypothesis=hypothesis,
+                    hypothesis=repair_hypothesis,
                     student_id=student_id,
                     workspace=workspace,
                     round_index=round_index,
@@ -1452,6 +1460,10 @@ class GoalEvolveEngine:
             telemetry_context = self._telemetry_repair_context(
                 candidate=candidate, verdict=provisional, workspace=workspace
             )
+            repair_hypothesis = self._repair_hypothesis(
+                hypothesis=hypothesis,
+                candidate=candidate,
+            )
             self._snapshot_failed_evaluation(
                 candidate=candidate,
                 workspace=workspace,
@@ -1469,7 +1481,7 @@ class GoalEvolveEngine:
                 student_id=student_id,
                 workspace=workspace,
                 parent=parent,
-                hypothesis=hypothesis,
+                hypothesis=repair_hypothesis,
                 prompt_path=prompt_path,
                 failure_context=telemetry_context,
                 repair_attempt=telemetry_attempt,
@@ -1487,7 +1499,7 @@ class GoalEvolveEngine:
                 repaired_candidate = self.evaluator.evaluate(
                     contract=self.contract,
                     parent=parent,
-                    hypothesis=hypothesis,
+                    hypothesis=repair_hypothesis,
                     student_id=student_id,
                     workspace=workspace,
                     round_index=round_index,
@@ -1523,7 +1535,7 @@ class GoalEvolveEngine:
                         student_id=student_id,
                         workspace=workspace,
                         parent=parent,
-                        hypothesis=hypothesis,
+                        hypothesis=repair_hypothesis,
                         prompt_path=prompt_path,
                         failure_context=failure_context,
                         repair_attempt=1,
@@ -1546,7 +1558,7 @@ class GoalEvolveEngine:
                         repaired_candidate = self.evaluator.evaluate(
                             contract=self.contract,
                             parent=parent,
-                            hypothesis=hypothesis,
+                            hypothesis=repair_hypothesis,
                             student_id=student_id,
                             workspace=workspace,
                             round_index=round_index,
@@ -1630,6 +1642,41 @@ class GoalEvolveEngine:
         if any(token in error for token in ("insufficient_disk", "timeout", "terminated_signal", "permission", "missing benchmark", "missing asap7")):
             return False
         return any(token in error for token in ("configure", "build", "flow", "metrics", "official_4of4", "filenotfound", "runtimeerror"))
+
+    @staticmethod
+    def _repair_hypothesis(*, hypothesis: Hypothesis, candidate: CandidateResult) -> Hypothesis:
+        """Keep same-Student repair inside the initially exercised mechanism.
+
+        A normal Student workspace intentionally permits a subsystem-sized
+        experiment.  Once that experiment has been evaluated, an engineering,
+        constraint, or telemetry repair must not use the failure as authority
+        to start a second mechanism elsewhere in the workspace.  The evaluated
+        diff is the authoritative concrete boundary; a pre-existing scheduler
+        fence remains stricter when present.
+        """
+        changed = tuple(
+            sorted(
+                set(
+                    re.findall(
+                        r"^\+\+\+ b/(.+)$",
+                        candidate.implementation_diff,
+                        flags=re.MULTILINE,
+                    )
+                )
+            )
+        )
+        cpp_changed = tuple(
+            path
+            for path in changed
+            if path.endswith((".cc", ".cpp", ".cxx", ".hh", ".hpp", ".h"))
+        )
+        if not cpp_changed:
+            return hypothesis
+        existing = frozenset(hypothesis.allowed_patch_paths)
+        boundary = tuple(
+            path for path in cpp_changed if not existing or path in existing
+        )
+        return replace(hypothesis, allowed_patch_paths=boundary or hypothesis.allowed_patch_paths)
 
     @staticmethod
     def _repairable_constraint_failure(*, candidate: CandidateResult, parent: Parent) -> bool:

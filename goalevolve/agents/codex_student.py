@@ -159,6 +159,7 @@ class CodexStudentEditor:
         repair_kind: str = "engineering",
     ) -> str:
         allowed = ", ".join(self.config.allowed_patch_roots) or "only the assigned source hooks"
+        exact = ", ".join(hypothesis.allowed_patch_paths) or "<no exact boundary recorded>"
         return "\n".join(
             [
                 prompt_path.read_text(encoding="utf-8"),
@@ -166,6 +167,7 @@ class CodexStudentEditor:
                 f"## {repair_kind.replace('_', ' ').title()} repair {repair_attempt}/{self.config.max_repair_attempts} — act now",
                 f"You are the same persistent Student for parent `{parent.parent_id}` in private tree `{source}`.",
                 f"Allowed source roots: `{allowed}`. Primary hooks: `{', '.join(hypothesis.source_hooks)}`.",
+                f"Exact repair patch boundary: `{exact}`. Any change outside this boundary is rejected before evidence is recorded.",
                 "The controller evaluated your current edit and found the gap described below. Repair the C++ implementation now, preserving the assigned mechanism and telemetry intent. Do not switch hypotheses, edit the evaluator/checker/benchmark/build artifacts, create Git metadata/commits (including a sibling source.git), or merely explain the error.",
                 "For a telemetry repair, an expected signal proves only the exact event named by that signal. Never satisfy it by relabeling or arithmetically deriving counts from an earlier phase, predecessor tranche, disabled branch, rejected alternative, or unrelated loop. If the named mechanism genuinely did not execute, preserve that truthful nonactivation instead of manufacturing a nonzero metric.",
                 "Inspect the cited log files and current diff, make the smallest coherent fix, then inspect the resulting diff. Keep tool output information-dense: search with rg first and read local ranges of at most 200 lines; never dump whole files, trees, unrelated instructions, or unrelated skills. Do not run clang-format or any formatter, reformat unrelated source lines, or create whitespace-only churn. Treat a build error as a whole-source integration failure: before responding, search every allowed source file and its message/declaration companions for the conflicting symbol, ID, signature, or registration (for example with rg). Do not change only the first occurrence named by the compiler if another occurrence can still conflict. Do not run the full contest flow; the controller will immediately rebuild and reevaluate after this turn.",

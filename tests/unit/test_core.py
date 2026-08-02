@@ -4967,6 +4967,22 @@ Keep the checked parent.
             )
             self.assertIn("whole-source integration failure", repair)
             self.assertIn("search every allowed source file", repair)
+            bounded_repair = editor._repair_prompt(
+                prompt_path=prompt,
+                source=source,
+                parent=self.parent,
+                hypothesis=replace(
+                    self.hypothesis,
+                    allowed_patch_paths=("src/rsz/src/RecoverPower.cc",),
+                ),
+                failure_context="candidate_build_failed",
+                repair_attempt=1,
+            )
+            self.assertIn(
+                "Exact repair patch boundary: `src/rsz/src/RecoverPower.cc`.",
+                bounded_repair,
+            )
+            self.assertIn("Any change outside this boundary is rejected", bounded_repair)
             self.assertTrue(NoopStudentEditor().apply().ok)
 
     def test_codex_remote_context_is_round_scoped_but_repair_continuous(self) -> None:
@@ -5080,6 +5096,99 @@ Keep the checked parent.
             self.assertIn("repair_01_repair_note", candidate.artifacts)
             self.assertTrue((workspace.parent / "artifacts" / "repair_attempts" / "engineering" / "attempt_01" / "evaluation" / "candidate_before_repair.json").is_file())
 
+    def test_engineering_repair_stays_within_initial_changed_files(self) -> None:
+        class RepairEditor:
+            name = "repair_editor"
+            config = SimpleNamespace(max_repair_attempts=1)
+
+            def __init__(self) -> None:
+                self.repair_boundaries: list[tuple[str, ...]] = []
+
+            def apply(self, **_: object) -> StudentEditReport:
+                return StudentEditReport(True, "edited", "initial", "thread-1", {})
+
+            def repair(self, *, hypothesis: Hypothesis, **_: object) -> StudentEditReport:
+                self.repair_boundaries.append(hypothesis.allowed_patch_paths)
+                return StudentEditReport(True, "repaired", "engineering", "thread-1", {})
+
+        class EngineeringScopeEvaluator:
+            name = "engineering_scope"
+
+            def __init__(self, hypothesis: Hypothesis, parent_metrics: dict[str, float]) -> None:
+                self.calls = 0
+                self.hypothesis = hypothesis
+                self.parent_metrics = parent_metrics
+
+            def evaluate(self, *, student_id: str, hypothesis: Hypothesis, **_: object) -> CandidateResult:
+                self.calls += 1
+                diff = "+++ b/src/rmp/src/Restructure.cpp\n+RMP change\n"
+                if self.calls == 1:
+                    return CandidateResult(
+                        student_id,
+                        hypothesis,
+                        {},
+                        {},
+                        [],
+                        diff,
+                        "broken",
+                        evaluation_error="RuntimeError:candidate_build_failed:1",
+                    )
+                diff += "+++ b/src/rsz/src/policy/RepairPowerPolicy.cc\n+cross-mechanism repair\n"
+                checks = [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")]
+                candidate = CandidateResult(
+                    student_id,
+                    hypothesis,
+                    dict(self.parent_metrics),
+                    {"accepted": 1.0},
+                    checks,
+                    diff,
+                    "cross-mechanism",
+                )
+                report = preflight_candidate(
+                    candidate,
+                    allowed_patch_paths=hypothesis.allowed_patch_paths,
+                )
+                if not report.ok:
+                    candidate.evaluation_error = ";".join(report.violations)
+                return candidate
+
+        hypothesis = Hypothesis(
+            "rmp",
+            "rmp_area",
+            "claim",
+            ("src/rmp/src/Restructure.cpp",),
+            ("accepted",),
+            ("rmp",),
+            "rmp",
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            (workspace / "source").mkdir(parents=True)
+            prompt = root / "prompt.md"
+            prompt.write_text("packet", encoding="utf-8")
+            editor = RepairEditor()
+            evaluator = EngineeringScopeEvaluator(hypothesis, dict(self.parent.metrics))
+            engine = GoalEvolveEngine(
+                self.contract,
+                root / "state",
+                DiversePlanner(),
+                evaluator,
+                IsolatedWorkspace(),
+                StrictEvidencePromotion(),
+                student_editor=editor,
+            )
+
+            candidate = engine._edit_then_evaluate(
+                self.parent, hypothesis, "student_1", workspace, prompt, 1
+            )
+
+            self.assertEqual(editor.repair_boundaries, [("src/rmp/src/Restructure.cpp",)])
+            self.assertIn(
+                "outside_assigned_patch_scope:src/rsz/src/policy/RepairPowerPolicy.cc",
+                candidate.evaluation_error or "",
+            )
+
     def test_missing_telemetry_repairs_same_student_without_losing_better_qor(self) -> None:
         class TelemetryEditor:
             name = "telemetry_editor"
@@ -5184,6 +5293,179 @@ Keep the checked parent.
             self.assertEqual(evaluator.calls, 2)
             self.assertEqual(editor.repair_kinds, ["telemetry"])
             self.assertEqual(candidate.phase_signals, {"accepted": 1.0})
+
+    def test_telemetry_repair_stays_within_initial_changed_files(self) -> None:
+        class RepairEditor:
+            name = "repair_editor"
+            config = SimpleNamespace(max_repair_attempts=0)
+
+            def __init__(self) -> None:
+                self.repair_boundaries: list[tuple[str, ...]] = []
+
+            def apply(self, **_: object) -> StudentEditReport:
+                return StudentEditReport(True, "edited", "initial", "thread-1", {})
+
+            def repair(self, *, hypothesis: Hypothesis, **_: object) -> StudentEditReport:
+                self.repair_boundaries.append(hypothesis.allowed_patch_paths)
+                return StudentEditReport(True, "instrumented", "telemetry", "thread-1", {})
+
+        class ScopeEnforcingEvaluator:
+            name = "scope_enforcing"
+
+            def __init__(self, hypothesis: Hypothesis, parent_metrics: dict[str, float]) -> None:
+                self.calls = 0
+                self.hypothesis = hypothesis
+                self.parent_metrics = parent_metrics
+
+            def evaluate(self, *, student_id: str, hypothesis: Hypothesis, **_: object) -> CandidateResult:
+                self.calls += 1
+                checks = [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")]
+                diff = "+++ b/src/rmp/src/Restructure.cpp\n+RMP change\n"
+                if self.calls == 2:
+                    diff += "+++ b/src/rsz/src/policy/RepairPowerPolicy.cc\n+cross-mechanism repair\n"
+                candidate = CandidateResult(
+                    student_id,
+                    hypothesis,
+                    dict(self.parent_metrics),
+                    {} if self.calls == 1 else {"accepted": 1.0},
+                    checks,
+                    diff,
+                    f"commit-{self.calls}",
+                )
+                report = preflight_candidate(
+                    candidate,
+                    allowed_patch_paths=hypothesis.allowed_patch_paths,
+                )
+                if not report.ok:
+                    candidate.evaluation_error = ";".join(report.violations)
+                return candidate
+
+        hypothesis = Hypothesis(
+            "rmp",
+            "rmp_area",
+            "claim",
+            ("src/rmp/src/Restructure.cpp",),
+            ("accepted",),
+            ("rmp",),
+            "rmp",
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            (workspace / "source").mkdir(parents=True)
+            prompt = root / "prompt.md"
+            prompt.write_text("packet", encoding="utf-8")
+            editor = RepairEditor()
+            evaluator = ScopeEnforcingEvaluator(hypothesis, dict(self.parent.metrics))
+            engine = GoalEvolveEngine(
+                self.contract,
+                root / "state",
+                DiversePlanner(),
+                evaluator,
+                IsolatedWorkspace(),
+                StrictEvidencePromotion(),
+                student_editor=editor,
+            )
+
+            candidate = engine._edit_then_evaluate(
+                self.parent, hypothesis, "student_1", workspace, prompt, 1
+            )
+
+            self.assertEqual(editor.repair_boundaries, [("src/rmp/src/Restructure.cpp",)])
+            self.assertIn(
+                "outside_assigned_patch_scope:src/rsz/src/policy/RepairPowerPolicy.cc",
+                candidate.evaluation_error or "",
+            )
+
+    def test_constraint_repair_stays_within_initial_changed_files(self) -> None:
+        class RepairEditor:
+            name = "repair_editor"
+            config = SimpleNamespace(max_repair_attempts=0)
+
+            def __init__(self) -> None:
+                self.repair_boundaries: list[tuple[str, ...]] = []
+
+            def apply(self, **_: object) -> StudentEditReport:
+                return StudentEditReport(True, "edited", "initial", "thread-1", {})
+
+            def repair(self, *, hypothesis: Hypothesis, **_: object) -> StudentEditReport:
+                self.repair_boundaries.append(hypothesis.allowed_patch_paths)
+                return StudentEditReport(True, "repaired", "constraint", "thread-1", {})
+
+        class ConstraintScopeEvaluator:
+            name = "constraint_scope"
+
+            def __init__(self, hypothesis: Hypothesis, parent_metrics: dict[str, float]) -> None:
+                self.calls = 0
+                self.hypothesis = hypothesis
+                self.parent_metrics = parent_metrics
+
+            def evaluate(self, *, student_id: str, hypothesis: Hypothesis, **_: object) -> CandidateResult:
+                self.calls += 1
+                checks = [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")]
+                diff = "+++ b/src/rmp/src/Restructure.cpp\n+RMP change\n"
+                if self.calls == 2:
+                    diff += "+++ b/src/rsz/src/policy/RepairPowerPolicy.cc\n+cross-mechanism repair\n"
+                candidate = CandidateResult(
+                    student_id,
+                    hypothesis,
+                    {**self.parent_metrics, "drv_count": 1.0},
+                    {"accepted": 1.0},
+                    checks,
+                    diff,
+                    f"commit-{self.calls}",
+                )
+                report = preflight_candidate(
+                    candidate,
+                    allowed_patch_paths=hypothesis.allowed_patch_paths,
+                )
+                if not report.ok:
+                    candidate.evaluation_error = ";".join(report.violations)
+                return candidate
+
+        hypothesis = Hypothesis(
+            "rmp",
+            "rmp_area",
+            "claim",
+            ("src/rmp/src/Restructure.cpp",),
+            ("accepted",),
+            ("rmp",),
+            "rmp",
+        )
+        parent = Parent(
+            "baseline",
+            {**self.parent.metrics, "drv_count": 0.0},
+            "base",
+            "hash",
+            self.parent.goal_distance,
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            (workspace / "source").mkdir(parents=True)
+            prompt = root / "prompt.md"
+            prompt.write_text("packet", encoding="utf-8")
+            editor = RepairEditor()
+            evaluator = ConstraintScopeEvaluator(hypothesis, dict(parent.metrics))
+            engine = GoalEvolveEngine(
+                self.contract,
+                root / "state",
+                DiversePlanner(),
+                evaluator,
+                IsolatedWorkspace(),
+                StrictEvidencePromotion(),
+                student_editor=editor,
+            )
+
+            candidate = engine._edit_then_evaluate(
+                parent, hypothesis, "student_1", workspace, prompt, 1
+            )
+
+            self.assertEqual(editor.repair_boundaries, [("src/rmp/src/Restructure.cpp",)])
+            self.assertIn(
+                "outside_assigned_patch_scope:src/rsz/src/policy/RepairPowerPolicy.cc",
+                candidate.evaluation_error or "",
+            )
 
     def test_telemetry_repair_build_failure_returns_to_same_student(self) -> None:
         class TelemetryThenEngineeringEditor:
