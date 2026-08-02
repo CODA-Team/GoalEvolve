@@ -15,19 +15,27 @@ from goalevolve.planning.repository_graph import RepositoryGraphIndex
 class ReleaseArtifactTests(unittest.TestCase):
     def test_checked_in_p0_repository_graph_matches_the_frozen_source(self) -> None:
         source_root = runner.PROJECT_ROOT / "artifact_evaluation/lineage/openroad_power/p0/source"
+        checked_in_root = source_root.parent / "repository_graph"
         with tempfile.TemporaryDirectory() as directory:
+            regenerated_root = Path(directory) / "repository_graph"
             graph = RepositoryGraphIndex(
                 state_root=Path(directory) / "state",
+                p0_source_root=source_root,
+                p0_artifact_root=regenerated_root,
             ).build_p0()
+            for filename in ("manifest.json", "graph.json", "doc_cards.json"):
+                self.assertTrue((graph.artifact_root / filename).is_file())
+                self.assertEqual(
+                    (graph.artifact_root / filename).read_bytes(),
+                    (checked_in_root / filename).read_bytes(),
+                    filename,
+                )
         manifest = json.loads(
             (source_root.parent / "source_manifest.json").read_text(encoding="utf-8")
         )
         self.assertEqual(graph.source_hash, manifest["content_sha256"])
         self.assertEqual(graph.base_source_hash, manifest["content_sha256"])
         self.assertEqual(graph.allowed_patch_roots, ("src/rmp", "src/rsz"))
-        self.assertTrue((graph.artifact_root / "manifest.json").is_file())
-        self.assertTrue((graph.artifact_root / "graph.json").is_file())
-        self.assertTrue((graph.artifact_root / "doc_cards.json").is_file())
         self.assertTrue(graph.files)
         for path, source_file in graph.files.items():
             self.assertTrue((source_root / path).is_file(), path)
