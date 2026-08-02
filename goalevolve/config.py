@@ -41,6 +41,7 @@ class CodexWorkerSettings:
     retries: int
     timeout_s: int
     max_repair_attempts: int | None = None
+    max_plan_format_repairs: int | None = None
 
 
 @dataclass(frozen=True)
@@ -54,12 +55,14 @@ def load_codex_settings(path: Path = CODEX_CONFIG_PATH) -> CodexSettings:
     """Load one project-wide, versioned Codex runtime policy."""
     raw = json.loads(path.read_text(encoding="utf-8"))
 
-    def worker(name: str, *, needs_repairs: bool) -> CodexWorkerSettings:
+    def worker(name: str, *, needs_repairs: bool, needs_plan_repairs: bool = False) -> CodexWorkerSettings:
         values = dict(raw.get(name) or {})
         required = ("model", "reasoning_effort", "retries", "timeout_s")
         missing = [field for field in required if field not in values]
         if needs_repairs and "max_repair_attempts" not in values:
             missing.append("max_repair_attempts")
+        if needs_plan_repairs and "max_plan_format_repairs" not in values:
+            missing.append("max_plan_format_repairs")
         if missing:
             raise ValueError(f"Codex configuration {name!r} lacks: {', '.join(missing)}")
         return CodexWorkerSettings(
@@ -68,12 +71,13 @@ def load_codex_settings(path: Path = CODEX_CONFIG_PATH) -> CodexSettings:
             retries=int(values["retries"]),
             timeout_s=int(values["timeout_s"]),
             max_repair_attempts=int(values["max_repair_attempts"]) if needs_repairs else None,
+            max_plan_format_repairs=int(values["max_plan_format_repairs"]) if needs_plan_repairs else None,
         )
 
     credential_env = Path(str(raw.get("credential_env") or "credentials/goalevolve_codex.env"))
     return CodexSettings(
         student=worker("student", needs_repairs=True),
-        teacher=worker("teacher", needs_repairs=False),
+        teacher=worker("teacher", needs_repairs=False, needs_plan_repairs=True),
         credential_env=(path.parent / credential_env).resolve() if not credential_env.is_absolute() else credential_env,
     )
 
@@ -120,6 +124,7 @@ class ExperimentConfig:
     max_campaign_rounds: int | None = None
     prefer_execution_champion: bool = False
     campaign_ready: bool | None = None
+    epd_max_reinforcement_attempts: int = 2
 
 
 def _load_raw_config(path: Path) -> dict[str, Any]:
@@ -204,6 +209,7 @@ def load_config(path: Path) -> ExperimentConfig:
         max_campaign_rounds=int(raw["max_campaign_rounds"]) if raw.get("max_campaign_rounds") is not None else None,
         prefer_execution_champion=bool(raw.get("prefer_execution_champion", False)),
         campaign_ready=bool(raw["campaign_ready"]) if "campaign_ready" in raw else None,
+        epd_max_reinforcement_attempts=max(0, int(raw.get("epd_max_reinforcement_attempts", 2))),
     )
 
 
@@ -232,7 +238,7 @@ def build_runtime(config: ExperimentConfig) -> tuple[GoalContract, PluginRegistr
     registry.register_evaluator(MockEvaluator())
     registry.register_student_editor(NoopStudentEditor())
     registry.register_teacher(HeuristicTeacher())
-    registry.register_teacher(CodexTeacher(CodexTeacherConfig(model=config.codex.teacher.model, reasoning_effort=config.codex.teacher.reasoning_effort, retries=config.codex.teacher.retries, timeout_s=config.codex.teacher.timeout_s, seed_home=config.state_root, credential_env=config.codex.credential_env)))
+    registry.register_teacher(CodexTeacher(CodexTeacherConfig(model=config.codex.teacher.model, reasoning_effort=config.codex.teacher.reasoning_effort, retries=config.codex.teacher.retries, timeout_s=config.codex.teacher.timeout_s, seed_home=config.state_root, credential_env=config.codex.credential_env, max_plan_format_repairs=int(config.codex.teacher.max_plan_format_repairs or 0))))
     registry.register_student_editor(
         CodexStudentEditor(
             CodexStudentConfig(

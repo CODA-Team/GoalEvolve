@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 import re
 from typing import Iterable, Mapping, Sequence
 
 from ..core.io import atomic_json, load_json, sha256_json
 from ..core.models import Hypothesis, Parent
+from .epd import EvolutionProgramDatabase
 from .timing_recovery import recipes_for_students
 
 
@@ -1302,6 +1303,77 @@ class DiverseRetriever:
         )
         atomic_json(path, ledger)
 
+    def paper_card_references(
+        self,
+        *,
+        parent: Parent,
+        symptoms: Sequence[str],
+        state_root: Path,
+        count: int = 8,
+    ) -> list[dict[str, object]]:
+        """Return retrieved literature/mechanism cards as advice, never slots.
+
+        A card is useful context for a Teacher but must not become an implicit
+        controller-authored hypothesis. Per-design use is tracked separately
+        and cards cited more than five times are demoted before retrieval.
+        """
+        path = state_root / "knowledge" / "paper_card_usage.json"
+        payload = load_json(path, {"schema_version": "goalevolve.v2.paper-card-usage.v1", "counts": {}}) or {}
+        counts = {
+            str(card_id): int(value)
+            for card_id, value in dict(payload.get("counts") or {}).items()
+            if isinstance(value, (int, float))
+        }
+        cards = self.retrieve(
+            parent=parent,
+            symptoms=symptoms,
+            state_root=state_root,
+            count=max(count * 2, count),
+        )
+        ranked = sorted(cards, key=lambda card: (counts.get(card.card_id, 0) > 5, counts.get(card.card_id, 0), card.card_id))
+        return [
+            {
+                "card_id": card.card_id,
+                # Paper cards are retrieval context, never an executable
+                # mechanism menu.  Do not leak their source hooks, signals,
+                # or patch-template prose into the Teacher prompt.
+                "topic_tags": list(card.symptom_tags),
+                "usage_count": counts.get(card.card_id, 0),
+                "overuse_penalty": counts.get(card.card_id, 0) > 5,
+            }
+            for card in ranked[:count]
+        ]
+
+    def record_paper_card_references(
+        self,
+        *,
+        state_root: Path,
+        round_index: int,
+        card_ids: Sequence[str],
+    ) -> dict[str, int]:
+        """Persist actual Teacher citations after a plan is structurally valid."""
+        path = state_root / "knowledge" / "paper_card_usage.json"
+        payload = load_json(path, {"schema_version": "goalevolve.v2.paper-card-usage.v1", "counts": {}, "rounds": []}) or {}
+        counts = {
+            str(card_id): int(value)
+            for card_id, value in dict(payload.get("counts") or {}).items()
+            if isinstance(value, (int, float))
+        }
+        unique = tuple(dict.fromkeys(str(card_id) for card_id in card_ids if str(card_id)))
+        for card_id in unique:
+            counts[card_id] = counts.get(card_id, 0) + 1
+        rounds = list(payload.get("rounds") or [])
+        rounds.append({"round": int(round_index), "card_ids": list(unique)})
+        atomic_json(
+            path,
+            {
+                "schema_version": "goalevolve.v2.paper-card-usage.v1",
+                "counts": dict(sorted(counts.items())),
+                "rounds": rounds[-500:],
+            },
+        )
+        return counts
+
     def audit(self, *, state_root: Path) -> dict[str, object]:
         ledger = load_json(state_root / "knowledge" / "retrieval_ledger.json", {"rounds": []})
         rounds = list(ledger.get("rounds") or [])
@@ -1377,12 +1449,12 @@ class DiversePlanner:
         # card crowd out a valid lower-ranked mechanism.  Scope resolution is
         # a hard admission gate, not an annotation.
         if stage == "adaptive_tradeoff":
-            # After the protected power rounds, avoid both failure modes of a
-            # single blended ranking: four timing cards can forget that the
-            # upstream low-power state remains unresolved, while four power
-            # cards recreate the starvation that triggered this stage.  Form
-            # three independently retrieved evidence buckets and allocate
-            # 2 dominant / 1 upstream / 1 handoff slots.
+            # Keep the Teacher's safety menu diverse after protected power
+            # rounds. A single blended rank can hide upstream power durability
+            # or power-to-timing reversion evidence under generic timing cards.
+            # These are candidate-pool coverage groups, not Student roles.
+            # The actual roster uses all Explorer slots when no EPD role is
+            # eligible, otherwise it includes the eligible historical roles.
             timing_cards = self.retriever.retrieve(
                 parent=parent,
                 symptoms=("tns", "timing", "timing_recovery"),
@@ -1417,14 +1489,9 @@ class DiversePlanner:
                 *secondary_cards[:1],
                 *handoff_cards[:1],
             ]
-            # Keep the controller allocation semantic, even when one bucket
-            # is exhausted.  Appending the wider timing/power rankings here
-            # used to let an extra timing card silently occupy an empty
-            # upstream-power slot (as happened in JPEG R11 after the tested
-            # repair_power cards were exhausted).  A sparse batch is the
-            # correct evidence in that case: no card from another bucket may
-            # masquerade as the missing source mechanism merely to reach four
-            # Students.
+            # Retain evidence provenance for each coverage group but do not
+            # force any group into a role slot. A missing group narrows the
+            # Teacher menu instead of relabeling another mechanism as it.
             cards = []
             for card in requested:
                 if card not in cards:
@@ -1437,114 +1504,375 @@ class DiversePlanner:
             if self.scope_resolver and (decision is None or not decision.files):
                 continue
             resolved.append((card, decision))
-        # Hard suppression is intentional evidence, not a reason to revive a
-        # refuted card merely to fill four nominal Student slots.  A sparse
-        # round still gives every assigned Student the full source/build/flow/
-        # LEC evidence path; it simply spends no model or tool budget on an
-        # unsupported duplicate experiment.
-        if not resolved:
-            raise RuntimeError("no source-verified mechanisms remain for this round")
+        portfolio = EvolutionProgramDatabase(state_root).role_portfolio(
+            contract=contract,
+            parent=parent,
+        )
+        portfolio_by_id = {
+            str(row.get("record_id") or ""): row
+            for row in list(portfolio.get("records") or ())
+            if isinstance(row, Mapping)
+        }
         planned: list[Hypothesis] = []
-        for student_id, (card, decision) in zip(student_ids, resolved, strict=False):
-            # The R27 probe cards each name the policy that their controller
-            # recipe actually executes.  Do not assign a WNS_CONE source edit
-            # to a LEGACY_MT run merely because the two happened to occupy
-            # the same Student index after retrieval ranking.
-            recipe_id = (
-                champion_recipe
-                if stage == "adaptive_tradeoff" and champion_recipe
-                else recipe_by_student.get(str(student_id), "legacy_setup")
-            )
-            if stage == "power_reclaim" and card.card_id == "repair_power_rmp_area_recipe_v1":
-                recipe_id = "rmp_area_power"
-            if stage in {"timing_recovery", "adaptive_tradeoff"}:
-                card_key = f"{card.card_id} {card.mechanism_family}".lower()
-                if "legacy_mt" in card_key:
-                    recipe_id = "legacy_mt"
-                elif "wns_cone" in card_key:
-                    recipe_id = "wns_cone"
-                elif "reroute" in card_key:
-                    recipe_id = "reroute_mid_power"
-                elif "measured_critical" in card_key or "measured_crit" in card_key:
-                    recipe_id = "measured_critical_path_deep"
-                elif "measured_vt" in card_key:
-                    recipe_id = "measured_vt_deep"
-                elif "last_gasp" in card_key:
-                    recipe_id = "last_gasp_deep"
-                elif "crit_vt" in card_key:
-                    # Do not accidentally run a CRIT_VT source experiment
-                    # under the Student-index fallback (formerly MT1 for the
-                    # fourth slot).  The command schedule is evidence too:
-                    # this policy needs its own phase-leading recipe.
-                    recipe_id = "crit_vt_deep"
-                elif "mt1" in card_key:
-                    recipe_id = "mt1_deep"
-                elif ("power_stability" in card_key
-                      or "timing_power_rebuild" in card_key
-                      or "compound_vt_reserve" in card_key
-                      or "compound_vt_critical_halo" in card_key
-                      or "compound_vt_critical_fanin_halo" in card_key
-                      or "pure_vt_critical_halo" in card_key
-                      or "size_down_critical_halo" in card_key
-                      or "buffer_removal_critical_halo" in card_key
-                      or "compound_vt_timing_reserve" in card_key):
-                    recipe_id = "mt1_deep"
-                elif "rmp" in card_key or "restructure" in card_key:
-                    recipe_id = (
-                        "rmp_post_timing_halo"
-                        if "post_timing_halo" in card_key or "post_timing_wire" in card_key
-                        else ("rmp_path_cone_halo_timing"
-                        if "path_cone_halo_v5" in card_key
-                        else (
-                            "rmp_path_cone_timing"
-                            if "path_cone_v4" in card_key
-                            else "rmp_delay_timing"
-                        ))
-                    )
-                elif "wns_path" in card_key:
-                    recipe_id = "wns_path_deep"
-                elif "wns" in card_key:
-                    recipe_id = "wns_cone"
-                elif "legacy" in card_key:
-                    recipe_id = "legacy_deep"
-                elif "tns_" in card_key or "_tns" in card_key:
-                    recipe_id = "tns_global"
-            identifier = f"r{round_index}_{student_id}_{card.card_id}"
-            hooks = decision.files if decision and decision.files else card.source_hooks
-            scope_evidence = tuple() if decision is None else (f"scope_confidence:{decision.confidence}", *(f"metric:{item}" for item in decision.observed_metrics), *(f"symbol:{item}" for item in decision.observed_symbols))
-            exact_stage_paths = tuple(
-                path for path in stage_patch_paths
-                if path.endswith((".cc", ".hh", ".cpp", ".hpp", ".tcl"))
-            )
-            # Timing stages normally name a subsystem directory, not a file
-            # fence.  The resolved hook list is nevertheless source-verified
-            # and exact, so use it as the Student's legal edit surface rather
-            # than emitting an impossible empty contract that guarantees a
-            # no-source-change invalid result.
-            allowed_paths = exact_stage_paths or tuple(
-                path for path in hooks if path.endswith((".cc", ".hh", ".cpp", ".hpp", ".tcl"))
-            )
-            planned.append(
-                Hypothesis(
-                    hypothesis_id=identifier,
-                    mechanism_family=card.mechanism_family,
-                    claim=card.claim_template,
-                    source_hooks=hooks,
-                    expected_signals=card.expected_signals,
-                    retrieval_ids=(card.card_id,),
-                    novelty_key=f"{card.mechanism_family}:{'|'.join(card.source_hooks)}",
-                    scope_evidence=scope_evidence,
-                    # A stage-wide source root is not an exact file fence.
-                    # Keep any explicit stage paths, otherwise permit the
-                    # already resolved source hooks themselves.
-                    allowed_patch_paths=allowed_paths,
+        explorer_options: list[Hypothesis] = []
+        for option_index, (card, decision) in enumerate(resolved):
+            explorer_options.append(
+                self._hypothesis_for_card(
+                    card=card,
+                    decision=decision,
+                    student_id="",
+                    role="explorer",
+                    role_mode="fresh_exploration",
+                    epd_records=(),
+                    round_index=round_index,
+                    stage=stage,
                     evaluation_mode=evaluation_mode,
-                    timing_recipe_id=recipe_id,
-                    activation_signals=card.activation_signals,
-                    conclusive_nonactivation_patterns=card.conclusive_nonactivation_patterns,
+                    recipe_by_student=recipe_by_student,
+                    champion_recipe=champion_recipe,
+                    stage_patch_paths=stage_patch_paths,
                 )
             )
+        pending_ideas = list(portfolio.get("pending_explorer_ideas") or ())
+        for pending in pending_ideas:
+            hooks = tuple(str(path) for path in list(pending.get("source_hooks") or ()) if path)
+            signals = tuple(str(signal) for signal in list(pending.get("expected_signals") or ()) if signal)
+            if not hooks or not self._epd_paths_exist(hooks):
+                continue
+            idea_id = str(pending.get("idea_id") or "")
+            if not idea_id:
+                continue
+            pending_card = MechanismCard(
+                card_id=f"epd_pending__{idea_id}",
+                mechanism_family="epd_pending_explorer",
+                symptom_tags=(),
+                source_hooks=hooks,
+                expected_signals=signals,
+                claim_template=str(pending.get("idea") or ""),
+                evidence_level="teacher_pending_idea",
+                scope="epd_pending",
+            )
+            explorer_options.append(
+                replace(
+                    self._hypothesis_for_card(
+                        card=pending_card,
+                        decision=None,
+                        student_id="",
+                        role="explorer",
+                        role_mode="pending_exploration",
+                        epd_records=(),
+                        round_index=round_index,
+                        stage=stage,
+                        evaluation_mode=evaluation_mode,
+                        recipe_by_student=recipe_by_student,
+                        champion_recipe=champion_recipe,
+                        stage_patch_paths=stage_patch_paths,
+                    ),
+                    epd_idea_id=idea_id,
+                )
+            )
+        # A teacher-controlled fresh menu gives explorers distinct ideas and
+        # lets bootstrap roles seed future EPD mechanisms. It is not a source
+        # parent and every selected option still receives an isolated flow.
+        role_option_records = {
+            "integrator": self._epd_option_records(
+                portfolio=portfolio,
+                portfolio_by_id=portfolio_by_id,
+                candidate_key="integration_candidates",
+                minimum_records=2,
+            ),
+            "enhancer": self._epd_option_records(
+                portfolio=portfolio,
+                portfolio_by_id=portfolio_by_id,
+                candidate_key="enhancement_candidates",
+                minimum_records=1,
+            ),
+        }
+        eligible_roles = {
+            role: tuple(
+                records
+                for records in options
+                if self._epd_records_source_available(records)
+            )
+            for role, options in role_option_records.items()
+        }
+        # A historical role is meaningful only with executable EPD evidence.
+        # Otherwise each configured worker performs an independent fresh
+        # exploration, which keeps a four-Student campaign fully utilized.
+        roles = self._roles_for_students(
+            student_ids,
+            has_integration=bool(eligible_roles["integrator"]),
+            has_enhancement=bool(eligible_roles["enhancer"]),
+        )
+        # Fresh explorers consume distinct retrieved cards. EPD roles are
+        # different: they are new, source-fenced experiments derived from
+        # source-backed historical mechanisms, so they must not disappear merely
+        # because a promoted original card is rightly absent from retrieval.
+        fresh_index = 0
+        for student_id, role in zip(student_ids, roles, strict=False):
+            selectable_records = eligible_roles.get(role, ())
+            if role in {"integrator", "enhancer"} and selectable_records:
+                role_records = selectable_records[0]
+                card = self._epd_mechanism_card(role=role, records=role_records)
+                decision = None
+            else:
+                if fresh_index >= len(resolved):
+                    continue
+                card, decision = resolved[fresh_index]
+                fresh_index += 1
+                role_records = ()
+            role_mode = self._role_mode(role=role, epd_records=role_records)
+            candidate = self._hypothesis_for_card(
+                card=card,
+                decision=decision,
+                student_id=str(student_id),
+                role=role,
+                role_mode=role_mode,
+                epd_records=role_records,
+                round_index=round_index,
+                stage=stage,
+                evaluation_mode=evaluation_mode,
+                recipe_by_student=recipe_by_student,
+                champion_recipe=champion_recipe,
+                stage_patch_paths=stage_patch_paths,
+            )
+            if role == "explorer":
+                candidate_options = tuple(
+                    replace(option, student_id=str(student_id)).to_dict()
+                    for option in explorer_options
+                )
+            elif selectable_records:
+                candidate_options = tuple(
+                    self._hypothesis_for_card(
+                        card=self._epd_mechanism_card(role=role, records=records),
+                        decision=None,
+                        student_id=str(student_id),
+                        role=role,
+                        role_mode=self._role_mode(role=role, epd_records=records),
+                        epd_records=records,
+                        round_index=round_index,
+                        stage=stage,
+                        evaluation_mode=evaluation_mode,
+                        recipe_by_student=recipe_by_student,
+                        champion_recipe=champion_recipe,
+                        stage_patch_paths=stage_patch_paths,
+                    ).to_dict()
+                    for records in selectable_records
+                )
+            else:
+                candidate_options = tuple(
+                    replace(option, student_id=str(student_id), student_role=role, role_mode=role_mode).to_dict()
+                    for option in explorer_options
+                )
+            candidate = replace(candidate, candidate_options=candidate_options)
+            planned.append(candidate)
+        if not planned:
+            raise RuntimeError("no source-verified fresh or EPD mechanisms remain for this round")
         return planned
+
+    @staticmethod
+    def _role_mode(*, role: str, epd_records: Sequence[Mapping[str, object]]) -> str:
+        if role == "integrator":
+            return "epd_integration" if epd_records else "bootstrap_integration"
+        if role == "enhancer":
+            return "epd_enhancement" if epd_records else "bootstrap_enhancement"
+        return "fresh_exploration"
+
+    @staticmethod
+    def _epd_option_records(
+        *,
+        portfolio: Mapping[str, object],
+        portfolio_by_id: Mapping[str, Mapping[str, object]],
+        candidate_key: str,
+        minimum_records: int,
+    ) -> tuple[tuple[Mapping[str, object], ...], ...]:
+        options: list[tuple[Mapping[str, object], ...]] = []
+        for raw_ids in list(portfolio.get(candidate_key) or ()):
+            record_ids = (raw_ids,) if isinstance(raw_ids, str) else tuple(raw_ids or ())
+            records = tuple(
+                portfolio_by_id[str(record_id)]
+                for record_id in record_ids
+                if str(record_id) in portfolio_by_id
+            )
+            if len(records) >= minimum_records and records not in options:
+                options.append(records)
+        return tuple(options)
+
+    def _epd_records_source_available(
+        self,
+        records: Sequence[Mapping[str, object]],
+    ) -> bool:
+        hooks = tuple(
+            dict.fromkeys(
+                str(path)
+                for record in records
+                for path in list(record.get("source_hooks") or ())
+                if path
+            )
+        )
+        return bool(hooks) and self._epd_paths_exist(hooks)
+
+    @staticmethod
+    def _epd_mechanism_card(
+        *,
+        role: str,
+        records: Sequence[Mapping[str, object]],
+    ) -> MechanismCard:
+        """Represent a source-backed, non-invalid EPD selection without replaying its old card."""
+        record_ids = tuple(str(record.get("record_id") or "") for record in records)
+        hooks = tuple(
+            dict.fromkeys(
+                str(path)
+                for record in records
+                for path in list(record.get("source_hooks") or ())
+                if path
+            )
+        )
+        signals = tuple(
+            dict.fromkeys(
+                str(signal)
+                for record in records
+                for signal in list(record.get("expected_signals") or ())
+                if signal
+            )
+        )
+        families = tuple(
+            dict.fromkeys(
+                str(record.get("mechanism_family") or "mechanism")
+                for record in records
+            )
+        )
+        action = "Combine" if role == "integrator" else "Refine"
+        return MechanismCard(
+            card_id=f"epd_{role}__{'__'.join(record_ids)}",
+            mechanism_family=f"epd_{role}",
+            symptom_tags=(),
+            source_hooks=hooks,
+            expected_signals=signals,
+            claim_template=(
+                f"{action} the source-backed non-invalid EPD mechanisms ({', '.join(families)}) "
+                "through one bounded source change with fresh evidence."
+            ),
+            evidence_level="noninvalid_epd",
+            scope="epd_history",
+        )
+
+    def _hypothesis_for_card(
+        self,
+        *,
+        card: MechanismCard,
+        decision: object | None,
+        student_id: str,
+        role: str,
+        role_mode: str,
+        epd_records: Sequence[Mapping[str, object]],
+        round_index: int,
+        stage: str,
+        evaluation_mode: str,
+        recipe_by_student: Mapping[str, str],
+        champion_recipe: str,
+        stage_patch_paths: Sequence[str],
+        candidate_suffix: str = "",
+    ) -> Hypothesis:
+        recipe_id = champion_recipe if stage == "adaptive_tradeoff" and champion_recipe else recipe_by_student.get(student_id, "legacy_setup")
+        if stage == "power_reclaim" and card.card_id == "repair_power_rmp_area_recipe_v1":
+            recipe_id = "rmp_area_power"
+        if stage in {"timing_recovery", "adaptive_tradeoff"}:
+            card_key = f"{card.card_id} {card.mechanism_family}".lower()
+            if "legacy_mt" in card_key:
+                recipe_id = "legacy_mt"
+            elif "wns_cone" in card_key:
+                recipe_id = "wns_cone"
+            elif "reroute" in card_key:
+                recipe_id = "reroute_mid_power"
+            elif "measured_critical" in card_key or "measured_crit" in card_key:
+                recipe_id = "measured_critical_path_deep"
+            elif "measured_vt" in card_key:
+                recipe_id = "measured_vt_deep"
+            elif "last_gasp" in card_key:
+                recipe_id = "last_gasp_deep"
+            elif "crit_vt" in card_key:
+                recipe_id = "crit_vt_deep"
+            elif "mt1" in card_key:
+                recipe_id = "mt1_deep"
+            elif any(token in card_key for token in ("power_stability", "timing_power_rebuild", "compound_vt_reserve", "compound_vt_critical_halo", "compound_vt_critical_fanin_halo", "pure_vt_critical_halo", "size_down_critical_halo", "buffer_removal_critical_halo", "compound_vt_timing_reserve")):
+                recipe_id = "mt1_deep"
+            elif "rmp" in card_key or "restructure" in card_key:
+                recipe_id = "rmp_post_timing_halo" if "post_timing_halo" in card_key or "post_timing_wire" in card_key else ("rmp_path_cone_halo_timing" if "path_cone_halo_v5" in card_key else ("rmp_path_cone_timing" if "path_cone_v4" in card_key else "rmp_delay_timing"))
+            elif "wns_path" in card_key:
+                recipe_id = "wns_path_deep"
+            elif "wns" in card_key:
+                recipe_id = "wns_cone"
+            elif "legacy" in card_key:
+                recipe_id = "legacy_deep"
+            elif "tns_" in card_key or "_tns" in card_key:
+                recipe_id = "tns_global"
+        hooks = tuple(getattr(decision, "files", ()) or card.source_hooks)
+        if epd_records:
+            epd_hooks = tuple(dict.fromkeys(str(path) for record in epd_records for path in list(record.get("source_hooks") or ()) if path))
+            if epd_hooks and self._epd_paths_exist(epd_hooks):
+                hooks = epd_hooks
+        epd_signals = tuple(dict.fromkeys(str(signal) for record in epd_records for signal in list(record.get("expected_signals") or ()) if signal))
+        scope_evidence = () if decision is None else (
+            f"scope_confidence:{getattr(decision, 'confidence', 'declared_only')}",
+            *(f"metric:{item}" for item in getattr(decision, "observed_metrics", ())),
+            *(f"symbol:{item}" for item in getattr(decision, "observed_symbols", ())),
+        )
+        exact_stage_paths = tuple(path for path in stage_patch_paths if path.endswith((".cc", ".hh", ".cpp", ".hpp", ".tcl")))
+        allowed_paths = tuple(path for path in hooks if path.endswith((".cc", ".hh", ".cpp", ".hpp", ".tcl"))) if epd_records else (exact_stage_paths or tuple(path for path in hooks if path.endswith((".cc", ".hh", ".cpp", ".hpp", ".tcl"))))
+        claim = card.claim_template
+        if role_mode == "epd_integration":
+            claim = "Integrate only compatible source-backed decisions from the selected EPD mechanisms; preserve guards, rollback, and telemetry semantics. " + claim
+        elif role_mode == "epd_enhancement":
+            claim = "Enhance the selected source-backed EPD mechanism with one bounded refinement; preserve its mechanism boundary. " + claim
+        identity = student_id or "candidate"
+        return Hypothesis(
+            hypothesis_id=f"r{round_index}_{identity}_{card.card_id}{'__' + candidate_suffix if candidate_suffix else ''}",
+            mechanism_family=card.mechanism_family,
+            claim=claim,
+            source_hooks=hooks,
+            expected_signals=epd_signals or card.expected_signals,
+            retrieval_ids=(card.card_id,),
+            novelty_key=f"{role}:{card.mechanism_family}:{'|'.join(hooks)}:{'|'.join(str(record.get('record_id') or '') for record in epd_records)}",
+            scope_evidence=scope_evidence,
+            allowed_patch_paths=allowed_paths,
+            evaluation_mode=evaluation_mode,
+            timing_recipe_id=recipe_id,
+            activation_signals=card.activation_signals,
+            conclusive_nonactivation_patterns=card.conclusive_nonactivation_patterns,
+            student_role=role,
+            role_mode=role_mode,
+            epd_record_ids=tuple(str(record.get("record_id") or "") for record in epd_records),
+            epd_idea_id=(
+                str(epd_records[0].get("idea_id") or "")
+                if role == "enhancer" and role_mode == "epd_enhancement" and len(epd_records) == 1
+                else ""
+            ),
+            student_id=student_id,
+        )
+
+    @staticmethod
+    def _roles_for_students(
+        student_ids: Sequence[str],
+        *,
+        has_integration: bool,
+        has_enhancement: bool,
+    ) -> tuple[str, ...]:
+        """Schedule historical roles only when their EPD evidence is executable."""
+        ids = tuple(student_ids)
+        if not has_integration and not has_enhancement:
+            return tuple("explorer" for _ in ids)
+        roles = ["explorer", "explorer"]
+        if has_integration:
+            roles.append("integrator")
+        if has_enhancement:
+            roles.append("enhancer")
+        return tuple(roles[: len(ids)])
+
+    def _epd_paths_exist(self, paths: Sequence[str]) -> bool:
+        if self.scope_resolver is None or not getattr(self.scope_resolver, "index", None):
+            return True
+        source_index = getattr(self.scope_resolver, "index")
+        return all(str(path) in source_index for path in paths)
 
     def commit_round(
         self,
@@ -1577,23 +1905,23 @@ class DiversePlanner:
         if stage != "power_reclaim" and "route" in str(getattr(diagnosis, "responsible_stage", "")).lower():
             symptoms.extend(("route", "post_route"))
         by_id = {card.card_id: card for card in self.retriever.cards}
-        cards = [
-            by_id[identifier]
+        cards = {
+            identifier: by_id[identifier]
             for hypothesis in hypotheses
             for identifier in hypothesis.retrieval_ids
             if identifier in by_id
-        ]
-        if len(cards) == len(hypotheses):
+        }
+        if cards:
             self.retriever.record(
                 state_root=state_root,
                 round_index=round_index,
-                cards=cards,
+                cards=list(cards.values()),
                 symptoms=symptoms,
             )
 
 
 class RoundRobinPlanner:
-    """Retrieval-free ablation with the same card schema and four-way scope split."""
+    """Retrieval-free ablation with the same card schema and fresh Explorer roles."""
 
     name = "round_robin_planner"
 
@@ -1605,6 +1933,11 @@ class RoundRobinPlanner:
             raise ValueError("round-robin ablation needs at least one card per student")
         offset = (round_index - 1) % len(self.cards)
         cards = [self.cards[(offset + index) % len(self.cards)] for index in range(len(student_ids))]
+        roles = DiversePlanner._roles_for_students(
+            student_ids,
+            has_integration=False,
+            has_enhancement=False,
+        )
         return [
             Hypothesis(
                 hypothesis_id=f"r{round_index}_{student_id}_{card.card_id}",
@@ -1614,6 +1947,9 @@ class RoundRobinPlanner:
                 expected_signals=card.expected_signals,
                 retrieval_ids=(card.card_id,),
                 novelty_key=f"{card.mechanism_family}:{'|'.join(card.source_hooks)}",
+                student_role=role,
+                role_mode="fresh_exploration",
+                student_id=str(student_id),
             )
-            for student_id, card in zip(student_ids, cards, strict=True)
+            for student_id, card, role in zip(student_ids, cards, roles, strict=True)
         ]

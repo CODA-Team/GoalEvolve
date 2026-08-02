@@ -214,9 +214,9 @@ function renderRoundDetail(snapshot) {
   const ideas = teacher.ideas || [];
   $("ideaList").innerHTML = ideas.length ? ideas.map((idea) => `
     <article class="ideaCard">
-      <div class="ideaHeader"><strong>${escapeHtml(idea.student_id || "Unassigned")}</strong><span>${escapeHtml(idea.hypothesis_id || "planned idea")}</span></div>
+      <div class="ideaHeader"><strong>${escapeHtml(idea.student_id || "Unassigned")}</strong><span>${escapeHtml(idea.student_role || "explorer")}</span><span>${escapeHtml(idea.hypothesis_id || "planned idea")}</span></div>
       <p>${escapeHtml(idea.claim || "No claim recorded.")}</p>
-      <div class="ideaMeta"><span>${escapeHtml((idea.source_hooks || []).join(", ") || "No source hook")}</span><span>${escapeHtml(idea.timing_recipe_id || "No recipe")}</span></div>
+      <div class="ideaMeta"><span>${escapeHtml((idea.source_hooks || []).join(", ") || "No source hook")}</span><span>${escapeHtml(idea.timing_recipe_id || "No recipe")}</span><span>${escapeHtml(idea.role_mode || "fresh_exploration")}</span><span>${escapeHtml((idea.epd_record_ids || []).join(", ") || "no EPD reference")}</span></div>
     </article>`).join("") : '<p class="empty">The Teacher has not persisted an idea for this round.</p>';
   $("studentTable").innerHTML = (round.students || []).length ? round.students.map((student) => {
     const checks = Object.entries(student.checks || {});

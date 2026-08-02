@@ -17,6 +17,7 @@
     "student_editor": {"enum": ["codex_student", "noop_student"]},
     "teacher": {"enum": ["codex_teacher", "heuristic_teacher"]},
     "promotion": {"enum": ["strict_evidence", "power_first_promotion"]},
-    "max_campaign_rounds": {"type": ["integer", "null"]}
+    "max_campaign_rounds": {"type": ["integer", "null"]},
+    "epd_max_reinforcement_attempts": {"type": "integer", "minimum": 0, "default": 2, "description": "Maximum Enhancer attempts for one promising EPD idea."}
   }
 }

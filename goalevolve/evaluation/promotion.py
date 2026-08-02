@@ -139,11 +139,11 @@ class PowerFirstPromotion:
                 context.update(
                     {
                         "evaluation_mode": "power_then_timing",
-                        "adaptive_allocation": {
-                            "dominant_downstream_slots": 2,
-                            "upstream_power_slot": 1,
-                            "power_timing_handoff_slot": 1,
-                            "rule": "Allocate two experiments to the dominant normalized residual, one to repair_power durability, and one to the power-to-timing handoff. Buckets are strict: if one is evidence-exhausted, leave that slot empty rather than backfilling it with another mechanism type.",
+                        "candidate_pool_coverage": {
+                            "dominant_metric_candidates": 2,
+                            "upstream_power_candidates": 1,
+                            "power_timing_handoff_candidates": 1,
+                            "rule": "Build a diverse controller-verified candidate menu covering the dominant residual, repair_power durability, and power-to-timing handoff. These are retrieval coverage groups, not Student roles. The Teacher assigns only the role envelopes supplied by the Controller: when no EPD role is eligible, all available slots are Explorers; otherwise the Controller retains its Explorer and eligible Integrator/Enhancer envelopes. An evidence-exhausted group narrows the menu rather than being relabeled as another mechanism type.",
                         },
                         "falsification_rule": "Require a strict reduction in the active dominant normalized residual and in full three-metric normalized distance, keep every metric already at target within target, require zero DRV and official 4/4 LEC, and compare each recipe only with its exact no-diff baseline.",
                         "baseline_policy": "The transition from power_only to power_then_timing is measured once. Every distinct controller-owned timing/RMP recipe then uses a cached exact-recipe no-diff parent baseline; never rerun an unchanged baseline.",

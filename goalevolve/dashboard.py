@@ -53,6 +53,9 @@ def _idea(raw: Mapping[str, Any]) -> dict[str, Any]:
         "claim": str(raw.get("claim") or ""),
         "source_hooks": [str(item) for item in hooks if item],
         "timing_recipe_id": str(raw.get("timing_recipe_id") or ""),
+        "student_role": str(raw.get("student_role") or "explorer"),
+        "role_mode": str(raw.get("role_mode") or "fresh_exploration"),
+        "epd_record_ids": [str(item) for item in list(raw.get("epd_record_ids") or ()) if item],
     }
 
 

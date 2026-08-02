@@ -11,6 +11,7 @@
     "model": "gpt-5.6-terra",
     "reasoning_effort": "xhigh",
     "retries": 3,
-    "timeout_s": 1800
+    "timeout_s": 1800,
+    "max_plan_format_repairs": 2
   }
 }

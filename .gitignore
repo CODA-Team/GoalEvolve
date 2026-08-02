@@ -6,5 +6,6 @@ state/
 runtime/
 outputs/
 illustrate/
+experiments/**/*.local.json
 .env*
 config/credentials/*.env

@@ -8,6 +8,7 @@ import threading
 import time
 import unittest
 import shutil
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -25,7 +26,7 @@ from goalevolve.testing.evaluators import MockEvaluator
 from goalevolve.evaluation.evidence import classify_candidate
 from goalevolve.core.io import atomic_json, load_json
 from goalevolve.legacy import LegacyImporter
-from goalevolve.core.models import CandidateResult, CheckResult, Hypothesis, Parent
+from goalevolve.core.models import CandidateResult, CheckResult, EvidenceVerdict, Hypothesis, Parent
 from goalevolve.planning.observations import ObservationMemory
 from goalevolve.execution.preflight import preflight_candidate
 from goalevolve.planning.retrieval import DiversePlanner, DiverseRetriever, MechanismCard
@@ -183,6 +184,1744 @@ class GoalEvolveV2Tests(unittest.TestCase):
         review = CodexTeacher._review_prompt(parent=self.parent, diagnosis=diagnosis, epd={}, observations={}, rows=())
         self.assertIn("Runtime is execution telemetry only", plan)
         self.assertIn("Runtime is execution telemetry only", review)
+        self.assertIn("Return Markdown field blocks", plan)
+        self.assertIn("Return Markdown field blocks", review)
+        self.assertNotIn("Return exactly one JSON object", plan)
+        self.assertNotIn("Return exactly one JSON object", review)
+
+    def test_teacher_markdown_protocol_parses_fixed_assignment_and_review_blocks(self) -> None:
+        from goalevolve.agents.markdown_protocol import parse_teacher_plan, parse_teacher_review
+
+        plan = parse_teacher_plan(
+            """## Diagnosis Summary
+Timing is the dominant residual.
+
+## Evolution Ideas
+- Add one bounded endpoint-ranking guard.
+- Preserve the validated power mechanism while recovering timing.
+
+## Parent Policy
+Keep the current checked parent.
+
+## Student Assignments
+### student_1
+- Role: explorer
+- Candidate: r2_student_1_timing_guard
+- Claim: Explore a bounded timing frontier.
+- Selection Rationale: It directly addresses the current timing debt.
+- Source Hooks: `src/rsz/src/Timing.cc`
+- Expected Signals: `timing_examined`
+- Falsification Condition: No official QoR gain.
+- EPD References: none
+
+### student_3
+- Role: integrator
+- Claim: Port the compatible portions of two verified mechanisms.
+- Source Hooks: `src/rsz/src/Timing.cc`, `src/rsz/src/Power.cc`
+- Expected Signals: `timing_examined`, `power_retained`
+- Falsification Condition: The combination is not buildable or regresses the contract.
+- EPD References: `EPD_timing`, `EPD_power`
+"""
+        )
+        review = parse_teacher_review(
+            """## Round Assessment
+One timing mechanism is validated.
+
+## Mechanism Actions
+### timing_family
+- Action: refine
+- Evidence Classification: validated_official_gain
+- Rationale: Improve the bounded candidate ordering.
+
+## Next Round Constraints
+Retain the verified timing guard.
+"""
+        )
+        self.assertEqual(plan["diagnosis_summary"], "Timing is the dominant residual.")
+        self.assertEqual(
+            plan["evolution_ideas"],
+            (
+                "Add one bounded endpoint-ranking guard.",
+                "Preserve the validated power mechanism while recovering timing.",
+            ),
+        )
+        self.assertEqual(plan["assignments"][0]["student_id"], "student_1")
+        self.assertEqual(plan["assignments"][0]["candidate_id"], "r2_student_1_timing_guard")
+        self.assertEqual(
+            plan["assignments"][0]["selection_rationale"],
+            "It directly addresses the current timing debt.",
+        )
+        self.assertEqual(plan["assignments"][1]["epd_record_ids"], ("EPD_timing", "EPD_power"))
+        self.assertEqual(review["mechanism_actions"][0]["action"], "refine")
+        self.assertEqual(review["next_round_constraints"], "Retain the verified timing guard.")
+
+    def test_teacher_markdown_protocol_preserves_structured_pending_idea_fields(self) -> None:
+        from goalevolve.agents.markdown_protocol import parse_teacher_plan
+
+        parsed = parse_teacher_plan(
+            """## Diagnosis Summary
+Timing remains the active residual.
+
+## Evolution Ideas
+### idea_1
+- Idea: Admit one bounded endpoint guard.
+- Predicted Stage Effect: Reduce post-repair timing debt.
+- Source Hooks: src/rsz/src/Timing.cc
+- Expected Signals: endpoint_guard_examined
+- Priority: 3
+
+## Parent Policy
+Keep the checked parent.
+
+## Student Assignments
+### student_1
+- Role: explorer
+- Candidate: candidate_1
+- EPD Idea: idea_1
+- Claim: Admit one bounded endpoint guard.
+- Selection Rationale: Highest current timing value.
+- Source Hooks: src/rsz/src/Timing.cc
+- Expected Signals: endpoint_guard_examined
+- Falsification Condition: No official gain.
+- EPD References: none
+"""
+        )
+
+        idea = parsed["evolution_idea_records"][0]
+        self.assertEqual(idea["reference"], "idea_1")
+        self.assertEqual(idea["predicted_stage_effect"], "Reduce post-repair timing debt.")
+        self.assertEqual(idea["source_hooks"], ("src/rsz/src/Timing.cc",))
+        self.assertEqual(idea["expected_signals"], ("endpoint_guard_examined",))
+        self.assertEqual(parsed["assignments"][0]["idea_reference"], "idea_1")
+
+    def test_teacher_plan_validation_requires_five_explorer_ideas_and_four_role_blocks(self) -> None:
+        from goalevolve.agents.markdown_protocol import teacher_plan_validation_errors
+
+        malformed = """## Diagnosis Summary
+Timing is constrained.
+
+## Evolution Ideas
+### idea_1
+- Idea: One idea only.
+
+## Parent Policy
+Retain parent.
+
+## Student Assignments
+### student_1
+- Role: explorer
+"""
+        errors = teacher_plan_validation_errors(
+            malformed,
+            required_roles=("explorer", "explorer", "integrator", "enhancer"),
+            require_explorer_ideas=True,
+        )
+        self.assertIn("explorer_idea_count:1<5", errors)
+        self.assertIn("missing_assignment:student_2", errors)
+        self.assertIn("missing_assignment:student_3", errors)
+        self.assertIn("missing_assignment:student_4", errors)
+
+    def test_controller_materializes_teacher_authored_explorer_idea(self) -> None:
+        from goalevolve.execution.teacher_assignment import (
+            build_role_templates,
+            materialize_teacher_assignments,
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "source"
+            hook = source / "src/rsz/src/Timing.cc"
+            hook.parent.mkdir(parents=True)
+            hook.write_text("namespace rsz { void adjustTiming() {} }\n", encoding="utf-8")
+            templates = build_role_templates(
+                student_ids=("student_1",),
+                round_index=3,
+                decision_context={"evaluation_mode": "timing_only"},
+                portfolio={},
+                suspend_explorers=False,
+            )
+            result = materialize_teacher_assignments(
+                assignments=(
+                    {
+                        "student_id": "student_1",
+                        "role": "explorer",
+                        "idea_reference": "idea_3",
+                        "claim": "Rank one endpoint repair move by post-route timing debt.",
+                        "selection_rationale": "The current timing residual is dominant.",
+                        "source_hooks": ("src/rsz/src/Timing.cc",),
+                        "source_evidence": ("src/rsz/src/Timing.cc::adjustTiming",),
+                        "expected_signals": ("endpoint_repair_examined",),
+                        "falsification_condition": "No official timing improvement with complete checks.",
+                        "epd_record_ids": (),
+                    },
+                ),
+                evolution_ideas=(
+                    {
+                        "reference": "idea_3",
+                        "idea": "Rank one endpoint repair move by post-route timing debt.",
+                        "predicted_stage_effect": "Reduce post-route timing debt.",
+                        "source_hooks": ("src/rsz/src/Timing.cc",),
+                        "source_evidence": ("src/rsz/src/Timing.cc::adjustTiming",),
+                        "expected_signals": ("endpoint_repair_examined",),
+                        "falsification_condition": "No official timing improvement with complete checks.",
+                    },
+                ),
+                templates=templates,
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                historical_ideas=(),
+            )
+        self.assertEqual(result.errors, ())
+        self.assertEqual(len(result.hypotheses), 1)
+        hypothesis = result.hypotheses[0]
+        self.assertEqual(hypothesis.claim, "Rank one endpoint repair move by post-route timing debt.")
+        self.assertEqual(hypothesis.source_hooks, ("src/rsz/src/Timing.cc",))
+        self.assertEqual(hypothesis.allowed_patch_paths, ())
+        self.assertEqual(hypothesis.teacher_idea_reference, "idea_3")
+
+    def test_controller_selects_an_executing_recipe_for_a_phase_specific_teacher_hook(self) -> None:
+        from goalevolve.execution.teacher_assignment import (
+            build_role_templates,
+            materialize_teacher_assignments,
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "source"
+            hook = source / "src/rsz/src/policy/SetupMt1Policy.cc"
+            hook.parent.mkdir(parents=True)
+            hook.write_text(
+                "void SetupMt1Policy::commitAndUpdateTiming() {}\n",
+                encoding="utf-8",
+            )
+            templates = build_role_templates(
+                student_ids=("student_1",),
+                round_index=3,
+                decision_context={
+                    "evaluation_mode": "power_then_timing",
+                    "timing_recipe_ids": {"student_1": "legacy_deep"},
+                },
+                portfolio={},
+                suspend_explorers=False,
+            )
+            result = materialize_teacher_assignments(
+                assignments=(
+                    {
+                        "student_id": "student_1",
+                        "role": "explorer",
+                        "idea_reference": "idea_1",
+                        "claim": "Retain each MT1 candidate only after strict global-TNS improvement.",
+                        "selection_rationale": "MT1 owns this bounded journal decision.",
+                        "source_hooks": ("src/rsz/src/policy/SetupMt1Policy.cc",),
+                        "source_evidence": (
+                            "src/rsz/src/policy/SetupMt1Policy.cc::SetupMt1Policy::commitAndUpdateTiming",
+                        ),
+                        "expected_signals": ("timing_mt1_incremental_examined",),
+                        "falsification_condition": "No official timing gain.",
+                        "epd_record_ids": (),
+                    },
+                ),
+                evolution_ideas=(
+                    {
+                        "reference": "idea_1",
+                        "idea": "Retain each MT1 candidate only after strict global-TNS improvement.",
+                        "predicted_stage_effect": "Reduce timing debt.",
+                        "source_hooks": ("src/rsz/src/policy/SetupMt1Policy.cc",),
+                        "source_evidence": (
+                            "src/rsz/src/policy/SetupMt1Policy.cc::SetupMt1Policy::commitAndUpdateTiming",
+                        ),
+                        "expected_signals": ("timing_mt1_incremental_examined",),
+                        "falsification_condition": "No official timing gain.",
+                    },
+                ),
+                templates=templates,
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                historical_ideas=(),
+            )
+        self.assertEqual(result.errors, ())
+        self.assertEqual(result.hypotheses[0].timing_recipe_id, "mt1_deep")
+
+    def test_controller_honors_teacher_declared_rmp_recipe_for_a_generic_hook(self) -> None:
+        from goalevolve.execution.teacher_assignment import (
+            build_role_templates,
+            materialize_teacher_assignments,
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "source"
+            hook = source / "src/rmp/src/Restructure.cpp"
+            hook.parent.mkdir(parents=True)
+            hook.write_text(
+                "void Restructure::runABC() {}\n",
+                encoding="utf-8",
+            )
+            templates = build_role_templates(
+                student_ids=("student_1",),
+                round_index=4,
+                decision_context={
+                    "evaluation_mode": "power_then_timing",
+                    "timing_recipe_ids": {"student_1": "wns_path_deep"},
+                },
+                portfolio={},
+                suspend_explorers=False,
+            )
+            result = materialize_teacher_assignments(
+                assignments=(
+                    {
+                        "student_id": "student_1",
+                        "role": "explorer",
+                        "idea_reference": "idea_2",
+                        "evaluation_recipe": "rmp_path_cone_halo_timing",
+                        "claim": "Recheck selected-state STA before retaining an RMP trial.",
+                        "selection_rationale": "The RMP selected-state boundary is untested.",
+                        "source_hooks": ("src/rmp/src/Restructure.cpp",),
+                        "source_evidence": ("src/rmp/src/Restructure.cpp::Restructure::runABC",),
+                        "expected_signals": ("rmp_selected_state_recheck",),
+                        "falsification_condition": "No official timing gain.",
+                        "epd_record_ids": (),
+                    },
+                ),
+                evolution_ideas=(
+                    {
+                        "reference": "idea_2",
+                        "idea": "Recheck selected-state STA before retaining an RMP trial.",
+                        "evaluation_recipe": "rmp_path_cone_halo_timing",
+                        "predicted_stage_effect": "Avoid non-reproducible RMP trial retention.",
+                        "source_hooks": ("src/rmp/src/Restructure.cpp",),
+                        "source_evidence": ("src/rmp/src/Restructure.cpp::Restructure::runABC",),
+                        "expected_signals": ("rmp_selected_state_recheck",),
+                        "falsification_condition": "No official timing gain.",
+                    },
+                ),
+                templates=templates,
+                source_root=source,
+                allowed_patch_roots=("src/rmp",),
+                historical_ideas=(),
+            )
+        self.assertEqual(result.errors, ())
+        self.assertEqual(result.hypotheses[0].timing_recipe_id, "rmp_path_cone_halo_timing")
+
+    def test_controller_accepts_structurally_grounded_explorer_paraphrase(self) -> None:
+        from goalevolve.execution.teacher_assignment import (
+            build_role_templates,
+            materialize_teacher_assignments,
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "source"
+            hook = source / "src/rsz/src/Timing.cc"
+            hook.parent.mkdir(parents=True)
+            hook.write_text("namespace rsz { void adjustTiming() {} }\n", encoding="utf-8")
+            templates = build_role_templates(
+                student_ids=("student_1",),
+                round_index=3,
+                decision_context={"evaluation_mode": "timing_only"},
+                portfolio={},
+                suspend_explorers=False,
+            )
+            result = materialize_teacher_assignments(
+                assignments=(
+                    {
+                        "student_id": "student_1",
+                        "role": "explorer",
+                        "idea_reference": "idea_3",
+                        "claim": "Prioritize the most negative timing slack before existing score ties.",
+                        "selection_rationale": "The current timing residual is dominant.",
+                        "source_hooks": ("src/rsz/src/Timing.cc",),
+                        "source_evidence": ("src/rsz/src/Timing.cc::adjustTiming",),
+                        "expected_signals": ("timing_move_examined",),
+                        "falsification_condition": "No official timing improvement with complete checks.",
+                        "epd_record_ids": (),
+                    },
+                ),
+                evolution_ideas=(
+                    {
+                        "reference": "idea_3",
+                        "idea": (
+                            "Within the bounded timing repair loop, prioritize existing legal candidates "
+                            "with the most negative collected timing slack, then use the existing score "
+                            "only for deterministic tie breaking."
+                        ),
+                        "predicted_stage_effect": "Reduce post-route timing debt.",
+                        "source_hooks": ("src/rsz/src/Timing.cc",),
+                        "source_evidence": ("src/rsz/src/Timing.cc::adjustTiming",),
+                        "expected_signals": ("timing_move_examined",),
+                        "falsification_condition": "No official timing improvement with complete checks.",
+                    },
+                ),
+                templates=templates,
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                historical_ideas=(),
+            )
+        self.assertEqual(result.errors, ())
+        self.assertEqual(len(result.hypotheses), 1)
+
+    def test_controller_rejects_duplicate_explorer_but_not_epd_enhancer(self) -> None:
+        from goalevolve.execution.teacher_assignment import (
+            build_role_templates,
+            materialize_teacher_assignments,
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "source"
+            hook = source / "src/rsz/src/Timing.cc"
+            hook.parent.mkdir(parents=True)
+            hook.write_text("void adjustTiming() {}\n", encoding="utf-8")
+            templates = build_role_templates(
+                student_ids=("student_1",),
+                round_index=4,
+                decision_context={},
+                portfolio={},
+                suspend_explorers=False,
+            )
+            result = materialize_teacher_assignments(
+                assignments=(
+                    {
+                        "student_id": "student_1", "role": "explorer", "idea_reference": "idea_1",
+                        "claim": "Rank one endpoint repair move by post-route timing debt.",
+                        "selection_rationale": "timing", "source_hooks": ("src/rsz/src/Timing.cc",),
+                        "source_evidence": ("src/rsz/src/Timing.cc::adjustTiming",),
+                        "expected_signals": ("endpoint_repair_examined",),
+                        "falsification_condition": "No gain.", "epd_record_ids": (),
+                    },
+                ),
+                evolution_ideas=(
+                    {
+                        "reference": "idea_1", "idea": "Rank one endpoint repair move by post-route timing debt.",
+                        "predicted_stage_effect": "timing", "source_hooks": ("src/rsz/src/Timing.cc",),
+                        "source_evidence": ("src/rsz/src/Timing.cc::adjustTiming",),
+                        "expected_signals": ("endpoint_repair_examined",), "falsification_condition": "No gain.",
+                    },
+                ),
+                templates=templates,
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                historical_ideas=(
+                    {"idea": "Rank one endpoint repair move by post-route timing debt.", "status": "validated", "source_hooks": ["src/rsz/src/Timing.cc"]},
+                ),
+            )
+        self.assertEqual(result.hypotheses, ())
+        self.assertIn("duplicate_explorer_idea:student_1", result.errors)
+
+    def test_role_schedule_suspends_explorers_for_one_bottleneck_transition(self) -> None:
+        from goalevolve.execution.teacher_assignment import build_role_templates
+
+        templates = build_role_templates(
+            student_ids=("student_1", "student_2", "student_3", "student_4"),
+            round_index=7,
+            decision_context={"evaluation_mode": "power_then_timing"},
+            portfolio={
+                "integration_candidates": [["EPD_timing", "EPD_power"]],
+                "enhancement_candidates": ["EPD_power"],
+            },
+            suspend_explorers=True,
+        )
+        self.assertEqual([item.student_role for item in templates], ["integrator", "enhancer"])
+        self.assertEqual([item.student_id for item in templates], ["student_1", "student_2"])
+        self.assertEqual(templates[0].candidate_options[0]["epd_record_ids"], ("EPD_timing", "EPD_power"))
+
+    def test_role_schedule_expands_to_four_explorers_without_epd_roles(self) -> None:
+        from goalevolve.execution.teacher_assignment import build_role_templates
+
+        templates = build_role_templates(
+            student_ids=("student_1", "student_2", "student_3", "student_4"),
+            round_index=7,
+            decision_context={"evaluation_mode": "timing_only"},
+            portfolio={},
+            suspend_explorers=True,
+        )
+
+        self.assertEqual(
+            [item.student_role for item in templates],
+            ["explorer", "explorer", "explorer", "explorer"],
+        )
+        self.assertEqual(
+            [item.student_id for item in templates],
+            ["student_1", "student_2", "student_3", "student_4"],
+        )
+
+    def test_role_schedule_keeps_two_explorers_when_an_epd_role_is_available(self) -> None:
+        from goalevolve.execution.teacher_assignment import build_role_templates
+
+        templates = build_role_templates(
+            student_ids=("student_1", "student_2", "student_3", "student_4"),
+            round_index=7,
+            decision_context={"evaluation_mode": "timing_only"},
+            portfolio={"integration_candidates": [["EPD_timing", "EPD_power"]]},
+            suspend_explorers=False,
+        )
+
+        self.assertEqual(
+            [item.student_role for item in templates],
+            ["explorer", "explorer", "integrator"],
+        )
+
+    def test_paper_card_reference_penalizes_use_above_five(self) -> None:
+        from goalevolve.planning.retrieval import DiverseRetriever
+
+        cards = (
+            MechanismCard("frequent", "frequent", ("timing",), ("src/rsz/src/A.cc",), ("a",), "frequent"),
+            MechanismCard("fresh", "fresh", ("timing",), ("src/rsz/src/B.cc",), ("b",), "fresh"),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            retriever = DiverseRetriever(cards)
+            for index in range(6):
+                retriever.record_paper_card_references(
+                    state_root=root, round_index=index + 1, card_ids=("frequent",)
+                )
+            references = retriever.paper_card_references(
+                parent=self.parent, symptoms=("timing",), state_root=root, count=2
+            )
+        self.assertEqual(references[0]["card_id"], "fresh")
+        self.assertTrue(next(row for row in references if row["card_id"] == "frequent")["overuse_penalty"])
+
+    def test_paper_card_reference_exposes_topics_not_patch_recipe(self) -> None:
+        from goalevolve.planning.retrieval import DiverseRetriever
+
+        cards = (
+            MechanismCard(
+                "timing_reference",
+                "timing_family",
+                ("tns", "timing"),
+                ("src/rsz/src/Timing.cc",),
+                ("timing_examined",),
+                "Copy this exact source-level candidate ordering patch.",
+            ),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            references = DiverseRetriever(cards).paper_card_references(
+                parent=self.parent,
+                symptoms=("timing",),
+                state_root=Path(temporary),
+                count=1,
+            )
+        self.assertEqual(references[0]["topic_tags"], ["tns", "timing"])
+        self.assertNotIn("claim", references[0])
+        self.assertNotIn("mechanism_family", references[0])
+        self.assertNotIn("source_hooks", references[0])
+
+    def test_teacher_markdown_protocol_requires_source_investigation_for_explorer_anchors(self) -> None:
+        from goalevolve.agents.markdown_protocol import teacher_plan_validation_errors
+
+        markdown = """## Diagnosis Summary
+Timing remains active.
+
+## Evolution Ideas
+### idea_1
+- Idea: Add a bounded timing guard.
+- Predicted Stage Effect: Reduce timing debt.
+- Source Hooks: src/rsz/src/Timing.cc
+- Source Evidence: src/rsz/src/Timing.cc::adjustTiming
+- Expected Signals: timing_guard_examined
+- Falsification Condition: No official QoR gain.
+- Paper Card References: none
+- Priority: 0
+
+## Parent Policy
+Keep the checked parent.
+
+## Student Assignments
+### student_1
+- Role: explorer
+- Candidate:
+- EPD Idea: idea_1
+- Claim: Add a bounded timing guard.
+- Selection Rationale: It targets timing.
+- Source Hooks: src/rsz/src/Timing.cc
+- Source Evidence: src/rsz/src/Timing.cc::adjustTiming
+- Expected Signals: timing_guard_examined
+- Falsification Condition: No official QoR gain.
+- EPD References: none
+"""
+        errors = teacher_plan_validation_errors(
+            markdown,
+            required_roles=("explorer",),
+            require_explorer_ideas=False,
+            required_student_roles={"student_1": "explorer"},
+        )
+        self.assertIn("missing_section:source_investigation", errors)
+
+    def test_teacher_markdown_protocol_keeps_blank_explorer_candidate_blank(self) -> None:
+        from goalevolve.agents.markdown_protocol import parse_teacher_plan
+
+        parsed = parse_teacher_plan(
+            """## Student Assignments
+### student_1
+- Role: explorer
+- Candidate:
+- EPD Idea: idea_1
+"""
+        )
+        self.assertEqual(parsed["assignments"][0]["candidate_id"], "")
+        self.assertEqual(parsed["assignments"][0]["idea_reference"], "idea_1")
+
+    def test_teacher_source_inspection_audit_requires_successful_source_reads(self) -> None:
+        from goalevolve.agents.teacher import source_inspection_audit
+
+        with tempfile.TemporaryDirectory() as temporary:
+            events = Path(temporary) / "events.jsonl"
+            events.write_text(
+                "{\"type\": \"item.completed\", \"item\": {\"type\": \"command_execution\", \"command\": \"rg -n adjustTiming src/rsz/src/Timing.cc\", \"exit_code\": 0, \"status\": \"completed\"}}\n",
+                encoding="utf-8",
+            )
+            audit = source_inspection_audit((events,))
+        self.assertFalse(audit["satisfied"])
+        self.assertEqual(audit["successful_source_commands"], 1)
+
+    def test_teacher_prompt_requires_source_investigation_before_evolution_ideas(self) -> None:
+        prompt = CodexTeacher._plan_prompt(
+            parent=self.parent,
+            diagnosis=SimpleNamespace(to_dict=lambda: {}),
+            epd={},
+            observations={},
+            previous_review={},
+            fallback=(replace(self.hypothesis, student_id="student_1"),),
+        )
+        self.assertLess(prompt.index("## Source Investigation"), prompt.index("## Evolution Ideas"))
+
+    def test_codex_teacher_retries_invalid_markdown_in_the_same_thread(self) -> None:
+        from goalevolve.agents.codex_runtime import CodexTurn
+        from goalevolve.agents.teacher import CodexTeacher, CodexTeacherConfig
+
+        class ScriptedRunner:
+            def __init__(self, messages):
+                self.messages = iter(messages)
+                self.calls = []
+
+            def run(self, *, identity, operation_id, artifact_root, **_):
+                self.calls.append((identity, operation_id))
+                artifact_root.mkdir(parents=True, exist_ok=True)
+                message = artifact_root / "last_message.md"
+                message.write_text(next(self.messages), encoding="utf-8")
+                events = artifact_root / "events.jsonl"
+                events.write_text(
+                    "{\"type\": \"item.completed\", \"item\": {\"type\": \"command_execution\", \"command\": \"rg -n adjustTiming src/rsz/src/Timing.cc\", \"exit_code\": 0}}\n"
+                    "{\"type\": \"item.completed\", \"item\": {\"type\": \"command_execution\", \"command\": \"sed -n '1,80p' src/rsz/src/Timing.cc\", \"exit_code\": 0}}\n",
+                    encoding="utf-8",
+                )
+                return CodexTurn(
+                    True,
+                    operation_id,
+                    "thread-1",
+                    "ok",
+                    {"codex_last_message": str(message), "codex_events": str(events)},
+                )
+
+        valid = """## Diagnosis Summary
+Timing is active.
+
+## Source Investigation
+### investigation_1
+- Source Evidence: src/rsz/src/Timing.cc::adjustTiming
+- Observed Control Point: Existing timing candidate ordering is inside the policy loop.
+### investigation_2
+- Source Evidence: src/rsz/src/Timing.cc::adjustTiming
+- Observed Control Point: The current journal boundary accepts bounded telemetry.
+
+## Evolution Ideas
+### idea_1
+- Idea: Rank a bounded timing move.
+- Predicted Stage Effect: Reduce timing debt.
+- Source Hooks: src/rsz/src/Timing.cc
+- Source Evidence: src/rsz/src/Timing.cc::adjustTiming
+- Evaluation Recipe: legacy_deep
+- Expected Signals: timing_move_examined
+- Falsification Condition: No official gain.
+- Paper Card References: none
+- Priority: 0
+### idea_2
+- Idea: Bound endpoint repair admission.
+- Predicted Stage Effect: Reduce timing debt.
+- Source Hooks: src/rsz/src/Timing.cc
+- Source Evidence: src/rsz/src/Timing.cc::adjustTiming
+- Expected Signals: endpoint_admission_examined
+- Falsification Condition: No official gain.
+- Paper Card References: none
+- Priority: 1
+### idea_3
+- Idea: Preserve post-route timing reserve.
+- Predicted Stage Effect: Reduce timing debt.
+- Source Hooks: src/rsz/src/Timing.cc
+- Source Evidence: src/rsz/src/Timing.cc::adjustTiming
+- Expected Signals: timing_reserve_examined
+- Falsification Condition: No official gain.
+- Paper Card References: none
+- Priority: 2
+### idea_4
+- Idea: Reject a timing regression before commit.
+- Predicted Stage Effect: Reduce timing debt.
+- Source Hooks: src/rsz/src/Timing.cc
+- Source Evidence: src/rsz/src/Timing.cc::adjustTiming
+- Expected Signals: timing_rejection_examined
+- Falsification Condition: No official gain.
+- Paper Card References: none
+- Priority: 3
+### idea_5
+- Idea: Measure a local timing recovery choice.
+- Predicted Stage Effect: Reduce timing debt.
+- Source Hooks: src/rsz/src/Timing.cc
+- Source Evidence: src/rsz/src/Timing.cc::adjustTiming
+- Expected Signals: timing_choice_examined
+- Falsification Condition: No official gain.
+- Paper Card References: none
+- Priority: 4
+
+## Parent Policy
+Keep the checked parent.
+
+## Student Assignments
+### student_1
+- Role: explorer
+- Candidate:
+- EPD Idea: idea_1
+- Claim: Rank a bounded timing move.
+- Selection Rationale: Timing is active.
+- Source Hooks: src/rsz/src/Timing.cc
+- Source Evidence: src/rsz/src/Timing.cc::adjustTiming
+- Evaluation Recipe: legacy_deep
+- Expected Signals: timing_move_examined
+- Falsification Condition: No official gain.
+- EPD References: none
+"""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            teacher = CodexTeacher(CodexTeacherConfig(max_plan_format_repairs=1))
+            runner = ScriptedRunner(("## Diagnosis Summary\nmissing required blocks", valid))
+            teacher.runner = runner
+            plan = teacher.plan(
+                state_root=root,
+                round_root=root / "round",
+                round_index=4,
+                parent=self.parent,
+                diagnosis=SimpleNamespace(to_dict=lambda: {}),
+                fallback=(replace(self.hypothesis, student_id="student_1"),),
+                previous_review={},
+            )
+        self.assertTrue(plan.plan["format_valid"])
+        self.assertEqual(len(runner.calls), 2)
+        self.assertEqual(runner.calls[0][0], runner.calls[1][0])
+        self.assertIn("format_repair", runner.calls[1][1])
+
+    def test_codex_engine_uses_teacher_authored_mechanisms_not_planner_cards(self) -> None:
+        from goalevolve.agents.markdown_protocol import parse_teacher_plan
+        from goalevolve.agents.teacher import TeacherPlan
+
+        class Teacher:
+            name = "codex_teacher"
+
+            def plan(self, *, diagnosis, fallback, **_):
+                markdown = """## Diagnosis Summary
+Timing is the only active residual.
+
+## Evolution Ideas
+### idea_1
+- Idea: Rank endpoint recovery by current timing debt.
+- Predicted Stage Effect: Reduce timing debt.
+- Source Hooks: src/rsz/src/Teacher.cc
+- Source Evidence: src/rsz/src/Teacher.cc::rankEndpointRecovery
+- Expected Signals: endpoint_recovery_examined
+- Falsification Condition: No official timing gain.
+- Paper Card References: none
+- Priority: 0
+### idea_2
+- Idea: Reject endpoint recovery after route regression.
+- Predicted Stage Effect: Reduce timing debt.
+- Source Hooks: src/rsz/src/Teacher.cc
+- Source Evidence: src/rsz/src/Teacher.cc::rankEndpointRecovery
+- Expected Signals: endpoint_route_rejection_examined
+- Falsification Condition: No official timing gain.
+- Paper Card References: none
+- Priority: 1
+### idea_3
+- Idea: Track a bounded endpoint timing reserve.
+- Predicted Stage Effect: Reduce timing debt.
+- Source Hooks: src/rsz/src/Teacher.cc
+- Source Evidence: src/rsz/src/Teacher.cc::rankEndpointRecovery
+- Expected Signals: endpoint_reserve_examined
+- Falsification Condition: No official timing gain.
+- Paper Card References: none
+- Priority: 2
+### idea_4
+- Idea: Gate endpoint repair by local slack direction.
+- Predicted Stage Effect: Reduce timing debt.
+- Source Hooks: src/rsz/src/Teacher.cc
+- Source Evidence: src/rsz/src/Teacher.cc::rankEndpointRecovery
+- Expected Signals: endpoint_slack_gate_examined
+- Falsification Condition: No official timing gain.
+- Paper Card References: none
+- Priority: 3
+### idea_5
+- Idea: Limit endpoint recovery to the current bottleneck.
+- Predicted Stage Effect: Reduce timing debt.
+- Source Hooks: src/rsz/src/Teacher.cc
+- Source Evidence: src/rsz/src/Teacher.cc::rankEndpointRecovery
+- Expected Signals: endpoint_bottleneck_examined
+- Falsification Condition: No official timing gain.
+- Paper Card References: none
+- Priority: 4
+
+## Parent Policy
+Keep the checked parent.
+
+## Student Assignments
+### student_1
+- Role: explorer
+- Candidate:
+- EPD Idea: idea_1
+- Claim: Rank endpoint recovery by current timing debt.
+- Selection Rationale: It directly tests the active timing residual.
+- Source Hooks: src/rsz/src/Teacher.cc
+- Source Evidence: src/rsz/src/Teacher.cc::rankEndpointRecovery
+- Expected Signals: endpoint_recovery_examined
+- Falsification Condition: No official timing gain.
+- EPD References: none
+### student_2
+- Role: explorer
+- Candidate:
+- EPD Idea: idea_2
+- Claim: Reject endpoint recovery after route regression.
+- Selection Rationale: It independently protects the post-route result.
+- Source Hooks: src/rsz/src/Teacher.cc
+- Source Evidence: src/rsz/src/Teacher.cc::rankEndpointRecovery
+- Expected Signals: endpoint_route_rejection_examined
+- Falsification Condition: No official timing gain.
+- EPD References: none
+"""
+                parsed = parse_teacher_plan(markdown)
+                return TeacherPlan((), diagnosis, {
+                    "teacher_markdown": markdown,
+                    "parsed_markdown": parsed,
+                    "format_valid": True,
+                    "hypotheses": [],
+                }, {})
+
+            def repair_plan_after_controller_validation(self, **_):
+                raise AssertionError("Teacher assignment should already be valid")
+
+            def review(self, **_):
+                return {}
+
+        class StaticEditor:
+            name = "static"
+            def apply(self, **_):
+                return StudentEditReport(True, "edited", "static", None, {})
+            def repair(self, **_):
+                return StudentEditReport(False, "not_needed", "repair", None, {})
+
+        class StaticEvaluator:
+            name = "static"
+            config = SimpleNamespace(allowed_patch_roots=("src/rsz",))
+            def evaluate(self, *, parent, hypothesis, student_id, **_):
+                metrics = dict(parent.metrics)
+                metrics["tns_abs_ns"] = float(metrics["tns_abs_ns"]) - 1.0
+                return CandidateResult(
+                    student_id, hypothesis, metrics,
+                    {signal: 1.0 for signal in hypothesis.expected_signals},
+                    [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+                    f"+++ b/{hypothesis.source_hooks[0]}\n+// teacher idea\n",
+                    f"commit-{student_id}",
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "seed"
+            hook = source / "src/rsz/src/Teacher.cc"
+            hook.parent.mkdir(parents=True)
+            hook.write_text("void rankEndpointRecovery() {}\n", encoding="utf-8")
+            planner = DiversePlanner(DiverseRetriever((
+                MechanismCard("planner_card", "planner", ("timing",), ("src/rsz/src/Planner.cc",), ("planner",), "planner card"),
+            )))
+            engine = GoalEvolveEngine(
+                self.contract, root / "campaign", planner, StaticEvaluator(),
+                IsolatedWorkspace(source), StrictEvidencePromotion(),
+                student_ids=("student_1", "student_2"), student_editor=StaticEditor(), teacher=Teacher(),
+            )
+            engine.initialize(baseline_metrics=dict(self.parent.metrics))
+            engine.run(rounds=1)
+            plan = load_json(root / "campaign" / "rounds" / "round_001" / "teacher_plan.json")
+        hypotheses = list(plan["hypotheses"])
+        self.assertEqual([row["source_hooks"] for row in hypotheses], [["src/rsz/src/Teacher.cc"], ["src/rsz/src/Teacher.cc"]])
+        self.assertTrue(all(row["retrieval_ids"][0].startswith("teacher_idea:") for row in hypotheses))
+        self.assertNotIn("planner_card", str(hypotheses))
+
+    def test_epd_role_portfolio_uses_distinct_validated_qor_islands(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            epd = EvolutionProgramDatabase(root)
+            checks = [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")]
+            timing = Hypothesis(
+                "timing", "timing", "timing claim", ("src/rsz/src/Timing.cc",),
+                ("timing_examined",), ("timing_card",), "timing",
+            )
+            power = Hypothesis(
+                "power", "power", "power claim", ("src/rsz/src/Power.cc",),
+                ("power_retained",), ("power_card",), "power",
+            )
+            timing_record = epd.record(
+                round_index=1,
+                parent=self.parent,
+                candidate=CandidateResult(
+                    "student_1", timing,
+                    {"tns_abs_ns": 60.0, "leakage_power_pw": 200.0},
+                    {"timing_examined": 1.0}, checks, "+++ b/src/rsz/src/Timing.cc\n+change\n", "timing-source",
+                ),
+                verdict=EvidenceVerdict("validated", 0.1, 0.4, True, True, ()),
+            )
+            power_record = epd.record(
+                round_index=1,
+                parent=self.parent,
+                candidate=CandidateResult(
+                    "student_2", power,
+                    {"tns_abs_ns": 100.0, "leakage_power_pw": 170.0},
+                    {"power_retained": 1.0}, checks, "+++ b/src/rsz/src/Power.cc\n+change\n", "power-source",
+                ),
+                verdict=EvidenceVerdict("validated", 0.15, 0.35, True, True, ()),
+            )
+            portfolio = epd.role_portfolio(contract=self.contract, parent=self.parent)
+        self.assertEqual(portfolio["enhancement_record_ids"], [])
+        self.assertEqual(
+            set(portfolio["integration_record_ids"]),
+            {timing_record.record_id, power_record.record_id},
+        )
+        self.assertEqual(portfolio["records"][0]["qor_island"], "timing")
+
+    def test_epd_role_portfolio_admits_promising_records_to_integration_and_enhancement(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            epd = EvolutionProgramDatabase(root)
+            hypothesis = Hypothesis(
+                "promising", "timing", "claim", ("src/rsz/src/Timing.cc",),
+                ("timing_examined",), ("timing_card",), "timing",
+            )
+            record = epd.record(
+                round_index=1,
+                parent=self.parent,
+                candidate=CandidateResult(
+                    "student_1", hypothesis,
+                    {"tns_abs_ns": 60.0, "leakage_power_pw": 200.0},
+                    {"timing_examined": 1.0},
+                    [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+                    "+++ b/src/rsz/src/Timing.cc\n+change\n", "source",
+                ),
+                verdict=EvidenceVerdict("verified_qor_unattributed", 0.1, 0.4, True, True, ()),
+            )
+            portfolio = epd.role_portfolio(contract=self.contract, parent=self.parent)
+        self.assertEqual(record.epd_status, "promising")
+        self.assertEqual([row["record_id"] for row in portfolio["records"]], [record.record_id])
+        self.assertEqual(portfolio["enhancement_record_ids"], [record.record_id])
+
+    def test_epd_v2_teacher_idea_is_pending_then_updated_by_its_attempt(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            epd = EvolutionProgramDatabase(root)
+            idea_id = epd.register_teacher_ideas(
+                round_index=1,
+                parent=self.parent,
+                evolution_ideas=("Rank timing candidates with a bounded endpoint guard.",),
+                diagnosis_summary="Timing is the active residual.",
+                parent_policy="Preserve the checked parent.",
+            )[0]
+            pending = epd.idea(idea_id)
+            self.assertEqual(pending["status"], "pending")
+            self.assertFalse(pending["executed"])
+            self.assertEqual(pending["execution_count"], 0)
+            hypothesis = Hypothesis(
+                "r1_student_1_endpoint_guard",
+                "endpoint_guard",
+                "Rank timing candidates with a bounded endpoint guard.",
+                ("src/rsz/src/Timing.cc",),
+                ("endpoint_examined",),
+                ("endpoint_guard",),
+                "endpoint_guard",
+                student_id="student_1",
+                epd_idea_id=idea_id,
+            )
+            record = epd.record(
+                round_index=1,
+                parent=self.parent,
+                candidate=CandidateResult(
+                    "student_1", hypothesis,
+                    {"tns_abs_ns": 60.0, "leakage_power_pw": 200.0},
+                    {"endpoint_examined": 1.0},
+                    [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+                    "+++ b/src/rsz/src/Timing.cc\n+endpoint guard\n",
+                    "endpoint-source",
+                ),
+                verdict=EvidenceVerdict("validated", 0.1, 0.4, True, True, ()),
+            )
+            updated = epd.idea(idea_id)
+            attempt = epd.records()[0]
+            attempt_idea_id = attempt["idea_id"]
+        self.assertEqual(updated["status"], "validated")
+        self.assertTrue(updated["executed"])
+        self.assertEqual(updated["execution_count"], 1)
+        self.assertEqual(updated["attempt_ids"], [record.record_id])
+        self.assertEqual(attempt_idea_id, idea_id)
+        self.assertEqual(attempt["source_change_bundle"]["modified_files"], ["src/rsz/src/Timing.cc"])
+        self.assertIn("added:endpoint guard", attempt["source_change_bundle"]["added_mechanism_changes"])
+
+    def test_teacher_can_retire_unexecuted_pending_idea_without_deleting_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            epd = EvolutionProgramDatabase(root)
+            idea_id = epd.register_teacher_ideas(
+                round_index=2,
+                parent=self.parent,
+                evolution_ideas=(
+                    {
+                        "idea": "An obsolete pending endpoint experiment.",
+                        "source_hooks": ("src/rsz/src/Timing.cc",),
+                        "expected_signals": ("endpoint_examined",),
+                    },
+                ),
+            )[0]
+            retired = epd.retire_pending_ideas(idea_ids=(idea_id,), reason="teacher_retired_pending")
+            idea = epd.idea(idea_id)
+        self.assertEqual(retired, (idea_id,))
+        self.assertEqual(idea["status"], "invalid")
+        self.assertEqual(idea["terminal_reason"], "teacher_retired_pending")
+        self.assertEqual(idea["execution_count"], 0)
+
+    def test_engine_persists_teacher_ideas_before_student_execution(self) -> None:
+        class TwoIdeaTeacher:
+            name = "two_idea_teacher"
+
+            def plan(self, *, diagnosis, fallback, **_):
+                from goalevolve.agents.markdown_protocol import render_teacher_plan
+                from goalevolve.agents.teacher import TeacherPlan, _assignment_from_hypothesis
+
+                markdown = render_teacher_plan(
+                    diagnosis_summary="Timing residual remains active.",
+                    parent_policy="Keep the checked parent.",
+                    evolution_ideas=(
+                        {
+                            "reference": "idea_1",
+                            "idea": "Selected bounded timing guard.",
+                            "predicted_stage_effect": "Reduce timing residual after repair.",
+                            "source_hooks": ("src/rsz/src/Timing.cc",),
+                            "expected_signals": ("guard",),
+                            "priority": 0,
+                        },
+                        {
+                            "reference": "idea_2",
+                            "idea": "Unselected power-aware endpoint tie-break.",
+                            "predicted_stage_effect": "Improve power selection without widening scope.",
+                            "source_hooks": ("src/rsz/src/Timing.cc",),
+                            "expected_signals": ("guard",),
+                            "priority": 1,
+                        },
+                    ),
+                    assignments=[{**_assignment_from_hypothesis(fallback[0]), "idea_reference": "idea_1"}],
+                )
+                parsed = __import__("goalevolve.agents.markdown_protocol", fromlist=["parse_teacher_plan"]).parse_teacher_plan(markdown)
+                selected = CodexTeacher._sanitize_hypotheses(
+                    parsed["assignments"], fallback, teacher_context=__import__(
+                        "goalevolve.agents.teacher", fromlist=["_teacher_context"]
+                    )._teacher_context(parsed)
+                )
+                return TeacherPlan(tuple(selected), diagnosis, {"teacher_markdown": markdown, "parsed_markdown": parsed, "hypotheses": [item.to_dict() for item in selected]}, {})
+
+            def review(self, **_):
+                return {}
+
+        class OneCardPlanner:
+            name = "one_card_planner"
+
+            def plan(self, **_):
+                return [
+                    Hypothesis(
+                        "r1_student_1_guard", "guard", "Selected bounded timing guard.",
+                        ("src/rsz/src/Timing.cc",), ("guard",), ("guard",), "guard",
+                        student_id="student_1",
+                    )
+                ]
+
+        class StaticEvaluator:
+            name = "static"
+
+            def evaluate(self, *, hypothesis, student_id, **_):
+                return CandidateResult(
+                    student_id, hypothesis, {"tns_abs_ns": 60.0, "leakage_power_pw": 200.0},
+                    {"guard": 1.0}, [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+                    "+++ b/src/rsz/src/Timing.cc\n+guard\n", "guard-source",
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            engine = GoalEvolveEngine(
+                self.contract, root, OneCardPlanner(), StaticEvaluator(), IsolatedWorkspace(), StrictEvidencePromotion(),
+                student_ids=("student_1",), teacher=TwoIdeaTeacher(),
+            )
+            engine.initialize(baseline_metrics=dict(self.parent.metrics))
+            engine.run(rounds=1)
+            epd = EvolutionProgramDatabase(root)
+            ideas = epd.ideas()
+            attempts = epd.records()
+        by_text = {str(idea["idea"]): idea for idea in ideas}
+        self.assertEqual(by_text["Selected bounded timing guard."]["status"], "validated")
+        self.assertEqual(by_text["Selected bounded timing guard."]["execution_count"], 1)
+        self.assertEqual(by_text["Selected bounded timing guard."]["predicted_stage_effect"], "Reduce timing residual after repair.")
+        self.assertTrue(by_text["Selected bounded timing guard."]["inherited"])
+        self.assertEqual(by_text["Selected bounded timing guard."]["inherited_parent_id"], "round_001:student_1")
+        self.assertEqual(by_text["Unselected power-aware endpoint tie-break."]["status"], "pending")
+        self.assertEqual(by_text["Unselected power-aware endpoint tie-break."]["execution_count"], 0)
+        self.assertEqual(attempts[1]["idea_id"], by_text["Selected bounded timing guard."]["idea_id"])
+
+    def test_epd_v2_integrator_uses_only_validated_records_not_inherited_by_current_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            epd = EvolutionProgramDatabase(root)
+            checks = [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")]
+            validated = epd.record(
+                round_index=1,
+                parent=self.parent,
+                candidate=CandidateResult(
+                    "student_1",
+                    Hypothesis("timing", "timing", "timing", ("src/rsz/src/Timing.cc",), ("timing",), ("timing",), "timing"),
+                    {"tns_abs_ns": 60.0, "leakage_power_pw": 200.0}, {"timing": 1.0}, checks,
+                    "+++ b/src/rsz/src/Timing.cc\n+timing\n", "timing-source",
+                ),
+                verdict=EvidenceVerdict("validated", 0.1, 0.4, True, True, ()),
+            )
+            second_validated = epd.record(
+                round_index=1,
+                parent=self.parent,
+                candidate=CandidateResult(
+                    "student_3",
+                    Hypothesis("route", "route", "route", ("src/grt/src/Route.cc",), ("route",), ("route",), "route"),
+                    {"tns_abs_ns": 70.0, "leakage_power_pw": 190.0}, {"route": 1.0}, checks,
+                    "+++ b/src/grt/src/Route.cc\n+route\n", "route-source",
+                ),
+                verdict=EvidenceVerdict("validated", 0.1, 0.2, True, True, ()),
+            )
+            promising = epd.record(
+                round_index=1,
+                parent=self.parent,
+                candidate=CandidateResult(
+                    "student_2",
+                    Hypothesis("power", "power", "power", ("src/rsz/src/Power.cc",), ("power",), ("power",), "power"),
+                    {"tns_abs_ns": 100.0, "leakage_power_pw": 170.0}, {}, checks,
+                    "+++ b/src/rsz/src/Power.cc\n+power\n", "power-source",
+                ),
+                verdict=EvidenceVerdict("verified_qor_unattributed", 0.1, 0.3, True, True, ()),
+            )
+            epd.mark_inherited(record_id=validated.record_id, parent=self.parent)
+            portfolio = epd.role_portfolio(contract=self.contract, parent=self.parent)
+        integration_ids = {record_id for pair in portfolio["integration_candidates"] for record_id in pair}
+        self.assertNotIn(validated.record_id, integration_ids)
+        self.assertNotIn(promising.record_id, integration_ids)
+        self.assertNotIn(second_validated.record_id, integration_ids)
+        self.assertEqual(portfolio["integration_candidates"], [])
+        self.assertEqual(portfolio["enhancement_candidates"], [promising.record_id])
+
+    def test_epd_v2_every_uninherited_validated_attempt_is_represented_in_an_integrator_option(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            epd = EvolutionProgramDatabase(root)
+            checks = [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")]
+            records = []
+            for index in range(13):
+                hypothesis = Hypothesis(
+                    f"timing_{index}",
+                    "timing",
+                    f"timing mechanism {index}",
+                    (f"src/rsz/src/Timing{index}.cc",),
+                    (f"timing_{index}",),
+                    (f"timing_{index}",),
+                    f"timing_{index}",
+                )
+                records.append(
+                    epd.record(
+                        round_index=1,
+                        parent=self.parent,
+                        candidate=CandidateResult(
+                            f"student_{index}",
+                            hypothesis,
+                            {"tns_abs_ns": 60.0, "leakage_power_pw": 200.0},
+                            {f"timing_{index}": 1.0},
+                            checks,
+                            f"+++ b/src/rsz/src/Timing{index}.cc\n+guard {index}\n",
+                            f"timing-source-{index}",
+                        ),
+                        verdict=EvidenceVerdict("validated", 0.1, 0.2, True, True, ()),
+                    )
+                )
+            portfolio = epd.role_portfolio(contract=self.contract, parent=self.parent)
+
+        represented = {
+            record_id
+            for candidate in portfolio["integration_candidates"]
+            for record_id in candidate
+        }
+        self.assertEqual(represented, {record.record_id for record in records})
+
+    def test_epd_v2_planner_keeps_every_uninherited_validated_record_selectable_for_integration(self) -> None:
+        cards = tuple(
+            MechanismCard(
+                f"timing_{index}",
+                "timing",
+                ("tns",),
+                (f"src/rsz/src/Timing{index}.cc",),
+                (f"timing_{index}",),
+                f"Fresh timing mechanism {index}.",
+            )
+            for index in range(13)
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            epd = EvolutionProgramDatabase(root)
+            checks = [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")]
+            record_ids = set()
+            for index, card in enumerate(cards):
+                record = epd.record(
+                    round_index=1,
+                    parent=self.parent,
+                    candidate=CandidateResult(
+                        f"student_{index}",
+                        Hypothesis(
+                            f"timing_{index}", "timing", f"timing mechanism {index}",
+                            card.source_hooks, card.expected_signals, (card.card_id,), card.card_id,
+                        ),
+                        {"tns_abs_ns": 60.0, "leakage_power_pw": 200.0},
+                        {card.expected_signals[0]: 1.0}, checks,
+                        f"+++ b/{card.source_hooks[0]}\n+guard {index}\n", f"source-{index}",
+                    ),
+                    verdict=EvidenceVerdict("validated", 0.1, 0.2, True, True, ()),
+                )
+                record_ids.add(record.record_id)
+            plan = DiversePlanner(DiverseRetriever(cards)).plan(
+                contract=self.contract,
+                parent=self.parent,
+                round_index=2,
+                student_ids=("student_1", "student_2", "student_3", "student_4"),
+                state_root=root,
+            )
+
+        selectable = {
+            record_id
+            for option in plan[2].candidate_options
+            for record_id in option["epd_record_ids"]
+        }
+        self.assertEqual(selectable, record_ids)
+
+    def test_epd_v2_enhancement_budget_is_bounded_per_promising_idea(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            epd = EvolutionProgramDatabase(root, max_reinforcement_attempts=2)
+            checks = [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")]
+            seed = epd.record(
+                round_index=1,
+                parent=self.parent,
+                candidate=CandidateResult(
+                    "student_1",
+                    Hypothesis("seed", "timing", "seed", ("src/rsz/src/Timing.cc",), ("timing",), ("seed",), "seed"),
+                    {"tns_abs_ns": 60.0, "leakage_power_pw": 200.0}, {}, checks,
+                    "+++ b/src/rsz/src/Timing.cc\n+seed\n", "seed-source",
+                ),
+                verdict=EvidenceVerdict("verified_qor_unattributed", 0.1, 0.3, True, True, ()),
+            )
+            seed_idea_id = str(epd.records()[0]["idea_id"])
+            for attempt in (1, 2):
+                epd.record(
+                    round_index=attempt + 1,
+                    parent=self.parent,
+                    candidate=CandidateResult(
+                        f"student_{attempt + 1}",
+                        Hypothesis(
+                            f"enhance_{attempt}", "enhancement", "enhance", ("src/rsz/src/Timing.cc",),
+                            ("timing",), ("enhance",), "enhance", student_role="enhancer",
+                            role_mode="epd_enhancement", epd_record_ids=(seed.record_id,),
+                        ),
+                        {"tns_abs_ns": 100.0, "leakage_power_pw": 200.0}, {"timing": 1.0}, checks,
+                        f"+++ b/src/rsz/src/Timing.cc\n+enhance {attempt}\n", f"enhance-source-{attempt}",
+                    ),
+                    verdict=EvidenceVerdict("invalid", 0.0, 0.0, True, False, ()),
+                )
+            seed_idea = epd.idea(seed_idea_id)
+        self.assertEqual(seed_idea["reinforcement_attempts"], 2)
+        self.assertEqual(seed_idea["status"], "invalid")
+        self.assertEqual(seed_idea["terminal_reason"], "reinforcement_budget_exhausted")
+
+    def test_epd_v2_uses_the_configured_reinforcement_budget_for_new_ideas(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            epd = EvolutionProgramDatabase(Path(temporary), max_reinforcement_attempts=1)
+            idea_id = epd.register_teacher_ideas(
+                round_index=1,
+                parent=self.parent,
+                evolution_ideas=(
+                    {
+                        "idea": "Refine one bounded timing guard.",
+                        "source_hooks": ("src/rsz/src/Timing.cc",),
+                        "expected_signals": ("timing_examined",),
+                    },
+                ),
+            )[0]
+            budget = epd.idea(idea_id)["max_reinforcement_attempts"]
+
+        self.assertEqual(budget, 1)
+
+    def test_epd_v2_pending_teacher_idea_is_selectable_by_an_explorer(self) -> None:
+        card = MechanismCard(
+            "fresh_timing",
+            "timing",
+            ("tns",),
+            ("src/rsz/src/Timing.cc",),
+            ("timing_examined",),
+            "Fresh timing exploration.",
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            epd = EvolutionProgramDatabase(root)
+            idea_id = epd.register_teacher_ideas(
+                round_index=1,
+                parent=self.parent,
+                evolution_ideas=(
+                    {
+                        "idea": "Retry one bounded endpoint guard.",
+                        "source_hooks": ("src/rsz/src/Timing.cc",),
+                        "expected_signals": ("endpoint_guard_examined",),
+                        "priority": 0,
+                    },
+                ),
+            )[0]
+            plan = DiversePlanner(DiverseRetriever((card,))).plan(
+                contract=self.contract,
+                parent=self.parent,
+                round_index=2,
+                student_ids=("student_1",),
+                state_root=root,
+            )
+
+        options = plan[0].candidate_options
+        pending = next(option for option in options if option["epd_idea_id"] == idea_id)
+        self.assertEqual(pending["role_mode"], "pending_exploration")
+        self.assertEqual(pending["expected_signals"], ("endpoint_guard_examined",))
+
+    def test_epd_portfolio_records_descendant_feedback_for_elite_ranking(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            epd = EvolutionProgramDatabase(root)
+            checks = [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")]
+            first = epd.record(
+                round_index=1,
+                parent=self.parent,
+                candidate=CandidateResult(
+                    "student_1",
+                    Hypothesis("first", "timing", "first", ("src/rsz/src/Timing.cc",), ("timing",), ("first",), "first"),
+                    {"tns_abs_ns": 70.0, "leakage_power_pw": 200.0}, {"timing": 1.0}, checks,
+                    "+++ b/src/rsz/src/Timing.cc\n+first\n", "first-source",
+                ),
+                verdict=EvidenceVerdict("validated", 0.2, 0.2, True, True, ()),
+            )
+            second = epd.record(
+                round_index=1,
+                parent=self.parent,
+                candidate=CandidateResult(
+                    "student_2",
+                    Hypothesis("second", "power", "second", ("src/rsz/src/Power.cc",), ("power",), ("second",), "second"),
+                    {"tns_abs_ns": 100.0, "leakage_power_pw": 180.0}, {"power": 1.0}, checks,
+                    "+++ b/src/rsz/src/Power.cc\n+second\n", "second-source",
+                ),
+                verdict=EvidenceVerdict("validated", 0.1, 0.2, True, True, ()),
+            )
+            epd.record(
+                round_index=2,
+                parent=self.parent,
+                candidate=CandidateResult(
+                    "student_3",
+                    Hypothesis(
+                        "child", "integration", "child", ("src/rsz/src/Timing.cc", "src/rsz/src/Power.cc"),
+                        ("timing", "power"), ("child",), "child", student_role="integrator",
+                        role_mode="epd_integration", epd_record_ids=(first.record_id, second.record_id),
+                    ),
+                    {"tns_abs_ns": 60.0, "leakage_power_pw": 170.0}, {"timing": 1.0, "power": 1.0}, checks,
+                    "+++ b/src/rsz/src/Timing.cc\n+child\n", "child-source",
+                ),
+                verdict=EvidenceVerdict("validated", 0.05, 0.5, True, True, ()),
+            )
+            portfolio = epd.role_portfolio(contract=self.contract, parent=self.parent)
+        rows = {row["record_id"]: row for row in portfolio["records"]}
+        self.assertEqual(rows[first.record_id]["offspring_validated_count"], 1)
+        self.assertEqual(rows[second.record_id]["offspring_validated_count"], 1)
+        self.assertGreater(rows[first.record_id]["elite_score"], rows[first.record_id]["distance_gain"])
+
+    def test_diverse_planner_uses_only_eligible_epd_roles(self) -> None:
+        cards = (
+            MechanismCard("explore_timing", "timing", ("tns",), ("src/rsz/src/Timing.cc",), ("timing_examined",), "Explore timing."),
+            MechanismCard("explore_power", "power", ("leakage",), ("src/rsz/src/Power.cc",), ("power_examined",), "Explore power."),
+            MechanismCard("explore_route", "route", ("tns",), ("src/grt/src/Route.cc",), ("route_examined",), "Explore route."),
+            MechanismCard("explore_setup", "setup", ("tns",), ("src/rsz/src/Setup.cc",), ("setup_examined",), "Explore setup."),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            epd = EvolutionProgramDatabase(root)
+            checks = [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")]
+            for student_id, hypothesis, metrics in (
+                ("student_1", Hypothesis("old_timing", "timing", "old timing", ("src/rsz/src/Timing.cc",), ("timing_examined",), ("timing_card",), "old:timing"), {"tns_abs_ns": 60.0, "leakage_power_pw": 200.0}),
+                ("student_2", Hypothesis("old_power", "power", "old power", ("src/rsz/src/Power.cc",), ("power_retained",), ("power_card",), "old:power"), {"tns_abs_ns": 100.0, "leakage_power_pw": 170.0}),
+            ):
+                epd.record(
+                    round_index=1,
+                    parent=self.parent,
+                    candidate=CandidateResult(student_id, hypothesis, metrics, {hypothesis.expected_signals[0]: 1.0}, checks, f"+++ b/{hypothesis.source_hooks[0]}\n+change\n", f"{student_id}-source"),
+                    verdict=EvidenceVerdict("validated", 0.1, 0.2, True, True, ()),
+                )
+            plan = DiversePlanner(DiverseRetriever(cards)).plan(
+                contract=self.contract,
+                parent=self.parent,
+                round_index=2,
+                student_ids=("student_1", "student_2", "student_3", "student_4"),
+                state_root=root,
+            )
+        self.assertEqual([item.student_role for item in plan], ["explorer", "explorer", "integrator"])
+        self.assertEqual(len(plan[2].epd_record_ids), 2)
+        self.assertIn("epd_integration", plan[2].role_mode)
+
+    def test_student_packet_injects_role_specific_epd_evidence(self) -> None:
+        from goalevolve.agents.prompting import student_packet
+
+        hypothesis = Hypothesis(
+            "integrate", "integration", "combine validated changes",
+            ("src/rsz/src/Timing.cc", "src/rsz/src/Power.cc"),
+            ("timing_examined", "power_retained"), ("epd_integration",), "integration",
+            student_role="integrator",
+            role_mode="epd_integration",
+            epd_record_ids=("EPD_timing", "EPD_power"),
+        )
+        packet = student_packet(
+            parent=self.parent,
+            hypothesis=hypothesis,
+            prior=(),
+            epd_records=(
+                {"record_id": "EPD_timing", "implementation_diff_artifact": "/tmp/timing.diff"},
+                {"record_id": "EPD_power", "implementation_diff_artifact": "/tmp/power.diff"},
+            ),
+        )
+        self.assertIn("## Integrator Operating Protocol", packet)
+        self.assertIn("EPD_timing", packet)
+        self.assertIn("/tmp/power.diff", packet)
+        self.assertIn("Do not blindly apply", packet)
+
+    def test_enhancer_packet_includes_prior_source_change_bundle(self) -> None:
+        from goalevolve.agents.prompting import student_packet
+
+        hypothesis = Hypothesis(
+            "enhance", "enhancement", "refine prior timing change",
+            ("src/rsz/src/Timing.cc",), ("timing_examined",), ("enhance",), "enhance",
+            student_role="enhancer", role_mode="epd_enhancement", epd_record_ids=("EPD_promising",),
+        )
+        packet = student_packet(
+            parent=self.parent,
+            hypothesis=hypothesis,
+            prior=(),
+            epd_records=(
+                {
+                    "record_id": "EPD_promising",
+                    "epd_status": "promising",
+                    "source_change_bundle": {
+                        "modified_files": ["src/rsz/src/Timing.cc"],
+                        "added_code": ["add bounded endpoint guard"],
+                        "removed_code": ["remove unguarded selection"],
+                        "added_mechanism_changes": ["added:endpoint_guard"],
+                        "removed_mechanism_changes": ["removed:unguarded_selection"],
+                        "telemetry_changes": ["added:METRIC|timing_examined"],
+                    },
+                    "implementation_diff_artifact": "/tmp/promising.diff",
+                },
+            ),
+        )
+        self.assertIn("## Prior Source Change Bundle", packet)
+        self.assertIn("src/rsz/src/Timing.cc", packet)
+        self.assertIn("add bounded endpoint guard", packet)
+        self.assertIn("remove unguarded selection", packet)
+        self.assertIn("added:endpoint_guard", packet)
+        self.assertIn("removed:unguarded_selection", packet)
+        self.assertIn("added:METRIC|timing_examined", packet)
+
+    def test_teacher_markdown_handoff_is_compiled_into_the_student_packet(self) -> None:
+        from goalevolve.agents.prompting import student_packet
+
+        slot = Hypothesis(
+            "r2_student_1_timing", "timing", "default timing claim",
+            ("src/rsz/src/Timing.cc",), ("timing_examined",), ("timing_card",), "timing",
+            student_id="student_1",
+        )
+        selected = CodexTeacher._sanitize_hypotheses(
+            (
+                {
+                    "student_id": "student_1",
+                    "idea_reference": "idea_1",
+                    "claim": "Prefer endpoint ranking with a bounded stale-cache guard.",
+                    "selection_rationale": "Timing debt dominates and this hook has not been refuted.",
+                },
+            ),
+            (slot,),
+            teacher_context={
+                "diagnosis_summary": "TNS is the sole unresolved target.",
+                "parent_policy": "Preserve the checked low-power parent.",
+                "evolution_ideas": (
+                    "Use endpoint freshness to avoid stale criticality ordering.",
+                    "Keep rollback accounting explicit.",
+                ),
+                "idea_records": {
+                    "idea_1": {"predicted_stage_effect": "Reduce timing debt after the repair stage."},
+                },
+            },
+        )
+        packet = student_packet(parent=self.parent, hypothesis=selected[0], prior=())
+        self.assertIn("## Teacher Handoff", packet)
+        self.assertIn("TNS is the sole unresolved target.", packet)
+        self.assertIn("Preserve the checked low-power parent.", packet)
+        self.assertIn("endpoint freshness", packet)
+        self.assertIn("Timing debt dominates", packet)
+        self.assertIn("Reduce timing debt after the repair stage.", packet)
+
+    def test_epd_roles_offer_teacher_selectable_verified_crossovers(self) -> None:
+        cards = (
+            MechanismCard("explore_timing", "timing", ("tns",), ("src/rsz/src/Timing.cc",), ("timing_examined",), "Explore timing."),
+            MechanismCard("explore_power", "power", ("leakage",), ("src/rsz/src/Power.cc",), ("power_examined",), "Explore power."),
+            MechanismCard("explore_route", "route", ("tns",), ("src/grt/src/Route.cc",), ("route_examined",), "Explore route."),
+            MechanismCard("explore_setup", "setup", ("tns",), ("src/rsz/src/Setup.cc",), ("setup_examined",), "Explore setup."),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            epd = EvolutionProgramDatabase(root)
+            checks = [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")]
+            seeds = (
+                ("timing", "src/rsz/src/Timing.cc", "timing_examined", {"tns_abs_ns": 70.0, "leakage_power_pw": 200.0}),
+                ("power", "src/rsz/src/Power.cc", "power_examined", {"tns_abs_ns": 100.0, "leakage_power_pw": 170.0}),
+                ("route", "src/grt/src/Route.cc", "route_examined", {"tns_abs_ns": 80.0, "leakage_power_pw": 190.0}),
+            )
+            for index, (family, hook, signal, metrics) in enumerate(seeds, start=1):
+                hypothesis = Hypothesis(
+                    f"old_{family}", family, f"old {family}", (hook,), (signal,), (f"{family}_card",), family,
+                )
+                epd.record(
+                    round_index=1,
+                    parent=self.parent,
+                    candidate=CandidateResult(
+                        f"student_{index}", hypothesis, metrics, {signal: 1.0}, checks,
+                        f"+++ b/{hook}\n+change\n", f"{family}-source",
+                    ),
+                    verdict=EvidenceVerdict("validated", 0.1, 0.2, True, True, ()),
+                )
+            plan = DiversePlanner(DiverseRetriever(cards)).plan(
+                contract=self.contract,
+                parent=self.parent,
+                round_index=2,
+                student_ids=("student_1", "student_2", "student_3", "student_4"),
+                state_root=root,
+            )
+        integrator = plan[2]
+        self.assertGreaterEqual(len(integrator.candidate_options), 2)
+        integration_options = [Hypothesis(**option) for option in integrator.candidate_options]
+        self.assertTrue(all(option.student_role == "integrator" for option in integration_options))
+        self.assertTrue(all(len(option.epd_record_ids) == 2 for option in integration_options))
+        selected = CodexTeacher._sanitize_hypotheses(
+            ({"student_id": "student_3", "candidate_id": integration_options[-1].hypothesis_id},),
+            (integrator,),
+        )
+        self.assertEqual(selected[0].epd_record_ids, integration_options[-1].epd_record_ids)
+
+    def test_roles_expand_to_four_explorers_before_epd_has_eligible_roles(self) -> None:
+        cards = tuple(
+            MechanismCard(
+                f"card_{index}", f"family_{index}", ("tns",),
+                (f"src/rsz/src/F{index}.cc",), (f"signal_{index}",), f"claim {index}",
+            )
+            for index in range(4)
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            plan = DiversePlanner(DiverseRetriever(cards)).plan(
+                contract=self.contract,
+                parent=self.parent,
+                round_index=1,
+                student_ids=("student_1", "student_2", "student_3", "student_4"),
+                state_root=Path(temporary),
+            )
+        self.assertEqual([item.student_role for item in plan], ["explorer", "explorer", "explorer", "explorer"])
+        self.assertTrue(all(item.role_mode == "fresh_exploration" for item in plan))
+
+    def test_one_validated_epd_record_does_not_create_a_bootstrap_role(self) -> None:
+        cards = tuple(
+            MechanismCard(
+                f"card_{index}", f"family_{index}", ("tns",),
+                (f"src/rsz/src/F{index}.cc",), (f"signal_{index}",), f"claim {index}",
+            )
+            for index in range(4)
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            epd = EvolutionProgramDatabase(root)
+            hypothesis = Hypothesis(
+                "only_one", "timing", "one", ("src/rsz/src/F0.cc",), ("signal_0",), ("card_0",), "one",
+            )
+            epd.record(
+                round_index=1,
+                parent=self.parent,
+                candidate=CandidateResult(
+                    "student_1", hypothesis, {"tns_abs_ns": 70.0, "leakage_power_pw": 200.0},
+                    {"signal_0": 1.0}, [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+                    "+++ b/src/rsz/src/F0.cc\n+change\n", "source",
+                ),
+                verdict=EvidenceVerdict("validated", 0.1, 0.3, True, True, ()),
+            )
+            plan = DiversePlanner(DiverseRetriever(cards)).plan(
+                contract=self.contract,
+                parent=self.parent,
+                round_index=2,
+                student_ids=("student_1", "student_2", "student_3", "student_4"),
+                state_root=root,
+            )
+        self.assertEqual([item.student_role for item in plan], ["explorer", "explorer", "explorer", "explorer"])
+
+    def test_controller_persists_markdown_and_four_role_packets(self) -> None:
+        class FourCardPlanner:
+            name = "four_card_planner"
+
+            def __init__(self, hypotheses):
+                self.hypotheses = hypotheses
+
+            def plan(self, **_):
+                return list(self.hypotheses)
+
+            def commit_round(self, **_):
+                return None
+
+        class StaticEditor:
+            name = "static_editor"
+
+            def apply(self, **_):
+                return StudentEditReport(True, "edited", "static", None, {})
+
+            def repair(self, **_):
+                return StudentEditReport(False, "not_needed", "static", None, {})
+
+        class StaticEvaluator:
+            name = "static_evaluator"
+
+            def evaluate(self, *, hypothesis, student_id, **_):
+                return CandidateResult(
+                    student_id,
+                    hypothesis,
+                    {"tns_abs_ns": 100.0, "leakage_power_pw": 200.0},
+                    {signal: 1.0 for signal in hypothesis.expected_signals},
+                    [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+                    f"+++ b/{hypothesis.source_hooks[0]}\n+change\n",
+                    f"commit-{student_id}",
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            hypotheses = tuple(
+                Hypothesis(
+                    f"r1_student_{index}_card_{index}",
+                    f"family_{index}",
+                    f"claim {index}",
+                    (f"src/rsz/src/Family{index}.cc",),
+                    (f"signal_{index}",),
+                    (f"card_{index}",),
+                    f"family_{index}",
+                    student_role=role,
+                    role_mode="epd_integration" if role == "integrator" else ("epd_enhancement" if role == "enhancer" else "fresh_exploration"),
+                    epd_record_ids=("EPD_demo",) if role in {"integrator", "enhancer"} else (),
+                    student_id=f"student_{index}",
+                )
+                for index, role in enumerate(("explorer", "explorer", "integrator", "enhancer"), start=1)
+            )
+            engine = GoalEvolveEngine(
+                self.contract,
+                root,
+                FourCardPlanner(hypotheses),
+                StaticEvaluator(),
+                IsolatedWorkspace(),
+                StrictEvidencePromotion(),
+                student_editor=StaticEditor(),
+                teacher=__import__("goalevolve.agents.teacher", fromlist=["HeuristicTeacher"]).HeuristicTeacher(),
+            )
+            engine.initialize(baseline_metrics=dict(self.parent.metrics))
+            engine.run(rounds=1)
+            round_root = root / "rounds" / "round_001"
+            plan = load_json(round_root / "teacher_plan.json")
+            self.assertTrue((round_root / "teacher_plan.md").is_file())
+            self.assertTrue((round_root / "teacher_plan.parsed.json").is_file())
+            self.assertTrue((round_root / "teacher_review.md").is_file())
+            self.assertTrue((round_root / "epd_role_portfolio.json").is_file())
+            self.assertEqual(
+                [item["student_role"] for item in plan["hypotheses"]],
+                ["explorer", "explorer", "integrator", "enhancer"],
+            )
+            self.assertIn("## Explorer Operating Protocol", (round_root / "prompts" / "student_1.md").read_text(encoding="utf-8"))
+            self.assertIn("## Integrator Operating Protocol", (round_root / "prompts" / "student_3.md").read_text(encoding="utf-8"))
+            self.assertIn("## Enhancer Operating Protocol", (round_root / "prompts" / "student_4.md").read_text(encoding="utf-8"))
+
+    def test_two_round_controller_promotes_validated_epd_into_role_specific_packets(self) -> None:
+        class StaticEditor:
+            name = "static_editor"
+
+            def apply(self, **_):
+                return StudentEditReport(True, "edited", "static", None, {})
+
+            def repair(self, **_):
+                return StudentEditReport(False, "not_needed", "static", None, {})
+
+        class ImprovingEvaluator:
+            name = "improving_evaluator"
+
+            def evaluate(self, *, parent, hypothesis, student_id, round_index, **_):
+                index = int(student_id.rsplit("_", 1)[-1])
+                metrics = dict(parent.metrics)
+                metrics["tns_abs_ns"] = float(metrics["tns_abs_ns"]) - 1.0 - index / 10.0
+                return CandidateResult(
+                    student_id,
+                    hypothesis,
+                    metrics,
+                    (
+                        {}
+                        if round_index == 1 and student_id == "student_2"
+                        else {signal: 1.0 for signal in hypothesis.expected_signals}
+                    ),
+                    [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+                    f"+++ b/{hypothesis.source_hooks[0]}\n+// round {round_index} {student_id}\n",
+                    f"commit-{round_index}-{student_id}",
+                )
+
+        cards = tuple(
+            MechanismCard(
+                f"card_{index}", f"family_{index}", ("tns",),
+                (f"src/rsz/src/F{index}.cc",), (f"signal_{index}",), f"claim {index}",
+            )
+            for index in range(1, 5)
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            engine = GoalEvolveEngine(
+                self.contract,
+                root,
+                DiversePlanner(DiverseRetriever(cards)),
+                ImprovingEvaluator(),
+                IsolatedWorkspace(),
+                StrictEvidencePromotion(),
+                student_editor=StaticEditor(),
+                teacher=__import__("goalevolve.agents.teacher", fromlist=["HeuristicTeacher"]).HeuristicTeacher(),
+            )
+            engine.initialize(baseline_metrics=dict(self.parent.metrics))
+            engine.run(rounds=2)
+            round_two = root / "rounds" / "round_002"
+            plan = load_json(round_two / "teacher_plan.json")
+            integrator = plan["hypotheses"][2]
+            enhancer = plan["hypotheses"][3]
+            integrator_prompt = (round_two / "prompts" / "student_3.md").read_text(encoding="utf-8")
+            enhancer_prompt = (round_two / "prompts" / "student_4.md").read_text(encoding="utf-8")
+        self.assertEqual(integrator["role_mode"], "epd_integration")
+        self.assertEqual(len(integrator["epd_record_ids"]), 2)
+        self.assertEqual(enhancer["role_mode"], "epd_enhancement")
+        self.assertEqual(len(enhancer["epd_record_ids"]), 1)
+        self.assertIn("## Integrator Operating Protocol", integrator_prompt)
+        self.assertIn("implementation_diff_artifact", integrator_prompt)
+        self.assertIn("## Enhancer Operating Protocol", enhancer_prompt)
+        self.assertIn("implementation_diff_artifact", enhancer_prompt)
 
     def test_teacher_power_stage_prompt_carries_controller_semantics(self) -> None:
         from goalevolve.agents.teacher import CodexTeacher
@@ -235,6 +1974,100 @@ class GoalEvolveV2Tests(unittest.TestCase):
         sanitized = CodexTeacher._sanitize_hypotheses((raw,), (self.hypothesis,))
         self.assertEqual(len(sanitized), 1)
         self.assertEqual(sanitized[0].claim, self.hypothesis.claim)
+
+    def test_teacher_can_select_only_a_controller_verified_explorer_option(self) -> None:
+        alternate = Hypothesis(
+            "candidate_1_route", "route", "route claim",
+            ("src/grt/src/Route.cc",), ("route_examined",), ("route_card",), "route",
+            student_id="candidate_1",
+        )
+        slot = Hypothesis(
+            "r2_student_1_timing", "timing", "timing claim",
+            ("src/rsz/src/Timing.cc",), ("timing_examined",), ("timing_card",), "timing",
+            student_id="student_1",
+            candidate_options=(alternate.to_dict(),),
+        )
+        selected = CodexTeacher._sanitize_hypotheses(
+            (
+                {
+                    "student_id": "student_1",
+                    "candidate_id": "route_card",
+                    "claim": "Use the controller-verified route mechanism.",
+                },
+            ),
+            (slot,),
+        )
+        self.assertEqual(selected[0].retrieval_ids, ("route_card",))
+        self.assertEqual(selected[0].source_hooks, ("src/grt/src/Route.cc",))
+        self.assertEqual(selected[0].student_id, "student_1")
+        self.assertEqual(selected[0].student_role, "explorer")
+
+    def test_teacher_duplicate_explorer_selection_keeps_the_second_slot_distinct(self) -> None:
+        first = Hypothesis(
+            "r2_student_1_timing", "timing", "timing claim",
+            ("src/rsz/src/Timing.cc",), ("timing_examined",), ("timing_card",), "timing",
+            student_id="student_1",
+        )
+        second = Hypothesis(
+            "r2_student_2_route", "route", "route claim",
+            ("src/grt/src/Route.cc",), ("route_examined",), ("route_card",), "route",
+            student_id="student_2",
+        )
+        options = tuple(item.to_dict() for item in (first, second))
+        fallback = (
+            Hypothesis(**{**first.to_dict(), "candidate_options": options}),
+            Hypothesis(**{**second.to_dict(), "candidate_options": options}),
+        )
+        selected = CodexTeacher._sanitize_hypotheses(
+            (
+                {"student_id": "student_1", "candidate_id": "timing_card"},
+                {"student_id": "student_2", "candidate_id": "timing_card"},
+            ),
+            fallback,
+        )
+        self.assertEqual(selected[0].retrieval_ids, ("timing_card",))
+        self.assertEqual(selected[1].retrieval_ids, ("route_card",))
+
+    def test_teacher_keeps_an_integrator_epd_pair_atomic(self) -> None:
+        slot = Hypothesis(
+            "r2_student_3_integrate", "integration", "combine claims",
+            ("src/rsz/src/Timing.cc", "src/rsz/src/Power.cc"),
+            ("timing_examined", "power_retained"), ("integration",), "integration",
+            student_role="integrator",
+            role_mode="epd_integration",
+            epd_record_ids=("EPD_timing", "EPD_power"),
+            student_id="student_3",
+        )
+        selected = CodexTeacher._sanitize_hypotheses(
+            (
+                {
+                    "student_id": "student_3",
+                    "epd_record_ids": ("EPD_power", "EPD_unknown"),
+                },
+            ),
+            (slot,),
+        )
+        self.assertEqual(selected[0].epd_record_ids, ("EPD_timing", "EPD_power"))
+
+    def test_round_robin_planner_uses_four_explorers_without_epd_evidence(self) -> None:
+        cards = tuple(
+            MechanismCard(
+                f"card_{index}", f"family_{index}", ("tns",),
+                (f"src/rsz/src/F{index}.cc",), (f"signal_{index}",), f"claim {index}",
+            )
+            for index in range(4)
+        )
+        from goalevolve.planning.retrieval import RoundRobinPlanner
+
+        plans = RoundRobinPlanner(cards).plan(
+            contract=self.contract,
+            parent=self.parent,
+            round_index=1,
+            student_ids=("student_1", "student_2", "student_3", "student_4"),
+            state_root=Path("/tmp"),
+        )
+        self.assertEqual([plan.student_role for plan in plans], ["explorer", "explorer", "explorer", "explorer"])
+        self.assertEqual(plans[0].student_id, "student_1")
 
     def test_telemetry_repair_forbids_proxy_activation_counts(self) -> None:
         context = GoalEvolveEngine._telemetry_repair_context(
@@ -690,6 +2523,95 @@ class GoalEvolveV2Tests(unittest.TestCase):
             engine._recipe_matched_parent(parent=parent, hypothesis=hypothesis, decision_context=context)
         self.assertEqual(evaluator.calls, 2)
 
+    def test_recipe_baseline_is_measured_for_a_degraded_complete_timing_candidate(self) -> None:
+        """A failed source experiment still needs recipe-level attribution."""
+
+        class OneTimingPlanner:
+            name = "one_timing_planner"
+
+            def plan(self, **_: object) -> list[Hypothesis]:
+                return [
+                    Hypothesis(
+                        "r001_student_1_mt1",
+                        "mt1_guard",
+                        "Measure a bounded MT1 admission guard.",
+                        ("src/rsz/src/policy/SetupMt1Policy.cc",),
+                        ("mt1_guard_examined",),
+                        ("teacher_idea:idea_1",),
+                        "mt1_guard",
+                        evaluation_mode="power_then_timing",
+                        timing_recipe_id="mt1_deep",
+                        student_id="student_1",
+                    )
+                ]
+
+        class TimingEvaluator:
+            name = "timing_evaluator"
+            config = SimpleNamespace(allowed_patch_roots=("src/rsz",))
+
+            def __init__(self) -> None:
+                self.parent_recipe_calls: list[str] = []
+
+            def evaluate_parent(self, *, parent, timing_recipe_id: str = "legacy_setup", **_: object):
+                self.parent_recipe_calls.append(timing_recipe_id)
+                return {
+                    "ok": True,
+                    "metrics": dict(parent.metrics),
+                    "checks": [],
+                    "artifacts": {},
+                }
+
+            def evaluate(self, *, parent, hypothesis, student_id, **_: object) -> CandidateResult:
+                metrics = dict(parent.metrics)
+                metrics["tns_abs_ns"] = 15.0
+                return CandidateResult(
+                    student_id,
+                    hypothesis,
+                    metrics,
+                    {"mt1_guard_examined": 1.0},
+                    [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+                    "+++ b/src/rsz/src/policy/SetupMt1Policy.cc\n+// bounded guard\n",
+                    "degraded-mt1-source",
+                )
+
+        contract = build_contract(
+            design="recipe_baseline_attribution",
+            baseline_metrics={
+                "tns_abs_ns": 10.0,
+                "dynamic_power_pw": 200.0,
+                "leakage_power_pw": 100.0,
+            },
+            target_metrics={
+                "tns_abs_ns": 5.0,
+                "dynamic_power_pw": 300.0,
+                "leakage_power_pw": 150.0,
+            },
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            seed = root / "seed"
+            hook = seed / "src/rsz/src/policy/SetupMt1Policy.cc"
+            hook.parent.mkdir(parents=True)
+            hook.write_text("void SetupMt1Policy::apply() {}\n", encoding="utf-8")
+            evaluator = TimingEvaluator()
+            engine = GoalEvolveEngine(
+                contract,
+                root / "campaign",
+                OneTimingPlanner(),
+                evaluator,
+                IsolatedWorkspace(seed),
+                PowerFirstPromotion(),
+                student_ids=("student_1",),
+            )
+            initial = engine.initialize(baseline_metrics=dict(contract.baseline_metrics))
+            engine.run_round(
+                round_index=1,
+                parent=replace(initial, evaluation_mode="power_then_timing"),
+            )
+            baselines = list((root / "campaign" / "stage_baselines").glob("*_mt1_deep_*/baseline.json"))
+        self.assertEqual(evaluator.parent_recipe_calls, ["mt1_deep"])
+        self.assertEqual(len(baselines), 1)
+
     def test_failed_recipe_baseline_is_cached_and_falls_back_to_lineage(self) -> None:
         class FailingRecipeEvaluator:
             name = "failing_recipe_evaluator"
@@ -854,7 +2776,7 @@ class GoalEvolveV2Tests(unittest.TestCase):
         adaptive = policy.context(contract=contract, parent=parent, round_index=11)
         self.assertEqual(adaptive["stage"], "adaptive_tradeoff")
         self.assertEqual(adaptive["dominant_metric"], "tns_abs_ns")
-        self.assertEqual(adaptive["adaptive_allocation"]["upstream_power_slot"], 1)
+        self.assertEqual(adaptive["candidate_pool_coverage"]["upstream_power_candidates"], 1)
 
     def test_adaptive_tradeoff_preserves_satisfied_power_target(self) -> None:
         contract = build_contract(
@@ -1063,16 +2985,21 @@ class GoalEvolveV2Tests(unittest.TestCase):
             final_parent = engine.run(rounds=3)
             self.assertLess(final_parent.goal_distance, self.parent.goal_distance)
             previous_parent = "baseline"
-            for index in range(1, 4):
+            expected_student_counts = (4, 3, 3)
+            for index, expected_count in enumerate(expected_student_counts, start=1):
                 round_data = load_json(root / "rounds" / f"round_{index:03d}" / "round.json")
                 self.assertEqual(round_data["common_parent_id_at_start"], previous_parent)
-                self.assertEqual(round_data["student_count"], 4)
+                self.assertEqual(round_data["student_count"], expected_count)
                 self.assertEqual(round_data["promoted_student"], "student_1")
-                self.assertEqual(len({row["hypothesis_id"] for row in round_data["results"]}), 4)
+                self.assertEqual(len({row["hypothesis_id"] for row in round_data["results"]}), expected_count)
                 previous_parent = f"round_{index:03d}:student_1"
             ledger = load_json(root / "knowledge" / "retrieval_ledger.json")
             self.assertEqual(len(ledger["rounds"]), 3)
-            self.assertTrue(all(len(row["card_ids"]) == 4 for row in ledger["rounds"]))
+            # The ledger records only fresh retrieval cards. EPD integrator /
+            # enhancer tasks are derived from persisted verified mechanisms,
+            # not falsely replayed as new cards.
+            self.assertTrue(all(0 < len(row["card_ids"]) <= 4 for row in ledger["rounds"]))
+            self.assertTrue(all(not card_id.startswith("epd_") for row in ledger["rounds"] for card_id in row["card_ids"]))
             self.assertGreater(len(set(card for row in ledger["rounds"] for card in row["card_ids"])), 4)
             feedback = load_json(root / "knowledge" / "feedback.json")
             self.assertTrue(feedback["suppressed_card_ids"])
@@ -1113,6 +3040,14 @@ class GoalEvolveV2Tests(unittest.TestCase):
             self.assertIn("report_tns", tcl)
             self.assertIn("GOALEVOLVE_CHECKPOINT_METRIC post_route tns_abs_ns", tcl)
             self.assertLess(tcl.rfind("GOALEVOLVE_CHECKPOINT_END post_route"), tcl.rfind("puts \"===== METRICS =====\""))
+            placement = tcl.index("detailed_placement\n", tcl.index("set rsz_end"))
+            improve = tcl.index("improve_placement", placement)
+            mirror = tcl.index("optimize_mirroring", improve)
+            final_legalize = tcl.index("detailed_placement\n", mirror)
+            self.assertLess(placement, improve)
+            self.assertLess(improve, mirror)
+            self.assertLess(mirror, final_legalize)
+            self.assertLess(final_legalize, tcl.index("check_placement -verbose", final_legalize))
 
     def test_relocated_cow_build_discards_absolute_cmake_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1708,6 +3643,7 @@ class GoalEvolveV2Tests(unittest.TestCase):
             self.assertEqual(config.codex.credential_env, DEFAULT_CREDENTIAL_ENV)
             self.assertEqual(config.codex.student.model, "gpt-5.6-terra")
             self.assertEqual(config.codex.teacher.model, "gpt-5.6-terra")
+            self.assertEqual(config.codex.teacher.max_plan_format_repairs, 2)
             self.assertEqual(config.state_root, project_root / "outputs" / "ae3" / config.design)
             self.assertEqual(config.campaign_ready, config.design in ready_designs)
             self.assertTrue(config.source_root and config.source_root.is_dir())
@@ -1744,7 +3680,7 @@ class GoalEvolveV2Tests(unittest.TestCase):
             log.write_text("METRIC|accepted_commit|2\nMETRIC|other_signal|9\n", encoding="utf-8")
             self.assertEqual(_observed_phase_signals(log, ("accepted_commit", "missing")), {"accepted_commit": 2.0})
 
-    def test_checkpoint_parser_and_epd_four_statuses(self) -> None:
+    def test_checkpoint_parser_and_epd_v2_lifecycle_statuses(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             log = root / "evaluation.log"
@@ -1758,18 +3694,43 @@ class GoalEvolveV2Tests(unittest.TestCase):
             self.assertEqual(parsed["checkpoints"]["post_repair_timing"]["tns_abs_ns"], 2.5)
             self.assertEqual(parsed["checkpoints"]["post_repair_timing"]["leakage_power_pw"], 3.0e7)
             db = EvolutionProgramDatabase(root)
+            pending_idea_id, promising_idea_id, invalid_idea_id = db.register_teacher_ideas(
+                round_index=1,
+                parent=self.parent,
+                evolution_ideas=(
+                    {
+                        "idea": "A ranked but not yet executed timing experiment.",
+                        "source_hooks": ("src/rsz/src/RecoverPower.cc",),
+                        "expected_signals": ("accepted",),
+                    },
+                    {
+                        "idea": "A telemetry-incomplete timing experiment.",
+                        "source_hooks": ("src/rsz/src/RecoverPower.cc",),
+                        "expected_signals": ("accepted",),
+                    },
+                    {
+                        "idea": "A refuted timing experiment.",
+                        "source_hooks": ("src/rsz/src/RecoverPower.cc",),
+                        "expected_signals": ("accepted",),
+                    },
+                ),
+            )
             checks = [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")]
             cases = [
                 ("validated", CandidateResult("s", self.hypothesis, {"tns_abs_ns": 60.0, "leakage_power_pw": 170.0}, {"accepted": 1.0}, checks, "+++ b/src/rsz/src/RecoverPower.cc\n+x\n", "v")),
-                ("promising", CandidateResult("s", self.hypothesis, {"tns_abs_ns": 60.0, "leakage_power_pw": 170.0}, {}, checks, "+++ b/src/rsz/src/RecoverPower.cc\n+y\n", "p")),
-                ("pending", CandidateResult("s", self.hypothesis, {}, {}, [], "+++ b/src/rsz/src/RecoverPower.cc\n+z\n", "q", evaluation_error="candidate_build_failed")),
-                ("invalid", CandidateResult("s", self.hypothesis, {"tns_abs_ns": 110.0, "leakage_power_pw": 220.0}, {"accepted": 1.0}, checks, "+++ b/src/rsz/src/RecoverPower.cc\n+w\n", "i")),
+                ("promising", CandidateResult("s", replace(self.hypothesis, epd_idea_id=promising_idea_id), {"tns_abs_ns": 60.0, "leakage_power_pw": 170.0}, {}, checks, "+++ b/src/rsz/src/RecoverPower.cc\n+y\n", "p")),
+                ("invalid", CandidateResult("s", replace(self.hypothesis, epd_idea_id=invalid_idea_id), {"tns_abs_ns": 110.0, "leakage_power_pw": 220.0}, {"accepted": 1.0}, checks, "+++ b/src/rsz/src/RecoverPower.cc\n+w\n", "i")),
             ]
             for _, candidate in cases:
                 verdict = classify_candidate(contract=self.contract, parent=self.parent, candidate=candidate)
                 db.record(round_index=1, parent=self.parent, candidate=candidate, verdict=verdict)
             statuses = {row["epd_status"] for row in db.records()}
-            self.assertTrue(set(EPD_STATUSES).issubset(statuses))
+            self.assertEqual(statuses, {"validated", "promising", "invalid"})
+            self.assertEqual(db.idea(pending_idea_id)["status"], "pending")
+            self.assertEqual(
+                {status for status, count in db.summary()["status_counts"].items() if count},
+                {"validated", "promising", "pending", "invalid"},
+            )
             db.ensure_baseline(self.parent)
             db.attach_baseline_evaluation(
                 parent=self.parent,
@@ -1781,6 +3742,169 @@ class GoalEvolveV2Tests(unittest.TestCase):
             baseline = next(row for row in db.records() if row["hypothesis_id"] == "baseline")
             self.assertEqual(baseline["epd_status"], "validated")
             self.assertEqual(baseline["evidence_state"], "baseline_measured_4of4")
+
+    def test_epd_keeps_a_complete_but_unactivated_attempt_retriable(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            db = EvolutionProgramDatabase(root)
+            idea_id = db.register_teacher_ideas(
+                round_index=2,
+                parent=self.parent,
+                evolution_ideas=(
+                    {
+                        "idea": "Run a bounded phase-specific timing decision.",
+                        "source_hooks": ("src/rsz/src/RecoverPower.cc",),
+                        "expected_signals": ("phase_specific_examined",),
+                    },
+                ),
+            )[0]
+            candidate = CandidateResult(
+                "student_1",
+                replace(
+                    self.hypothesis,
+                    epd_idea_id=idea_id,
+                    expected_signals=("phase_specific_examined",),
+                ),
+                {"tns_abs_ns": 110.0, "leakage_power_pw": 220.0},
+                {},
+                [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+                "+++ b/src/rsz/src/RecoverPower.cc\n+phase decision\n",
+                "unactivated-source",
+            )
+            verdict = classify_candidate(
+                contract=self.contract,
+                parent=self.parent,
+                candidate=candidate,
+            )
+            record = db.record(
+                round_index=2,
+                parent=self.parent,
+                candidate=candidate,
+                verdict=verdict,
+            )
+            idea = db.idea(idea_id)
+            teacher = db.teacher_summary()
+        self.assertEqual(verdict.state, "refuted")
+        self.assertFalse(verdict.mechanism_fired)
+        self.assertEqual(record.epd_status, "unactivated")
+        self.assertEqual(idea["status"], "unactivated")
+        self.assertEqual(teacher["status_counts"]["unactivated"], 1)
+
+    def test_epd_reclassifies_historical_unactivated_attempts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            db = EvolutionProgramDatabase(root)
+            idea_id = db.register_teacher_ideas(
+                round_index=2,
+                parent=self.parent,
+                evolution_ideas=(
+                    {
+                        "idea": "Run a historical phase-specific timing decision.",
+                        "source_hooks": ("src/rsz/src/RecoverPower.cc",),
+                        "expected_signals": ("phase_specific_examined",),
+                    },
+                ),
+            )[0]
+            candidate = CandidateResult(
+                "student_1",
+                replace(
+                    self.hypothesis,
+                    epd_idea_id=idea_id,
+                    expected_signals=("phase_specific_examined",),
+                ),
+                {"tns_abs_ns": 110.0, "leakage_power_pw": 220.0},
+                {},
+                [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+                "+++ b/src/rsz/src/RecoverPower.cc\n+phase decision\n",
+                "historical-unactivated-source",
+            )
+            record = db.record(
+                round_index=2,
+                parent=self.parent,
+                candidate=candidate,
+                verdict=classify_candidate(
+                    contract=self.contract,
+                    parent=self.parent,
+                    candidate=candidate,
+                ),
+            )
+            payload = load_json(root / "knowledge" / "epd.json")
+            payload["attempts"][0]["epd_status"] = "invalid"
+            payload["ideas"][0]["status"] = "invalid"
+            atomic_json(root / "knowledge" / "epd.json", payload)
+            reclassified = db.reclassify_historical_unactivated_attempts()
+            idea_status = db.idea(idea_id)["status"]
+        self.assertEqual(reclassified, (record.record_id,))
+        self.assertEqual(idea_status, "unactivated")
+
+    def test_previous_teacher_review_does_not_resuppress_an_unactivated_attempt(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            db = EvolutionProgramDatabase(root)
+            idea_id = db.register_teacher_ideas(
+                round_index=1,
+                parent=self.parent,
+                evolution_ideas=(
+                    {
+                        "idea": "Run a bounded phase-specific timing decision.",
+                        "source_hooks": ("src/rsz/src/RecoverPower.cc",),
+                        "expected_signals": ("phase_specific_examined",),
+                    },
+                ),
+            )[0]
+            hypothesis = replace(
+                self.hypothesis,
+                hypothesis_id="r001_student_1_phase_specific",
+                epd_idea_id=idea_id,
+                expected_signals=("phase_specific_examined",),
+            )
+            candidate = CandidateResult(
+                "student_1",
+                hypothesis,
+                {"tns_abs_ns": 110.0, "leakage_power_pw": 220.0},
+                {},
+                [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+                "+++ b/src/rsz/src/RecoverPower.cc\n+phase decision\n",
+                "unactivated-review-source",
+            )
+            verdict = classify_candidate(
+                contract=self.contract,
+                parent=self.parent,
+                candidate=candidate,
+            )
+            db.record(round_index=1, parent=self.parent, candidate=candidate, verdict=verdict)
+            review_path = root / "rounds" / "round_001" / "teacher_review.json"
+            review_path.parent.mkdir(parents=True)
+            atomic_json(
+                review_path,
+                {
+                    "teacher_ok": True,
+                    "teacher_markdown": "## Mechanism Actions\n### phase_specific\n- Action: suppress",
+                    "parsed_markdown": {"mechanism_actions": [{"action": "suppress"}]},
+                    "outcomes": [
+                        {
+                            "student_id": "student_1",
+                            "hypothesis_id": hypothesis.hypothesis_id,
+                            "mechanism_family": hypothesis.mechanism_family,
+                            "hypothesis": hypothesis.to_dict(),
+                            "verdict": verdict.to_dict(),
+                        }
+                    ],
+                },
+            )
+            atomic_json(
+                review_path.parent / "round.json",
+                {"promoted_student": None, "parent_after": self.parent.to_dict()},
+            )
+            engine = SimpleNamespace(state_root=root, _epd=lambda: db)
+            guidance = GoalEvolveEngine._previous_teacher_review(
+                engine,
+                2,
+                parent=self.parent,
+            )
+        self.assertEqual(guidance["teacher_markdown"], "")
+        self.assertTrue(guidance["raw_review"]["superseded"])
+        self.assertEqual(guidance["outcomes"][0]["epd_lifecycle"], "unactivated")
 
     def test_codex_student_command_and_packet_are_source_scoped(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -4,6 +4,10 @@
 
 Each profile supplies `baseline_metrics` and absolute `target_metrics`; the runtime never derives a target by multiplying a ratio. `state_root` is optional and defaults to `outputs/ae3/<design>/`.
 
+`epd_max_reinforcement_attempts` sets the per-idea limit for Enhancer retries
+after a `promising` measured result. It defaults to `2`, is persisted into each
+new EPD idea, and does not limit Explorer or Integrator attempts.
+
 `source_root` is optional. When it is omitted or `null`, a `contest_openroad`
 profile uses the shared source snapshot
 `artifact_evaluation/lineage/openroad_power/p0/source`; set
@@ -19,4 +23,4 @@ Copy its measured decision metrics into `evolve.json`, set the absolute target
 metrics, and change `campaign_ready` to `true`. The evolve template begins
 locked deliberately, so placeholder values cannot launch a campaign.
 
-[`codex.json`](codex.json) is the committed, project-wide Teacher/Student policy: models, reasoning effort, retries, and timeouts. It applies to every design. Worker homes are created under each campaign `state_root`. The ignored `credentials/goalevolve_codex.env` is created locally from its committed `.example` template and is the canonical AE-3 credential source. It contains the API key and provider connection fields only. Use environment variables `GOALEVOLVE_OPENROAD_SEED` and `GOALEVOLVE_BENCHMARK_ROOT` for machine-specific defaults, or explicit relative paths in a reviewed profile.
+[`codex.json`](codex.json) is the committed, project-wide Teacher/Student policy: models, reasoning effort, retries, timeouts, Student repair budget, and Teacher Markdown-format repair budget. It applies to every design. Worker homes are created under each campaign `state_root`. The ignored `credentials/goalevolve_codex.env` is created locally from its committed `.example` template and is the canonical AE-3 credential source. It contains the API key and provider connection fields only. Use environment variables `GOALEVOLVE_OPENROAD_SEED` and `GOALEVOLVE_BENCHMARK_ROOT` for machine-specific defaults, or explicit relative paths in a reviewed profile.

@@ -33,12 +33,21 @@ def teacher_packet(*, contract: GoalContract, parent: Parent, round_index: int, 
     )
 
 
-def student_packet(*, parent: Parent, hypothesis: Hypothesis, prior: Sequence[dict[str, object]], decision_context: dict[str, object] | None = None) -> str:
+def student_packet(
+    *,
+    parent: Parent,
+    hypothesis: Hypothesis,
+    prior: Sequence[dict[str, object]],
+    decision_context: dict[str, object] | None = None,
+    epd_records: Sequence[dict[str, object]] = (),
+) -> str:
     rmp_controller_fact = (
         "For RMP timing recipes, the controller already passes the generated merged standard-cell Liberty and sets RMP_STA_SELECT_BEST_MODE=1. Do not remove, bypass, or broaden that gate in C++; it is already active for the assigned run. Preserve all existing guards and rollback behavior. For rmp_path_cone_timing and rmp_path_cone_halo_timing, the controller additionally owns union-of-four-paths-per-endpoint and the bounded one-level/16-instance upstream fanin halo; the halo recipe also sets RMP_PATH_CONE_ONLY=1. Edit only the source-side cone-quality/admission and fallback behavior assigned by the hypothesis, never those Tcl budgets."
         if hypothesis.timing_recipe_id in {"rmp_delay_timing", "rmp_path_cone_timing", "rmp_path_cone_halo_timing"}
         else ""
     )
+    role_packet = _role_packet(hypothesis=hypothesis, epd_records=epd_records)
+    teacher_handoff = _teacher_handoff(hypothesis)
     return "\n".join(
         [
             "# GoalEvolve v2 Student Packet",
@@ -49,6 +58,8 @@ def student_packet(*, parent: Parent, hypothesis: Hypothesis, prior: Sequence[di
             "## Assigned Hypothesis",
             json.dumps(hypothesis.to_dict(), ensure_ascii=False, indent=2),
             "",
+            teacher_handoff,
+            "",
             "## Active Decision Stage",
             json.dumps(decision_context or {"mode": "single_stage"}, ensure_ascii=False, indent=2),
             "",
@@ -56,13 +67,89 @@ def student_packet(*, parent: Parent, hypothesis: Hypothesis, prior: Sequence[di
             "Return a source diff, source commit, phase-signal values, frozen-contract metrics, and exactly these checks: build, flow, metrics, lec. A verified QoR gain can be promoted after 4/4 checks even when telemetry is missing; mark it unattributed and make repairing that telemetry a follow-up obligation.",
             "",
             "## Timing/Power Trade-off Discipline",
-            "When the active stage is timing_recovery or adaptive_tradeoff, the controller—not you—selects the named repair_timing recipe and always executes/checkpoints repair_power before any timing phase. Do not edit Tcl or substitute a different recipe. In adaptive_tradeoff, obey the assigned source bucket: an upstream slot evolves repair_power, a downstream slot evolves repair_timing, and a handoff slot targets durable power moves or measured reversions; every slot still runs the complete power-then-timing flow and compares against its exact recipe baseline. Treat the assigned recipe as a controlled schedule experiment (LEGACY_MT/TNS/WNS/WNS_CONE/REROUTE/etc.); use its actual policy and command parameters when reasoning about the C++ change. Preserve or add structured source telemetry for eligible/considered moves, committed moves, journal rollbacks, retained moves, and a reason for any rejected timing-power trade-off. If your timing action reverses a power-reclaim cell replacement, explain and count that direction in the source telemetry; the evaluator independently compares checkpointed instance cell types and sends the overlap/reversion rate to the Teacher.",
+            "When the active stage is timing_recovery or adaptive_tradeoff, the controller—not you—selects the named repair_timing recipe and always executes/checkpoints repair_power before any timing phase. Do not edit Tcl or substitute a different recipe. In adaptive_tradeoff, the controller's candidate menu deliberately covers dominant-residual, repair_power-durability, and power-to-timing-reversion mechanisms; your role and selected hypothesis, not a hidden Student-number bucket, determine the source experiment. Every role still runs the complete power-then-timing flow and compares against its exact recipe baseline. Treat the assigned recipe as a controlled schedule experiment (LEGACY_MT/TNS/WNS/WNS_CONE/REROUTE/etc.); use its actual policy and command parameters when reasoning about the C++ change. Preserve or add structured source telemetry for eligible/considered moves, committed moves, journal rollbacks, retained moves, and a reason for any rejected timing-power trade-off. If your timing action reverses a power-reclaim cell replacement, explain and count that direction in the source telemetry; the evaluator independently compares checkpointed instance cell types and sends the overlap/reversion rate to the Teacher.",
             *([rmp_controller_fact] if rmp_controller_fact else []),
+            "",
+            *role_packet,
             "",
             "## Prior Negative Evidence",
             json.dumps(list(prior)[-8:], ensure_ascii=False, indent=2),
         ]
     )
+
+
+def _role_packet(*, hypothesis: Hypothesis, epd_records: Sequence[dict[str, object]]) -> list[str]:
+    records = [
+        record
+        for record in epd_records
+        if str(record.get("record_id") or "") in set(hypothesis.epd_record_ids)
+    ]
+    if hypothesis.student_role == "integrator" and hypothesis.role_mode == "epd_integration":
+        return [
+            "## Integrator Operating Protocol",
+            "You are integrating compatible, source-backed historical mechanisms whose measured attempts are not invalid. Read every referenced diff and its source-hook boundary before editing. Do not blindly apply, concatenate, or recreate historical patches. Keep only compatible decisions that fit the assigned source scope and current parent; resolve conflicts by preserving existing guards, journal rollback, Tcl ownership, and telemetry semantics. The historical records are evidence, not an inherited source tree or automatic promotion.",
+            "## Selected EPD Evidence",
+            json.dumps(records, ensure_ascii=False, indent=2),
+        ]
+    if hypothesis.student_role == "enhancer" and hypothesis.role_mode == "epd_enhancement":
+        bundles = [
+            {
+                "record_id": record.get("record_id"),
+                "idea_id": record.get("idea_id"),
+                "previous_claim": dict(record.get("source_change_bundle") or {}).get("prior_claim"),
+                "predicted_stage_effect": dict(record.get("source_change_bundle") or {}).get("prior_predicted_stage_effect"),
+                "implementation_diff_artifact": record.get("implementation_diff_artifact"),
+                "modified_files": dict(record.get("source_change_bundle") or {}).get("modified_files") or [],
+                "added_code": dict(record.get("source_change_bundle") or {}).get("added_code") or [],
+                "removed_code": dict(record.get("source_change_bundle") or {}).get("removed_code") or [],
+                "mechanism_changes": dict(record.get("source_change_bundle") or {}).get("mechanism_changes") or [],
+                "added_mechanism_changes": dict(record.get("source_change_bundle") or {}).get("added_mechanism_changes") or [],
+                "removed_mechanism_changes": dict(record.get("source_change_bundle") or {}).get("removed_mechanism_changes") or [],
+                "telemetry_changes": dict(record.get("source_change_bundle") or {}).get("telemetry_changes") or [],
+            }
+            for record in records
+        ]
+        return [
+            "## Enhancer Operating Protocol",
+            "You are strengthening one promising, source-backed historical mechanism. Inspect the prior source-change bundle and full diff before editing, identify the current bottleneck, and make one bounded refinement. Preserve the prior mechanism boundary; do not restart a suppressed experiment unchanged or broaden the patch into an unrelated rewrite. The historical result is a hypothesis seed, not a parent replacement.",
+            "## Prior Source Change Bundle",
+            json.dumps(bundles, ensure_ascii=False, indent=2),
+            "## Selected EPD Evidence",
+            json.dumps(records, ensure_ascii=False, indent=2),
+        ]
+    if hypothesis.student_role == "integrator":
+        return [
+            "## Integrator Bootstrap Protocol",
+            "No validated historical pair is available yet. Establish one clearly factored, telemetry-complete mechanism that can later be combined with independently validated evidence. Do not claim a crossover or reuse an unvalidated peer patch.",
+        ]
+    if hypothesis.student_role == "enhancer":
+        return [
+            "## Enhancer Bootstrap Protocol",
+            "No validated historical mechanism is available yet. Create one bounded refinement seed with explicit activation and falsification evidence; it becomes eligible for enhancement only after controller validation.",
+        ]
+    return [
+        "## Explorer Operating Protocol",
+        "You are an explorer. Form one fresh, bounded source-level idea from the Teacher claim, diagnosis, EDA/OpenROAD behavior, and assigned verified hook. Do not reuse a suppressed mechanism unchanged, import another Student's source change, or use EPD evidence as an unreviewed patch recipe.",
+    ]
+
+
+def _teacher_handoff(hypothesis: Hypothesis) -> str:
+    lines = ["## Teacher Handoff"]
+    if hypothesis.teacher_diagnosis_summary:
+        lines.extend(["### Diagnosis", hypothesis.teacher_diagnosis_summary])
+    if hypothesis.teacher_parent_policy:
+        lines.extend(["### Parent Policy", hypothesis.teacher_parent_policy])
+    if hypothesis.teacher_evolution_ideas:
+        lines.extend(
+            ["### Evolution Ideas", *(f"- {idea}" for idea in hypothesis.teacher_evolution_ideas)]
+        )
+    if hypothesis.teacher_predicted_stage_effect:
+        lines.extend(["### Predicted Stage Effect", hypothesis.teacher_predicted_stage_effect])
+    if hypothesis.teacher_selection_rationale:
+        lines.extend(["### Why This Assignment", hypothesis.teacher_selection_rationale])
+    if len(lines) == 1:
+        lines.append("Follow the controller-created role and source boundary for this round.")
+    return "\n".join(lines)
 
 
 def review_packet(*, verdicts: Sequence[EvidenceVerdict]) -> str:

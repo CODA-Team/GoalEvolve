@@ -34,6 +34,7 @@ def _engine(config_path: Path) -> tuple[GoalEvolveEngine, object]:
         student_ids=config.students,
         max_campaign_rounds=config.max_campaign_rounds,
         prefer_execution_champion=config.prefer_execution_champion,
+        epd_max_reinforcement_attempts=config.epd_max_reinforcement_attempts,
     )
     return engine, config
 
@@ -61,7 +62,7 @@ def _attach_configured_baseline(*, engine: GoalEvolveEngine, config) -> None:
             raise RuntimeError(f"configured baseline metric differs from frozen contract: {name}={actual}, expected={expected}")
     parent = engine._load_parent()
     distance, _, _ = engine.contract.evaluate(metrics)
-    EvolutionProgramDatabase(engine.state_root).attach_baseline_evaluation(
+    engine._epd().attach_baseline_evaluation(
         parent=parent,
         metrics=metrics,
         goal_distance=distance,
@@ -198,7 +199,7 @@ def command_baseline(args: argparse.Namespace) -> int:
     atomic_json(output / "baseline.json", result)
     measured_metrics = {str(name): float(value) for name, value in dict(result.get("metrics") or {}).items() if isinstance(value, (int, float))}
     distance, _, _ = contract.evaluate(measured_metrics)
-    EvolutionProgramDatabase(config.state_root).attach_baseline_evaluation(
+    engine._epd().attach_baseline_evaluation(
         parent=parent,
         metrics=measured_metrics,
         goal_distance=distance,

@@ -1865,6 +1865,14 @@ class Contest2026OpenROADEvaluator:
             # throw Tcl.  Always legalize before the one authoritative check:
             # an initial failing probe would otherwise remain in the log and
             # could be contradicted by a fabricated "legal" marker later.
+            # The DPL commands below are the public OpenROAD/ORFS Tcl forms:
+            # first legalize, then improve locally, mirror for physical
+            # quality, and legalize once more before the authoritative check.
+            # The sequence is intentionally controller-owned so a Student C++
+            # mechanism cannot leave a routability-sensitive placement state.
+            "detailed_placement",
+            "improve_placement",
+            "optimize_mirroring",
             "detailed_placement",
             "check_placement -verbose",
             *checkpoint("post_placement"),

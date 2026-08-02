@@ -12,5 +12,6 @@
   "command_timeout_s": 7200,
   "command_retries": 1,
   "min_free_gb": 20.0,
-  "max_campaign_rounds": null
+  "max_campaign_rounds": null,
+  "epd_max_reinforcement_attempts": 2
 }

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, Sequence
 
 from ..core.io import atomic_json, load_json
 
@@ -209,6 +209,118 @@ def timing_recipe(recipe_id: str | None) -> TimingRecoveryRecipe:
     if key not in TIMING_RECOVERY_RECIPES:
         raise ValueError(f"unknown timing recovery recipe: {key}")
     return TIMING_RECOVERY_RECIPES[key]
+
+
+# These names are existing OpenROAD policy entry points, not mechanism
+# categories.  A Teacher remains free to author any bounded decision inside a
+# policy, while the Controller must run a recipe that actually dispatches the
+# edited policy before it can collect causal evidence.
+_PHASE_BOUND_POLICY_RECIPES: dict[str, tuple[str, ...]] = {
+    "SetupMt1Policy": (
+        "mt1_deep",
+        "rmp_delay_timing",
+        "rmp_path_cone_timing",
+        "rmp_path_cone_halo_timing",
+        "rmp_post_timing_halo",
+    ),
+    "MeasuredCriticalPathPolicy": ("measured_critical_path_deep",),
+    "MeasuredVtSwapPolicy": ("measured_vt_deep",),
+    "SetupLegacyMtPolicy": ("legacy_mt",),
+    "SetupLastGaspPolicy": ("last_gasp_deep",),
+    "SetupCritVtSwapPolicy": ("crit_vt_deep",),
+    "SetupReroutePolicy": ("reroute_mid_power",),
+    "SetupTnsPolicy": (
+        "tns_global",
+        "rmp_delay_timing",
+        "rmp_path_cone_timing",
+        "rmp_path_cone_halo_timing",
+        "rmp_post_timing_halo",
+    ),
+    "SetupWnsPolicy": ("wns_path_deep", "wns_cone"),
+}
+
+# Generic source files do not expose one policy class that can be inferred
+# from their basename.  They still need a bounded Controller recipe whenever a
+# Teacher says the source decision is meaningful only under an RMP schedule.
+_SOURCE_BOUND_RECIPES: dict[str, tuple[str, ...]] = {
+    "src/rmp/src/Restructure.cpp": (
+        "rmp_delay_timing",
+        "rmp_path_cone_timing",
+        "rmp_path_cone_halo_timing",
+        "rmp_post_timing_halo",
+        "rmp_area_power",
+    ),
+}
+
+
+def teacher_selectable_recipe_ids(evaluation_mode: str) -> tuple[str, ...]:
+    """Return controller-owned schedules that a Teacher may name in Markdown.
+
+    This is a closed menu, not permission to create Tcl.  The selected ID is
+    later checked against the source hook and used unchanged for the candidate
+    and its no-diff parent baseline.
+    """
+    if evaluation_mode == "power_only":
+        return tuple(
+            recipe_id
+            for recipe_id, recipe in TIMING_RECOVERY_RECIPES.items()
+            if recipe.insert_rmp_area_restructure or recipe_id == "legacy_setup"
+        )
+    return tuple(
+        recipe_id
+        for recipe_id, recipe in TIMING_RECOVERY_RECIPES.items()
+        if not recipe.insert_rmp_area_restructure
+    )
+
+
+def recipe_is_compatible_with_source_hooks(
+    recipe_id: str,
+    source_hooks: Sequence[str],
+) -> bool:
+    """Whether a declared controller recipe reaches every constrained hook."""
+    if recipe_id not in TIMING_RECOVERY_RECIPES:
+        return False
+    required_sets = _required_recipe_sets(source_hooks)
+    return all(recipe_id in choices for choices in required_sets)
+
+
+def _required_recipe_sets(source_hooks: Sequence[str]) -> list[tuple[str, ...]]:
+    required_sets: list[tuple[str, ...]] = []
+    for hook in source_hooks:
+        normalized = str(hook).replace("\\", "/")
+        if normalized in _SOURCE_BOUND_RECIPES:
+            required_sets.append(_SOURCE_BOUND_RECIPES[normalized])
+        policy = normalized.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        if policy in _PHASE_BOUND_POLICY_RECIPES:
+            required_sets.append(_PHASE_BOUND_POLICY_RECIPES[policy])
+    return required_sets
+
+
+def recipe_for_source_hooks(
+    source_hooks: Sequence[str],
+    fallback_recipe_id: str | None,
+) -> str:
+    """Return a controller recipe that reaches every phase-bound policy hook.
+
+    Generic helpers are intentionally left on the scheduler's fallback.  For
+    a direct policy file, retaining an incompatible recipe would make a full
+    flow look like a valid source experiment even though the changed code
+    never ran.  If several direct policy hooks are incompatible with one
+    another, preserve the supplied recipe so Controller admission can reject
+    the assignment rather than silently inventing a combined Tcl schedule.
+    """
+    fallback = timing_recipe(fallback_recipe_id).recipe_id
+    required_sets = _required_recipe_sets(source_hooks)
+    if not required_sets:
+        return fallback
+    compatible = [
+        recipe_id
+        for recipe_id, recipe in TIMING_RECOVERY_RECIPES.items()
+        if all(recipe_id in choices for choices in required_sets)
+    ]
+    if not compatible:
+        return fallback
+    return fallback if fallback in compatible else compatible[0]
 
 
 def recipes_for_students(student_ids: Iterable[str]) -> dict[str, str]:

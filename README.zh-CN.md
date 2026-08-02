@@ -117,6 +117,21 @@ OpenROAD 构建依赖、环境脚本和动态库由用户准备的 workspace 负
 
 从 [config/credentials/goalevolve_codex.env.example](config/credentials/goalevolve_codex.env.example) 建立被忽略的 `config/credentials/goalevolve_codex.env`，并执行 `chmod 600 config/credentials/goalevolve_codex.env`。GoalEvolve 永远不读取 `~/.codex`，而是从这个项目文件创建隔离的 Teacher/Student home。所有 design 共用的模型和推理强度位于 `config/codex.json`，当前为 `gpt-5.6-terra` 与 `xhigh`。
 
+### EPD v2 生命周期
+
+每个 campaign 将演化程序数据库写入
+`outputs/ae3/<design>/knowledge/epd.json`。任一 Student 开始前，Teacher 的每个结构化
+idea 都会保存预测阶段效果、源码 hook、预期信号、排序和 `pending` 状态。Student 完成真实
+测评后，该 idea 更新为 `validated`、`promising` 或 `invalid`；只有从未执行的 idea 保持
+`pending`。
+
+Integrator 可从所有带有持久化源码 diff 的非 `invalid` 尝试中选取组合；Enhancer 仅可接收
+`promising` idea；按 Teacher 优先级排序的 `pending` idea 会进入 Explorer 的候选菜单。Enhancer
+prompt 必定包含上一轮 diff artifact、修改文件、增删代码、增删机制事实和 telemetry 变化。
+每个 promising idea 最多有 `epd_max_reinforcement_attempts` 次 Enhancer 强化机会，默认 `2`，
+在 evolve profile 中设置且对整个 campaign 生效。结果被晋升时，对应 idea 会记录继承的 parent
+和 source hash。
+
 ## Design Profile
 
 项目现已携带全部八个 contest design 的输入：`aes_cipher_top`、`ariane`、`jpeg_encoder`、`mempool_group`、`nvdla_a`、`nvdla_c`、`nvdla_m`、`nvdla_p`。每个 design 的 `.def(.gz)`、Verilog、SDC 与官方初始 metrics 位于 `third_party/benchmarks/benchmarks/`；它们共享 `artifact_evaluation/lineage/openroad_power/p0/` 的 source-only OpenROAD p0 快照，并以全树内容 hash 标识。

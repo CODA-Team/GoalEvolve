@@ -20,6 +20,11 @@ from .preflight import preflight_candidate
 from ..token_ledger import record_round_token_usage
 from ..planning.timing_recovery import record_schedule_memory, timing_recipe
 from .workspace import clone_source_tree
+from .teacher_assignment import (
+    build_role_templates,
+    materialize_teacher_assignments,
+    source_structure_index,
+)
 from ..evaluation.leaderboard import update_unified_leaderboard
 
 
@@ -37,6 +42,13 @@ class GoalEvolveEngine:
     teacher: Teacher | None = None
     max_campaign_rounds: int | None = None
     prefer_execution_champion: bool = False
+    epd_max_reinforcement_attempts: int = 2
+
+    def _epd(self) -> EvolutionProgramDatabase:
+        return EvolutionProgramDatabase(
+            self.state_root,
+            max_reinforcement_attempts=self.epd_max_reinforcement_attempts,
+        )
 
     def initialize(self, *, baseline_metrics: dict[str, float], source_commit: str = "baseline", source_hash: str = "baseline") -> Parent:
         self.state_root.mkdir(parents=True, exist_ok=True)
@@ -47,19 +59,22 @@ class GoalEvolveEngine:
                 raise RuntimeError("state root already has a different frozen goal contract")
             print(f"[GoalEvolve][campaign] resume contract={existing_contract.contract_id}", flush=True)
             parent = self._load_parent()
-            EvolutionProgramDatabase(self.state_root).ensure_baseline(parent)
+            self._epd().ensure_baseline(parent)
             return parent
         distance, _, _ = self.contract.evaluate(baseline_metrics)
         parent = Parent("baseline", dict(baseline_metrics), source_commit, source_hash, distance)
         atomic_json(self.state_root / "contract.json", self.contract.to_dict())
         atomic_json(self.state_root / "parent.json", parent.to_dict())
         atomic_json(self.state_root / "plugins.json", {"planner": self.planner.name, "teacher": self.teacher.name if self.teacher else "none", "student_editor": self.student_editor.name if self.student_editor else "none", "evaluator": self.evaluator.name, "workspace": self.workspace_provider.name})
-        EvolutionProgramDatabase(self.state_root).ensure_baseline(parent)
+        self._epd().ensure_baseline(parent)
         print(f"[GoalEvolve][campaign] initialized contract={self.contract.contract_id} baseline_distance={distance:.8f}", flush=True)
         return parent
 
     def run(self, *, rounds: int, baseline_metrics: dict[str, float] | None = None) -> Parent:
         parent = self._load_parent() if (self.state_root / "parent.json").is_file() else self.initialize(baseline_metrics=baseline_metrics or self.contract.baseline_metrics)
+        reclassified = self._epd().reclassify_historical_unactivated_attempts()
+        if reclassified:
+            print(f"[GoalEvolve][epd] reclassified_unactivated={len(reclassified)}", flush=True)
         parent = self._adopt_execution_champion(parent)
         start = self._last_round() + 1
         for round_index in range(start, start + rounds):
@@ -115,6 +130,102 @@ class GoalEvolveEngine:
                     "goal_distance": distance,
                 }
         return None
+
+    @staticmethod
+    def _matching_teacher_idea(
+        *,
+        epd_database: EvolutionProgramDatabase,
+        idea_id: str,
+        hypothesis: Hypothesis,
+    ) -> str:
+        """Bind an Explorer only to a pending idea with the same source fence."""
+        if not idea_id or hypothesis.student_role != "explorer":
+            return ""
+        try:
+            idea = epd_database.idea(idea_id)
+        except KeyError:
+            return ""
+        hooks = tuple(str(path) for path in list(idea.get("source_hooks") or ()) if path)
+        signals = tuple(str(signal) for signal in list(idea.get("expected_signals") or ()) if signal)
+        if not hooks or not signals:
+            return ""
+        if not set(hooks).issubset(hypothesis.source_hooks):
+            return ""
+        if not set(signals).issubset(hypothesis.expected_signals):
+            return ""
+        return idea_id
+
+    def _teacher_role_schedule(
+        self,
+        *,
+        round_index: int,
+        diagnosis,
+        portfolio: Mapping[str, object],
+        decision_context: Mapping[str, object],
+    ) -> tuple[tuple[Hypothesis, ...], dict[str, object]]:
+        """Schedule role envelopes without allocating mechanisms to them."""
+        previous = self._previous_round_diagnosis(round_index)
+        previous_bottleneck = str(previous.get("dominant_bottleneck") or "")
+        current_bottleneck = str(getattr(diagnosis, "dominant_bottleneck", "") or "")
+        changed = bool(previous_bottleneck and current_bottleneck and previous_bottleneck != current_bottleneck)
+        templates = build_role_templates(
+            student_ids=self.student_ids,
+            round_index=round_index,
+            decision_context=decision_context,
+            portfolio=portfolio,
+            suspend_explorers=changed,
+        )
+        if not templates and not changed:
+            # An empty initial EPD still needs fresh experiments. This branch
+            # is defensive for profiles with fewer than two configured IDs.
+            templates = build_role_templates(
+                student_ids=self.student_ids,
+                round_index=round_index,
+                decision_context=decision_context,
+                portfolio={},
+                suspend_explorers=False,
+            )
+        schedule = {
+            "schema_version": "goalevolve.v2.role-schedule.v1",
+            "previous_dominant_bottleneck": previous_bottleneck or None,
+            "dominant_bottleneck": current_bottleneck or None,
+            "bottleneck_changed": changed,
+            "explorers_suspended": changed,
+            "roles": [
+                {
+                    "student_id": item.student_id,
+                    "role": item.student_role,
+                    "role_mode": item.role_mode,
+                    "epd_options": [dict(option) for option in item.candidate_options],
+                }
+                for item in templates
+            ],
+        }
+        return templates, schedule
+
+    def _previous_round_diagnosis(self, round_index: int) -> dict[str, object]:
+        if round_index <= 1:
+            return {}
+        payload = load_json(
+            self.state_root / "rounds" / f"round_{round_index - 1:03d}" / "round.json",
+            {},
+        ) or {}
+        diagnosis = payload.get("diagnosis") if isinstance(payload, Mapping) else {}
+        return dict(diagnosis) if isinstance(diagnosis, Mapping) else {}
+
+    @staticmethod
+    def _teacher_reference_symptoms(
+        *,
+        diagnosis,
+        decision_context: Mapping[str, object],
+    ) -> tuple[str, ...]:
+        stage = str(decision_context.get("stage") or "")
+        if stage == "power_reclaim":
+            return ("leakage", "dynamic", "power", "power_reclaim")
+        if stage in {"timing_recovery", "adaptive_tradeoff"}:
+            return ("tns", "timing", "timing_recovery")
+        bottleneck = str(getattr(diagnosis, "dominant_bottleneck", "") or "")
+        return tuple(dict.fromkeys((bottleneck.split("_")[0], "timing", "power")))
 
     def run_round(self, *, round_index: int, parent: Parent) -> Parent:
         context_factory = getattr(self.promotion_policy, "context", None)
@@ -177,22 +288,226 @@ class GoalEvolveEngine:
                 flush=True,
             )
         else:
-            fallback_hypotheses = self.planner.plan(
-                contract=self.contract,
-                parent=parent,
-                round_index=round_index,
-                student_ids=self.student_ids,
-                state_root=self.state_root,
-                diagnosis=round_diagnosis,
-                decision_context=decision_context,
-            )
             previous_review = self._previous_teacher_review(round_index, parent=parent)
-            hypotheses = list(fallback_hypotheses)
-            if self.teacher is not None:
-                teacher_plan = self.teacher.plan(state_root=self.state_root, round_root=round_root, round_index=round_index, contract=self.contract, parent=parent, diagnosis=round_diagnosis, fallback=fallback_hypotheses, previous_review=previous_review, decision_context=decision_context)
-                hypotheses = list(teacher_plan.hypotheses)
+        epd_database = self._epd()
+        epd_portfolio = epd_database.role_portfolio(
+            contract=self.contract,
+            parent=parent,
+        )
+        atomic_json(round_root / "epd_role_portfolio.json", epd_portfolio)
+        if saved_teacher_plan is None:
+            if getattr(self.teacher, "name", "") == "codex_teacher":
+                role_templates, role_schedule = self._teacher_role_schedule(
+                    round_index=round_index,
+                    diagnosis=round_diagnosis,
+                    portfolio=epd_portfolio,
+                    decision_context=decision_context,
+                )
+                if not role_templates:
+                    raise RuntimeError("teacher_role_schedule_has_no_actionable_students")
+                parent_source = self.state_root / "parents" / parent.source_hash / "source"
+                source_index = source_structure_index(
+                    source_root=parent_source,
+                    allowed_patch_roots=tuple(getattr(self.evaluator, "config", object()).allowed_patch_roots)
+                    if hasattr(getattr(self.evaluator, "config", object()), "allowed_patch_roots")
+                    else (),
+                )
+                retriever = getattr(self.planner, "retriever", None)
+                paper_cards = (
+                    retriever.paper_card_references(
+                        parent=parent,
+                        symptoms=self._teacher_reference_symptoms(
+                            diagnosis=round_diagnosis,
+                            decision_context=decision_context,
+                        ),
+                        state_root=self.state_root,
+                    )
+                    if retriever is not None and hasattr(retriever, "paper_card_references")
+                    else []
+                )
+                teacher_plan = self.teacher.plan(
+                    state_root=self.state_root,
+                    round_root=round_root,
+                    round_index=round_index,
+                    contract=self.contract,
+                    parent=parent,
+                    diagnosis=round_diagnosis,
+                    fallback=role_templates,
+                    previous_review=previous_review,
+                    decision_context=decision_context,
+                    source_index=source_index,
+                    source_root=parent_source,
+                    paper_cards=paper_cards,
+                )
                 teacher_plan_payload = teacher_plan.plan
+                if not bool(teacher_plan_payload.get("format_valid")):
+                    raise RuntimeError("teacher_markdown_format_invalid_after_repair")
+                parsed_plan = dict(teacher_plan_payload.get("parsed_markdown") or {})
+                def materialize(plan: Mapping[str, object]):
+                    return materialize_teacher_assignments(
+                        assignments=tuple(
+                            item for item in list(plan.get("assignments") or ()) if isinstance(item, Mapping)
+                        ),
+                        evolution_ideas=tuple(
+                            item for item in list(plan.get("evolution_idea_records") or ()) if isinstance(item, Mapping)
+                        ),
+                        templates=role_templates,
+                        source_root=parent_source,
+                        allowed_patch_roots=tuple(getattr(self.evaluator.config, "allowed_patch_roots", ())),
+                        historical_ideas=epd_database.ideas(),
+                        paper_card_ids=tuple(str(row.get("card_id") or "") for row in paper_cards),
+                        teacher_context={
+                            "diagnosis_summary": plan.get("diagnosis_summary"),
+                            "parent_policy": plan.get("parent_policy"),
+                        },
+                    )
+
+                materialized = materialize(parsed_plan)
+                repair_budget = max(
+                    1,
+                    int(getattr(getattr(self.teacher, "config", None), "max_plan_format_repairs", 1)),
+                )
+                controller_repairs: list[dict[str, object]] = []
+                prior_markdown = str(teacher_plan_payload.get("teacher_markdown") or "")
+                controller_errors = list(materialized.errors)
+                for repair_index in range(1, repair_budget + 1):
+                    if not controller_errors:
+                        break
+                    repaired = self.teacher.repair_plan_after_controller_validation(
+                        state_root=self.state_root,
+                        round_root=round_root,
+                        round_index=round_index,
+                        prior_markdown=prior_markdown,
+                        errors=controller_errors,
+                        role_templates=role_templates,
+                        repair_index=repair_index,
+                    )
+                    controller_repairs.append(repaired)
+                    if not bool(repaired.get("teacher_ok")):
+                        controller_errors = ["teacher_assignment_repair_turn_failed"]
+                        break
+                    format_errors = [str(item) for item in list(repaired.get("format_errors") or ())]
+                    if format_errors:
+                        controller_errors = format_errors
+                        prior_markdown = str(repaired.get("teacher_markdown") or prior_markdown)
+                        continue
+                    parsed_plan = dict(repaired.get("parsed_markdown") or {})
+                    materialized = materialize(parsed_plan)
+                    controller_errors = list(materialized.errors)
+                    prior_markdown = str(repaired.get("teacher_markdown") or prior_markdown)
+                    if not controller_errors:
+                        teacher_plan_payload["teacher_markdown"] = prior_markdown
+                        teacher_plan_payload["parsed_markdown"] = parsed_plan
+                if controller_repairs:
+                    teacher_plan_payload["controller_assignment_repair"] = controller_repairs[-1]
+                    teacher_plan_payload["controller_assignment_repairs"] = controller_repairs
+                if controller_errors:
+                    teacher_plan_payload["controller_assignment_errors"] = controller_errors
+                    atomic_json(round_root / "teacher_plan.json", teacher_plan_payload)
+                    raise RuntimeError("teacher_assignment_rejected_after_repair:" + ";".join(controller_errors))
+                hypotheses = list(materialized.hypotheses)
+                teacher_plan_payload["hypotheses"] = [item.to_dict() for item in hypotheses]
+                teacher_plan_payload["role_schedule"] = role_schedule
+                teacher_plan_payload["source_index"] = source_index
+                teacher_plan_payload["paper_cards"] = paper_cards
+                cited_cards = [
+                    str(card_id)
+                    for idea in list(parsed_plan.get("evolution_idea_records") or ())
+                    if isinstance(idea, Mapping)
+                    for card_id in list(idea.get("paper_card_ids") or ())
+                    if str(card_id)
+                ]
+                if retriever is not None and hasattr(retriever, "record_paper_card_references"):
+                    teacher_plan_payload["paper_card_usage"] = retriever.record_paper_card_references(
+                        state_root=self.state_root,
+                        round_index=round_index,
+                        card_ids=cited_cards,
+                    )
+            else:
+                fallback_hypotheses = self.planner.plan(
+                    contract=self.contract,
+                    parent=parent,
+                    round_index=round_index,
+                    student_ids=self.student_ids,
+                    state_root=self.state_root,
+                    diagnosis=round_diagnosis,
+                    decision_context=decision_context,
+                )
+                hypotheses = list(fallback_hypotheses)
+                if self.teacher is not None:
+                    teacher_plan = self.teacher.plan(
+                        state_root=self.state_root,
+                        round_root=round_root,
+                        round_index=round_index,
+                        contract=self.contract,
+                        parent=parent,
+                        diagnosis=round_diagnosis,
+                        fallback=fallback_hypotheses,
+                        previous_review=previous_review,
+                        decision_context=decision_context,
+                    )
+                    hypotheses = list(teacher_plan.hypotheses)
+                    teacher_plan_payload = teacher_plan.plan
+            if teacher_plan_payload:
                 atomic_json(round_root / "teacher_plan.json", teacher_plan_payload)
+                markdown = str(teacher_plan_payload.get("teacher_markdown") or "")
+                if markdown:
+                    (round_root / "teacher_plan.md").write_text(markdown + "\n", encoding="utf-8")
+                atomic_json(
+                    round_root / "teacher_plan.parsed.json",
+                    dict(teacher_plan_payload.get("parsed_markdown") or {}),
+                )
+        idea_references: dict[str, str] = {}
+        if teacher_plan_payload:
+            parsed_plan = dict(teacher_plan_payload.get("parsed_markdown") or {})
+            teacher_plan_payload["retired_pending_idea_ids"] = list(
+                epd_database.retire_pending_ideas(
+                    idea_ids=tuple(str(item) for item in list(parsed_plan.get("retire_pending_ideas") or ())),
+                )
+            )
+            registered_ideas = epd_database.register_teacher_ideas(
+                round_index=round_index,
+                parent=parent,
+                evolution_ideas=tuple(
+                    item
+                    for item in list(parsed_plan.get("evolution_idea_records") or ())
+                    if isinstance(item, Mapping) and str(item.get("idea") or "").strip()
+                ) or tuple(
+                    {"reference": f"idea_{index}", "idea": str(item), "priority": index - 1}
+                    for index, item in enumerate(list(parsed_plan.get("evolution_ideas") or ()), start=1)
+                    if str(item).strip()
+                ),
+                diagnosis_summary=str(parsed_plan.get("diagnosis_summary") or ""),
+                parent_policy=str(parsed_plan.get("parent_policy") or ""),
+            )
+            for raw, idea_id in zip(list(parsed_plan.get("evolution_idea_records") or ()), registered_ideas, strict=False):
+                if isinstance(raw, Mapping) and str(raw.get("reference") or "").strip():
+                    idea_references[str(raw["reference"]).strip()] = idea_id
+        # Every assigned Student needs a durable idea lineage, including the
+        # heuristic/no-Teacher path. A matching Teacher idea is reused when
+        # possible; otherwise the assigned claim becomes a recorded idea.
+        hypotheses = [
+            replace(
+                hypothesis,
+                epd_idea_id=(
+                    self._matching_teacher_idea(
+                        epd_database=epd_database,
+                        idea_id=idea_references.get(hypothesis.teacher_idea_reference, ""),
+                        hypothesis=hypothesis,
+                    )
+                    or epd_database.ensure_idea_for_hypothesis(
+                        round_index=round_index,
+                        parent=parent,
+                        hypothesis=hypothesis,
+                    )
+                ),
+            )
+            if not hypothesis.epd_idea_id else hypothesis
+            for hypothesis in hypotheses
+        ]
+        if teacher_plan_payload:
+            teacher_plan_payload["hypotheses"] = [item.to_dict() for item in hypotheses]
+            atomic_json(round_root / "teacher_plan.json", teacher_plan_payload)
         if not hypotheses:
             raise RuntimeError("planner returned no source-verified hypotheses")
         if len(hypotheses) > len(self.student_ids):
@@ -213,10 +528,25 @@ class GoalEvolveEngine:
             for row in prior
             if str(dict(row.get("hypothesis") or {}).get("hypothesis_id") or "") not in quarantined_hypotheses
         ]
+        epd_portfolio = epd_database.role_portfolio(
+            contract=self.contract,
+            parent=parent,
+        )
+        atomic_json(round_root / "epd_role_portfolio.json", epd_portfolio)
+        epd_records = list(epd_portfolio.get("records") or [])
         for student_id, hypothesis in zip(assigned_student_ids, hypotheses, strict=True):
             prompt = round_root / "prompts" / f"{student_id}.md"
             if not prompt.is_file():
-                prompt.write_text(student_packet(parent=parent, hypothesis=hypothesis, prior=prior, decision_context=decision_context), encoding="utf-8")
+                prompt.write_text(
+                    student_packet(
+                        parent=parent,
+                        hypothesis=hypothesis,
+                        prior=prior,
+                        decision_context=decision_context,
+                        epd_records=epd_records,
+                    ),
+                    encoding="utf-8",
+                )
         prompt_paths = {student_id: round_root / "prompts" / f"{student_id}.md" for student_id in assigned_student_ids}
         candidates = self._recover_completed_candidates(
             round_root=round_root,
@@ -256,12 +586,6 @@ class GoalEvolveEngine:
                 candidate.artifacts["preflight"] = json.dumps(report.to_dict(), sort_keys=True)
                 if not report.ok and not candidate.evaluation_error:
                     candidate.evaluation_error = ";".join(report.violations)
-            # A candidate that already loses to the common promoted parent
-            # cannot become the next lineage node.  Do not spend another
-            # full build/official-flow/LEC run on a recipe baseline merely
-            # to attribute a result that is ineligible regardless of that
-            # attribution.  Candidates with lineage potential still receive
-            # the exact same-recipe no-diff baseline below.
             stage_uses_recipe_baseline = str(decision_context.get("stage") or "") in {
                 "timing_recovery",
                 "adaptive_tradeoff",
@@ -270,21 +594,17 @@ class GoalEvolveEngine:
                 str(decision_context.get("stage") or "") == "power_reclaim"
                 and candidate.hypothesis.timing_recipe_id == "rmp_area_power"
             )
-            lineage_distance, _, _ = self.contract.evaluate(parent_at_start.metrics)
-            candidate_distance, _, _ = self.contract.evaluate(candidate.metrics)
-            has_lineage_potential = not stage_uses_recipe_baseline or candidate_distance < lineage_distance - 1e-6
-            recipe_baseline_status = "not_required"
-            if stage_uses_recipe_baseline and not has_lineage_potential:
-                comparison_parent = parent
-                recipe_baseline_status = "skipped_no_lineage_improvement_potential"
-                candidate.artifacts["matched_recipe_baseline"] = recipe_baseline_status
-            else:
-                comparison_parent, recipe_baseline_status = self._recipe_matched_parent(
-                    parent=parent,
-                    hypothesis=candidate.hypothesis,
-                    decision_context=decision_context,
-                )
-                candidate.artifacts["matched_recipe_baseline"] = recipe_baseline_status
+            # A controller recipe is an intervention, so every completed
+            # source experiment needs the same-source, same-recipe parent
+            # measurement.  This includes a candidate that has already
+            # regressed against lineage: EPD and the Teacher must distinguish
+            # a bad source mechanism from a bad controller schedule.
+            comparison_parent, recipe_baseline_status = self._recipe_matched_parent(
+                parent=parent,
+                hypothesis=candidate.hypothesis,
+                decision_context=decision_context,
+            )
+            candidate.artifacts["matched_recipe_baseline"] = recipe_baseline_status
             verdict = self.promotion_policy.classify(contract=self.contract, parent=comparison_parent, candidate=candidate)
             if power_recipe_baseline and verdict.state in {"validated", "verified_qor_unattributed"}:
                 lineage_verdict = self.promotion_policy.classify(
@@ -382,7 +702,7 @@ class GoalEvolveEngine:
                 encoding="utf-8",
             )
             rows.append({"candidate": candidate, "verdict": verdict, "comparison_parent": comparison_parent})
-            EvolutionProgramDatabase(self.state_root).record(round_index=round_index, parent=comparison_parent, candidate=candidate, verdict=verdict)
+            epd_database.record(round_index=round_index, parent=comparison_parent, candidate=candidate, verdict=verdict)
         selected = self.promotion_policy.choose([(row["candidate"], row["verdict"]) for row in rows])
         if selected:
             candidate, verdict = selected
@@ -403,6 +723,10 @@ class GoalEvolveEngine:
             if callable(promote_candidate):
                 candidate_source = Path(candidate.artifacts["candidate_source"]) if candidate.artifacts.get("candidate_source") else None
                 promote_candidate(state_root=self.state_root, parent=parent_at_start, candidate=parent, candidate_source=candidate_source, candidate_artifacts=candidate.artifacts)
+            attempt_id = "EPD_" + sha256_json(
+                {"source": candidate.source_commit, "hypothesis": candidate.hypothesis.hypothesis_id}
+            )[:16]
+            epd_database.mark_inherited(record_id=attempt_id, parent=parent)
             print(f"[GoalEvolve][round={round_index:03d}][teacher] promoted student={promoted} distance={parent.goal_distance:.8f}", flush=True)
         else:
             promoted = None
@@ -428,6 +752,13 @@ class GoalEvolveEngine:
                 rows=[(row["candidate"], row["verdict"]) for row in rows],
             )
             atomic_json(round_root / "teacher_review.json", teacher_review)
+            review_markdown = str(teacher_review.get("teacher_markdown") or "")
+            if review_markdown:
+                (round_root / "teacher_review.md").write_text(review_markdown + "\n", encoding="utf-8")
+            atomic_json(
+                round_root / "teacher_review.parsed.json",
+                dict(teacher_review.get("parsed_markdown") or {}),
+            )
             self._apply_teacher_review_feedback(
                 round_index=round_index,
                 review=teacher_review,
@@ -455,7 +786,7 @@ class GoalEvolveEngine:
             "common_parent_source_hash_at_start": parent_at_start.source_hash,
             "diagnosis": round_diagnosis.to_dict(),
             "decision_context": decision_context,
-            "epd_summary": EvolutionProgramDatabase(self.state_root).summary(),
+            "epd_summary": self._epd().summary(),
             "teacher_plan": teacher_plan_payload,
             "teacher_review": teacher_review,
             "token_usage": token_usage,
@@ -598,6 +929,8 @@ class GoalEvolveEngine:
             "allowed_patch_paths",
             "activation_signals",
             "conclusive_nonactivation_patterns",
+            "epd_record_ids",
+            "teacher_evolution_ideas",
         }
         for raw in list(payload.get("hypotheses") or []):
             if not isinstance(raw, Mapping):
@@ -606,6 +939,10 @@ class GoalEvolveEngine:
             for field in tuple_fields:
                 if field in normalized:
                     normalized[field] = tuple(normalized[field] or ())
+            if "candidate_options" in normalized:
+                normalized["candidate_options"] = tuple(
+                    dict(item) for item in normalized["candidate_options"] or () if isinstance(item, Mapping)
+                )
             try:
                 hypotheses.append(Hypothesis(**normalized))
             except TypeError as exc:
@@ -1777,7 +2114,7 @@ class GoalEvolveEngine:
         # checkpoint artifact lives in the EPD rather than a parent snapshot.
         # Falling back to that authoritative same-flow artifact keeps Teacher
         # diagnosis and prompts checkpoint-grounded from round one onward.
-        for record in EvolutionProgramDatabase(self.state_root).records():
+        for record in self._epd().records():
             if str(record.get("parent_id") or "") != parent.parent_id:
                 continue
             if str(record.get("source_hash") or "") != parent.source_hash:
@@ -1812,6 +2149,11 @@ class GoalEvolveEngine:
             self.state_root / "knowledge" / "evidence_quarantine.json", {}
         ) or {}
         excluded = {str(item) for item in list(quarantine.get("hypothesis_ids") or [])}
+        epd_status_by_hypothesis = {
+            str(row.get("hypothesis_id") or ""): str(row.get("epd_status") or "")
+            for row in self._epd().records()
+            if str(row.get("hypothesis_id") or "")
+        }
         outcomes = []
         for row in list(payload.get("outcomes") or []):
             if not isinstance(row, dict):
@@ -1828,9 +2170,13 @@ class GoalEvolveEngine:
                     "hypothesis_id": hypothesis_id,
                     "mechanism_family": row.get("mechanism_family") or hypothesis.get("mechanism_family"),
                     "verdict": row.get("verdict"),
+                    "epd_lifecycle": epd_status_by_hypothesis.get(hypothesis_id, ""),
                 }
             )
-        raw_review = payload.get("raw_review") or {}
+        parsed_review = payload.get("parsed_markdown") or {}
+        raw_review = parsed_review if isinstance(parsed_review, Mapping) else {}
+        if not raw_review:
+            raw_review = payload.get("raw_review") or {}
         # Free-form review prose cannot be selectively redacted.  If this
         # round contains quarantined controller evidence, omit that prose and
         # pass only the remaining structured outcomes; otherwise a corrected
@@ -1843,6 +2189,18 @@ class GoalEvolveEngine:
             raw_review = {
                 "quarantined": True,
                 "reason": "prior review depended on quarantined controller evidence",
+            }
+        unactivated = [
+            row for row in outcomes if str(row.get("epd_lifecycle") or "") == "unactivated"
+        ]
+        if unactivated:
+            # The review was generated before the lifecycle repair and may
+            # call a non-firing mechanism "suppressed". EPD's current
+            # source-backed lifecycle is authoritative for the next plan.
+            raw_review = {
+                "superseded": True,
+                "reason": "current EPD lifecycle marks one or more completed attempts unactivated; prior suppression prose has no authority until an executing recipe is measured",
+                "unactivated_hypothesis_ids": [str(row["hypothesis_id"]) for row in unactivated],
             }
         committed_round = load_json(path.parent / "round.json", {}) or {}
         committed_parent = dict(committed_round.get("parent_after") or {})
@@ -1862,6 +2220,7 @@ class GoalEvolveEngine:
             "teacher_ok": bool(payload.get("teacher_ok")),
             "diagnosis": payload.get("diagnosis") or {},
             "raw_review": raw_review,
+            "teacher_markdown": "" if unactivated else (payload.get("teacher_markdown") or ""),
             "outcomes": outcomes,
             # The deterministic controller—not review prose—owns lineage.
             # Supplying the committed round decision prevents a later Teacher

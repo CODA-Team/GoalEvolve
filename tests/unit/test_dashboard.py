@@ -51,6 +51,9 @@ def _write_campaign(root: Path) -> None:
                     "claim": "Prioritize the critical timing path.",
                     "source_hooks": ["src/rsz/RecoverTiming.cc"],
                     "timing_recipe_id": "tns_global",
+                    "student_role": "explorer",
+                    "role_mode": "fresh_exploration",
+                    "epd_record_ids": [],
                 },
                 {
                     "student_id": "student_2",
@@ -143,6 +146,9 @@ def test_campaign_snapshot_exposes_ideas_progress_and_qor_history() -> None:
         "claim": "Prioritize the critical timing path.",
         "source_hooks": ["src/rsz/RecoverTiming.cc"],
         "timing_recipe_id": "tns_global",
+        "student_role": "explorer",
+        "role_mode": "fresh_exploration",
+        "epd_record_ids": [],
     }
     assert snapshot["rounds"][0]["students"][0]["status"] == "validated"
     assert snapshot["rounds"][1]["students"] == [
