@@ -9,10 +9,11 @@ source outputs/toolchain/activate.sh
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae1
 ```
 
-AE-1 verifies the release manifest, frozen AES source, portable Tcl, official
-parser/checker, all eight shipped design inputs (`.def(.gz)`, Verilog, SDC,
-and metrics), ASAP7 files, the shared OpenROAD p0 manifest/content digest,
-and Python. The JSON result is the authoritative preflight record.
+AE-1 verifies the release manifest, all eight frozen sources and portable Tcl
+files, the official parser/checker, all eight shipped design inputs
+(`.def(.gz)`, Verilog, SDC, and metrics), ASAP7 files, the shared OpenROAD p0
+manifest/content digest, and Python. The JSON result is the authoritative
+preflight record.
 
 ## AE-2: deterministic fixed-artifact replay
 
@@ -21,16 +22,28 @@ export OPENROAD_EXE=/path/to/prepared/OpenROAD/bin/openroad
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2-preflight \
   --artifact aes_r54_student1 --openroad "$OPENROAD_EXE" --verbose
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2 \
-  --artifact aes_r54_student1 --openroad "$OPENROAD_EXE" --verbose
+  --artifact aes_r54_student1 --rebuild --jobs 8 --verbose
 ```
 
-This command never starts Teacher, Student, retrieval, Codex, or an API call. It runs the path-normalized R54 Tcl with a prepared, version-matched host OpenROAD executable into `outputs/ae2/`, parses metrics, executes the official 4/4 checker, and compares the three decision metrics with the tolerances in `release_manifest.json`.
+This command never starts Teacher, Student, retrieval, Codex, or an API call.
+It stages and builds the selected artifact's frozen source, runs that binary
+with the path-normalized Tcl into `outputs/ae2/`, parses metrics, executes the
+official 4/4 checker, and compares the three decision metrics with the
+tolerances in `release_manifest.json`. A later run may omit `--rebuild` to
+reuse only that artifact's build cache.
 
-Before replay, run `ae2-preflight` with the same `OPENROAD_EXE`; it verifies
-that executable starts under the active host environment. `--verbose` streams
-flow logs to the terminal; all logs remain recorded under `outputs/ae2/`.
+Before replay, `ae2-preflight` with `OPENROAD_EXE` verifies that the active
+host environment can launch OpenROAD. The external executable is a diagnostic
+only: formal AE-2 never uses it in place of the selected artifact binary.
+`--verbose` streams flow logs to the terminal; all logs remain recorded under
+`outputs/ae2/`.
 
-The fixed claim is post-route `global_route + estimate_parasitics`, not detailed routing. A passing AE-2 report proves that the released source artifact, benchmark, checker, and flow produce the reported result on the declared environment; it does not prove a fresh LLM run will rediscover the same patch.
+The selected modes are `power_then_timing`, NVDLA-A `power_only`, and NVDLA-C
+`timing_only`; none is detailed routing. A passing AE-2 report proves that the
+released source artifact, benchmark, checker, and flow produce the reported
+result on the declared environment; it does not prove a fresh LLM run will
+rediscover the same patch. See
+[AE2_SELECTIONS.md](AE2_SELECTIONS.md) for the eight source/Tcl/QoR records.
 
 ## AE-3: fresh evolution
 
@@ -64,7 +77,11 @@ An AE-3 pass means the key, Codex invocation, source editing, build, flow, offic
 
 ## Evidence inventory
 
-`expected/aes_cipher_top/r054_student1/` contains the candidate/evidence/hypothesis records, metrics, observer scores, original and portable Tcl, source diff, and source manifest. `lineage/` contains the full immutable source. Generated ODBs, builds, flows, and API sessions belong under `outputs/`, not this release evidence.
+Each `expected/<design>/<selection>/` directory contains the candidate/evidence
+records, metrics, original and portable Tcl, and source manifest. The matching
+`lineage/<design>/<selection>/source/` directory contains that artifact's full
+immutable OpenROAD source. Generated ODBs, builds, flows, and API sessions
+belong under `outputs/`, not this release evidence.
 
 For the package-reorganization comparison, run
 `python3 artifact_evaluation/audit_migration.py --reference ../GoalEvolve_v2 --format markdown`.

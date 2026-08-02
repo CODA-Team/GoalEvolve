@@ -1,0 +1,125 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026-2026, The OpenROAD Authors
+
+#pragma once
+
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "MoveCommitter.hh"
+#include "OptimizationPolicy.hh"
+#include "OptimizerTypes.hh"
+#include "RepairSetupContext.hh"
+#include "rsz/Resizer.hh"
+#include "sta/Delay.hh"
+
+namespace sta {
+class Instance;
+class MinMax;
+class Path;
+class Pin;
+class Vertex;
+}  // namespace sta
+
+namespace utl {
+class Logger;
+}
+
+namespace rsz {
+
+class MoveCandidate;
+class MoveGenerator;
+
+// Experimental fully-MT batched setup-repair policy (selected via -policy
+// "MT1").
+//
+// Unlike SetupLegacyMtPolicy (which preserves the legacy per-endpoint loop),
+// SetupMt1Policy processes a flat batch of prepared path-driver targets per
+// iteration:
+//   1. collectWorstEndpointTargets(): collect unique path-driver pins from
+//      the worst path of each violating endpoint.
+//   2. prepareTargets(): snapshot delay context / load cap on each Target
+//      on the main thread.
+//   3. evaluateTargets(): walk prepared targets serially while dispatching
+//      move-type and candidate fanout for each target to the ThreadPool.
+//      Target-level parallelism is intentionally avoided because some
+//      generator-side STA/network queries are not thread-safe.
+//   4. commitEvaluatedTargets(): apply the best candidate for each target
+//      on the main thread, sequentially, under one ECO journal per target.
+//
+// Convergence: stops when TNS stops improving, the positive
+// max_committed_moves cap is reached, or no legal candidate is found.
+//
+// Currently supports VtSwapMt and SizeUpMt types only.
+class SetupMt1Policy : public OptimizationPolicy
+{
+ public:
+  // === OptimizationPolicy entry points
+  // ==============================================
+  SetupMt1Policy(Resizer& resizer,
+                 MoveCommitter& committer,
+                 RepairSetupContext& setup_context,
+                 const OptimizerRunConfig& config);
+  ~SetupMt1Policy() override;
+
+  const char* name() const override { return "SetupMt1Policy"; }
+  bool start() override;
+  void iterate() override;
+
+ private:
+  // === Run lifecycle and convergence =======================================
+  bool finishIfNoValidTargetPin(const std::vector<Target>& targets);
+  bool finishIfStopConditionReached(sta::Slack tns_before,
+                                    sta::Slack tns_after);
+  void finishRun(bool result);
+
+  // === Move type configuration ============================================
+  void buildMoveGenerators(const std::vector<MoveType>& move_types,
+                           const GeneratorContext& context) override;
+
+  // === Target selection =====================================================
+  std::vector<Target> collectWorstEndpointTargets() const;
+
+  // === Parallel generation and scoring =====================================
+  std::vector<TargetEvaluation> generateAndEstimateTargets(
+      const std::vector<Target>& targets);
+  TargetEvaluation generateAndEstimateTarget(const Target& target);
+  CandidateVector generateCandidates(const Target& target);
+  MoveCandidate* estimateCandidates(CandidateVector& candidates,
+                                    std::vector<Estimate>& estimates,
+                                    Estimate& best_estimate);
+
+  // === Sequential commit stage =============================================
+  int commitAndUpdateTiming(const std::vector<Target>& targets,
+                            std::vector<TargetEvaluation>& evaluations);
+  bool commitBestCandidate(MoveCandidate& best_candidate, const Target& target);
+
+  struct ElectricalState
+  {
+    const sta::Pin* pin{nullptr};
+    bool driver{false};
+    bool slew_violation{false};
+    bool capacitance_violation{false};
+    bool fanout_violation{false};
+  };
+  std::vector<ElectricalState> captureElectricalState(
+      const std::vector<sta::Instance*>& instances) const;
+  bool introducesElectricalViolation(
+      const std::vector<ElectricalState>& before) const;
+  const sta::Pin* findNetDriver(sta::Pin* load_pin) const;
+
+  // === MoveTracker reporting ===============================================
+  void trackPreparedTargets(const std::vector<Target>& targets);
+  void printTrackerIterationSummary();
+
+  // === Iteration progress ===================================================
+  int committed_moves_{0};
+  int iteration_index_{0};
+  int measured_batches_{0};
+  int committed_batches_{0};
+  int journal_rollbacks_{0};
+  int retained_batches_{0};
+};
+
+}  // namespace rsz

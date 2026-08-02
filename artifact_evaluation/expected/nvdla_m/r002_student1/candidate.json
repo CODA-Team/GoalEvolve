@@ -1,0 +1,14 @@
+{
+  "artifact_id": "nvdla_m_r2_student1",
+  "design": "nvdla_m",
+  "metrics": {
+    "drv_count": 0.0,
+    "dynamic_power_pw": 34763600000.0,
+    "leakage_power_pw": 36400000.0,
+    "runtime_s": 507.0,
+    "tns_abs_ns": 18.14
+  },
+  "parent_id": "round_002:student_1",
+  "source_commit": "c295c2c6ab4373da52252854fdefaa2b89a7573cdde864976aad79a255486253",
+  "source_hash": "f672ad5dd9316a884d1ab4e5338c4c9e5121ca6e1f9d3813d7670cb7e67a6995"
+}

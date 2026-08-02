@@ -9,7 +9,7 @@ source outputs/toolchain/activate.sh
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae1
 ```
 
-AE-1 检查 release manifest、冻结 AES 源码、可移植 Tcl、官方
+AE-1 检查 release manifest、八套冻结源码与可移植 Tcl、官方
 parser/checker、全部八个 design 的 `.def(.gz)`/Verilog/SDC/metrics、ASAP7
 文件、共享 OpenROAD p0 的 manifest/content digest 与 Python。它不要求已安装
 OpenROAD；JSON 输出是权威预检记录。
@@ -22,18 +22,23 @@ export OPENROAD_EXE=/path/to/prepared/OpenROAD/build/bin/openroad
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2-preflight \
   --artifact aes_r54_student1 --openroad "$OPENROAD_EXE" --verbose
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2 \
-  --artifact aes_r54_student1 --openroad "$OPENROAD_EXE" --verbose
+  --artifact aes_r54_student1 --rebuild --jobs 8 --verbose
 ```
 
-该命令绝不启动 Teacher、Student、retrieval、Codex 或 API 调用。它在 `outputs/ae2/`
-使用已准备且版本匹配的 OpenROAD 执行路径归一化后的 R54 Tcl，解析指标，运行官方
-4/4 checker，并按 `release_manifest.json` 的容差对比三项决策指标。
+该命令绝不启动 Teacher、Student、retrieval、Codex 或 API 调用。它将所选
+artifact 的冻结源码构建为 OpenROAD，在 `outputs/ae2/` 运行其路径归一化后的 Tcl，
+解析指标，运行官方 4/4 checker，并按 `release_manifest.json` 的容差对比三项决策指标。
+后续运行可省略 `--rebuild`，只复用该 artifact 自己的 build cache。
 
-`ae2-preflight` 会在当前 shell 环境中验证 `OPENROAD_EXE` 能够启动。完整 AE-2
-使用 `--verbose` 时会持续输出 flow 日志，日志仍会保存在 `outputs/ae2/`。只有当
-当前宿主工具链已确认可编译冻结源码版本时，才可额外使用 `--rebuild`。
+`ae2-preflight` 会在当前 shell 环境中验证 `OPENROAD_EXE` 能够启动，但它只是
+宿主环境诊断。正式 AE-2 不会用该外部二进制替代所选 artifact 的 OpenROAD；完整
+AE-2 使用 `--verbose` 时会持续输出 flow 日志，日志仍会保存在 `outputs/ae2/`。
 
-固定结果的阶段是 post-route `global_route + estimate_parasitics`，不是 detailed routing。AE-2 通过证明发布的源码 artifact、benchmark、checker 和 flow 可以产生报告结果；它不证明新鲜 LLM 进化一定会再次找到同一个 patch。
+选定模式包括 `power_then_timing`、NVDLA-A 的 `power_only` 与 NVDLA-C 的
+`timing_only`，均不是 detailed routing。AE-2 通过证明发布的源码 artifact、
+benchmark、checker 和 flow 可以产生报告结果；它不证明新鲜 LLM 进化一定会再次找到
+同一个 patch。八套 source/Tcl/QoR/目标距离记录见
+[AE2_SELECTIONS.md](AE2_SELECTIONS.md)。
 
 ## AE-3：新鲜进化
 
@@ -65,7 +70,10 @@ AE-3 通过指 key、Codex 调用、源码编辑、build、flow、官方检查�
 
 ## 证据清单
 
-`expected/aes_cipher_top/r054_student1/` 保存 candidate/evidence/hypothesis、metrics、observer score、原始和可移植 Tcl、source diff 与 source manifest。`lineage/` 保存完整不可变源码；新生成的 ODB、build、flow 和 API session 必须写在 `outputs/`，不属于 release evidence。
+每个 `expected/<design>/<selection>/` 保存 candidate/evidence、metrics、原始和
+可移植 Tcl 及 source manifest。匹配的 `lineage/<design>/<selection>/source/` 保存
+该 artifact 的完整不可变 OpenROAD 源码；新生成的 ODB、build、flow 和 API session
+必须写在 `outputs/`，不属于 release evidence。
 
 重组前后的包级审计可运行：
 `python3 artifact_evaluation/audit_migration.py --reference ../GoalEvolve_v2 --format markdown`。

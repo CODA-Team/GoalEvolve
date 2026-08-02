@@ -9,7 +9,7 @@
       "type": "object",
       "additionalProperties": {
         "type": "object",
-        "required": ["design", "parent_id", "source_hash", "source_root", "expected_root", "benchmark_root", "tolerances"]
+        "required": ["design", "parent_id", "source_hash", "source_root", "expected_root", "benchmark_root", "evaluation_mode", "tolerances"]
       }
     }
   }

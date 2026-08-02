@@ -1,0 +1,46 @@
+{
+  "artifacts": {
+    "checkpoint_metrics": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_c_evolution/campaign_r58_drv499_v2/stage_baselines/baseline_timing_only_rmp_path_cone_halo_timing_efaf3f024348efb7/checkpoint_metrics.json",
+    "checkpoint_post_route_db": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_c_evolution/campaign_r58_drv499_v2/stage_baselines/baseline_timing_only_rmp_path_cone_halo_timing_efaf3f024348efb7/post_route.odb",
+    "evaluation_log": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_c_evolution/campaign_r58_drv499_v2/stage_baselines/baseline_timing_only_rmp_path_cone_halo_timing_efaf3f024348efb7/evaluation.log",
+    "metrics_csv": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_c_evolution/campaign_r58_drv499_v2/stage_baselines/baseline_timing_only_rmp_path_cone_halo_timing_efaf3f024348efb7/metrics.csv",
+    "official_4of4_log": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_c_evolution/campaign_r58_drv499_v2/stage_baselines/baseline_timing_only_rmp_path_cone_halo_timing_efaf3f024348efb7/official_4of4.log",
+    "openroad_binary": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_c_evolution/campaign_r58_drv499_v2/stage_baselines/baseline_timing_only_rmp_path_cone_halo_timing_efaf3f024348efb7/workspace/build_goalevolve/bin/openroad",
+    "sfinal_observation": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_c_evolution/campaign_r58_drv499_v2/stage_baselines/baseline_timing_only_rmp_path_cone_halo_timing_efaf3f024348efb7/sfinal_observation.json"
+  },
+  "checks": [
+    {
+      "detail": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_c_evolution/campaign_r58_drv499_v2/stage_baselines/baseline_timing_only_rmp_path_cone_halo_timing_efaf3f024348efb7/workspace/build_goalevolve/bin/openroad",
+      "name": "build",
+      "passed": true
+    },
+    {
+      "detail": "official_openroad_flow",
+      "name": "flow",
+      "passed": true
+    },
+    {
+      "detail": "official_parse_log",
+      "name": "metrics",
+      "passed": true
+    },
+    {
+      "detail": "official_4of4_pass",
+      "name": "lec",
+      "passed": true
+    }
+  ],
+  "evaluation_mode": "timing_only",
+  "metrics": {
+    "drv_count": 476.0,
+    "dynamic_power_pw": 583700000000.0,
+    "leakage_power_pw": 17300000000.0,
+    "runtime_s": 124.0,
+    "tns_abs_ns": 8.93
+  },
+  "ok": true,
+  "parent_id": "baseline",
+  "schema_version": "goalevolve.v2.stage-baseline.v1",
+  "source_hash": "baseline",
+  "timing_recipe_id": "rmp_path_cone_halo_timing"
+}

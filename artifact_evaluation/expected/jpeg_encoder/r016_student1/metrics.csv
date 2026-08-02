@@ -1,0 +1,2 @@
+design,placement_legal,total_insts,wns,tns,time_unit,slew_over_sum,slew_over_count,cap_over_sum,cap_over_count,cap_unit,fanout_over_sum,fanout_over_count,leakage_power,total_power,power_unit,max_gr_overflow,total_gr_overflow,legal_fail_summary,tool_runtime,flow_runtime
+jpeg_encoder,1,63823,-0.1248,-52.45,ns,0.0,0,0.0,0,pF,0.0,0,115000000.0,264000000000.0,pw,,,,745.0,794.0

@@ -1,0 +1,14 @@
+exclude = [
+    "src/sta/",
+    "tmp/",
+]
+
+ignore = [
+    "unbraced-expr",
+]
+
+[style]
+indent = 2
+line-length = 100
+indent-namespace-eval = false
+spaces-in-braces = true

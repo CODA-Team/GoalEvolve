@@ -1,0 +1,51 @@
+{
+  "contract": {
+    "baseline_metrics": {
+      "dynamic_power_pw": 275930000000.0,
+      "leakage_power_pw": 3070000000.0,
+      "tns_abs_ns": 3680.33
+    },
+    "contract_id": "GC_611809e3691f98eb",
+    "design": "mempool_group",
+    "metrics": [
+      {
+        "baseline": 3680.33,
+        "hard": true,
+        "minimize": true,
+        "name": "tns_abs_ns",
+        "target": 1850.0000000000002,
+        "tolerance": 0.0,
+        "weight": 1.0
+      },
+      {
+        "baseline": 275930000000.0,
+        "hard": true,
+        "minimize": true,
+        "name": "dynamic_power_pw",
+        "target": 185000000000.0,
+        "tolerance": 0.0,
+        "weight": 1.0
+      },
+      {
+        "baseline": 3070000000.0,
+        "hard": true,
+        "minimize": true,
+        "name": "leakage_power_pw",
+        "target": 1210000000.0,
+        "tolerance": 0.0,
+        "weight": 1.0
+      }
+    ],
+    "schema_version": "goalevolve.v2.goal-contract.v1",
+    "source_fingerprint": {
+      "source_git_commit": "d231bd8f98d2a0adb8369002b2c1e7aa8e7877ed"
+    }
+  },
+  "decision_metrics": {
+    "drv_count": 814.0,
+    "dynamic_power_pw": 249940000000.0,
+    "leakage_power_pw": 3060000000.0,
+    "runtime_s": 491.0,
+    "tns_abs_ns": 2746.05
+  }
+}

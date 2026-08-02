@@ -1,0 +1,106 @@
+{
+  "artifact_id": "nvdla_c_rmp_path_cone_halo_timing",
+  "contract": {
+    "baseline_metrics": {
+      "dynamic_power_pw": 583700000000.0,
+      "leakage_power_pw": 17300000000.0,
+      "tns_abs_ns": 10.08
+    },
+    "contract_id": "GC_8954fd0acf4d9ff3",
+    "design": "nvdla_c",
+    "metrics": [
+      {
+        "baseline": 10.08,
+        "hard": false,
+        "minimize": true,
+        "name": "tns_abs_ns",
+        "target": 10.0,
+        "tolerance": 0.0,
+        "weight": 1.0
+      },
+      {
+        "baseline": 583700000000.0,
+        "hard": false,
+        "minimize": true,
+        "name": "dynamic_power_pw",
+        "target": 583000000000.0,
+        "tolerance": 0.0,
+        "weight": 1.0
+      },
+      {
+        "baseline": 17300000000.0,
+        "hard": false,
+        "minimize": true,
+        "name": "leakage_power_pw",
+        "target": 16500000000.0,
+        "tolerance": 0.0,
+        "weight": 1.0
+      }
+    ],
+    "schema_version": "goalevolve.v2.goal-contract.v1",
+    "source_fingerprint": {
+      "source_git_commit": "d231bd8f98d2a0adb8369002b2c1e7aa8e7877ed"
+    }
+  },
+  "design": "nvdla_c",
+  "goal_distances": {
+    "dynamic_power_pw": {
+      "baseline": 583700000000.0,
+      "normalized_residual": 0.0011992461881103306,
+      "target": 583000000000.0,
+      "unmet_target_percent": 0.12006861063464837,
+      "value": 583700000000.0
+    },
+    "leakage_power_pw": {
+      "baseline": 17300000000.0,
+      "normalized_residual": 0.046242774566473986,
+      "target": 16500000000.0,
+      "unmet_target_percent": 4.848484848484849,
+      "value": 17300000000.0
+    },
+    "tns_abs_ns": {
+      "baseline": 10.08,
+      "normalized_residual": 0.0,
+      "target": 10.0,
+      "unmet_target_percent": 0.0,
+      "value": 8.93
+    }
+  },
+  "parent": {
+    "evaluation_mode": "timing_only",
+    "goal_distance": 0.015814006918194772,
+    "metrics": {
+      "drv_count": 476.0,
+      "dynamic_power_pw": 583700000000.0,
+      "leakage_power_pw": 17300000000.0,
+      "runtime_s": 124.0,
+      "tns_abs_ns": 8.93
+    },
+    "parent_id": "schedule:rmp_path_cone_halo_timing",
+    "source_commit": "baseline",
+    "source_hash": "baseline",
+    "timing_recipe_id": "rmp_path_cone_halo_timing"
+  },
+  "provenance": {
+    "reference_campaign": "runtime/nvdla_c_evolution/campaign_schedule_locked_rmp_v1",
+    "reference_evidence": "../campaign_r58_drv499_v2/stage_baselines/baseline_timing_only_rmp_path_cone_halo_timing_efaf3f024348efb7",
+    "reference_source": "../campaign_r58_drv499_v2/parents/baseline/source",
+    "reference_source_manifest": {
+      "content_sha256": "0aeb0e4c3a922290534c0cd2a46d79c6b2305aec88bf78ffc4f3b4e978afcf07",
+      "directory_count": 682,
+      "external_symlinks": [],
+      "regular_file_count": 11935,
+      "symlink_count": 372,
+      "verified_no_external_symlinks": true
+    },
+    "reference_tcl": "../campaign_r58_drv499_v2/stage_baselines/baseline_timing_only_rmp_path_cone_halo_timing_efaf3f024348efb7/evaluate.tcl"
+  },
+  "recorded_flow_metrics": {
+    "drv_count": 476.0,
+    "dynamic_power_pw": 583700000000.0,
+    "leakage_power_pw": 17300000000.0,
+    "runtime_s": 124.0,
+    "tns_abs_ns": 8.93
+  },
+  "schema": "goalevolve.ae2-selection.v1"
+}

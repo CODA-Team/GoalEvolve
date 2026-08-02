@@ -1,0 +1,10 @@
+{
+  "distance_gain": 0.0,
+  "goal_distance": 0.08280176139901706,
+  "integrity_ok": true,
+  "mechanism_fired": true,
+  "reasons": [
+    "goal_distance_not_improved:0"
+  ],
+  "state": "refuted"
+}

@@ -1,0 +1,47 @@
+{
+  "artifacts": {
+    "checkpoint_metrics": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/stage_baselines/b2e98c139211cad5d066eab4e2e9e86a9ec528163702041d9c4303798bcec3f3_power_then_timing_405a72667d13eae2/checkpoint_metrics.json",
+    "checkpoint_post_route_db": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/stage_baselines/b2e98c139211cad5d066eab4e2e9e86a9ec528163702041d9c4303798bcec3f3_power_then_timing_405a72667d13eae2/post_route.odb",
+    "evaluation_log": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/stage_baselines/b2e98c139211cad5d066eab4e2e9e86a9ec528163702041d9c4303798bcec3f3_power_then_timing_405a72667d13eae2/evaluation.log",
+    "metrics_csv": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/stage_baselines/b2e98c139211cad5d066eab4e2e9e86a9ec528163702041d9c4303798bcec3f3_power_then_timing_405a72667d13eae2/metrics.csv",
+    "official_4of4_log": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/stage_baselines/b2e98c139211cad5d066eab4e2e9e86a9ec528163702041d9c4303798bcec3f3_power_then_timing_405a72667d13eae2/official_4of4.log",
+    "openroad_binary": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/stage_baselines/b2e98c139211cad5d066eab4e2e9e86a9ec528163702041d9c4303798bcec3f3_power_then_timing_405a72667d13eae2/workspace/build_goalevolve/bin/openroad",
+    "sfinal_observation": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/stage_baselines/b2e98c139211cad5d066eab4e2e9e86a9ec528163702041d9c4303798bcec3f3_power_then_timing_405a72667d13eae2/sfinal_observation.json"
+  },
+  "checks": [
+    {
+      "detail": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/stage_baselines/b2e98c139211cad5d066eab4e2e9e86a9ec528163702041d9c4303798bcec3f3_power_then_timing_405a72667d13eae2/workspace/build_goalevolve/bin/openroad",
+      "name": "build",
+      "passed": true
+    },
+    {
+      "detail": "official_openroad_flow",
+      "name": "flow",
+      "passed": true
+    },
+    {
+      "detail": "official_parse_log",
+      "name": "metrics",
+      "passed": true
+    },
+    {
+      "detail": "official_4of4_pass",
+      "name": "lec",
+      "passed": true
+    }
+  ],
+  "evaluation_mode": "power_then_timing",
+  "metrics": {
+    "drv_count": 0.0,
+    "dynamic_power_pw": 37743000000.0,
+    "leakage_power_pw": 257000000.0,
+    "runtime_s": 1273.0,
+    "tns_abs_ns": 160.62
+  },
+  "ok": true,
+  "parent_id": "round_001:student_2",
+  "power_stage_tns_ceiling_ns": null,
+  "schema_version": "goalevolve.v2.stage-baseline.v1",
+  "source_hash": "b2e98c139211cad5d066eab4e2e9e86a9ec528163702041d9c4303798bcec3f3",
+  "timing_recipe_id": "legacy_setup"
+}

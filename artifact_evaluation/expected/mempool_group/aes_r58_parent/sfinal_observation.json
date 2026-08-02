@@ -1,0 +1,29 @@
+{
+  "baseline_metrics": "/home/haixuliu/MLCAD26/MLCAD26-Contest-Scripts-Benchmarks/benchmarks/mempool_group/metrics.csv",
+  "baseline_post_opt": "/home/haixuliu/MLCAD26/MLCAD26-Contest-Scripts-Benchmarks/benchmarks/mempool_group",
+  "candidate_metrics": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/mempool_group_campaign/evolution_r58_target_1850/stage_baselines/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d_power_then_timing_94d03f611279ceab/metrics.csv",
+  "candidate_post_opt": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/mempool_group_campaign/evolution_r58_target_1850/stage_baselines/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d_power_then_timing_94d03f611279ceab",
+  "decision_role": "observer_only",
+  "design": "mempool_group",
+  "equivalent_cells": "/home/haixuliu/MLCAD26/GoalEvolve_v2/vendor/mlcad2026_official/validity_check/asap7_equivalent_cell_list.csv",
+  "formula_source": "MLCAD 2026 official evaluation/compute_score.py",
+  "schema_version": "goalevolve.v2.sfinal_observation.v1",
+  "score": {
+    "CAP_norm": 0.0,
+    "DPOWER_norm": 0.09419055557568949,
+    "Davg": 0.007349258774853707,
+    "FANOUT_norm": 0.0,
+    "LPOWER_norm": 0.003257328990228013,
+    "PERC": 2.9856746579467915e-05,
+    "Pmax": 0.0,
+    "Poverflow": 0.0,
+    "Ptotal": 0.0,
+    "R": 13.367404629696402,
+    "Rflow": 14.020408163265307,
+    "Rtool": -0.6530035335689046,
+    "SLEW_norm": 0.029856746579467915,
+    "SPPA": 12.488124339454382,
+    "Sfinal": -0.8829847763760262,
+    "TNS_norm": 0.2538576703719503
+  }
+}

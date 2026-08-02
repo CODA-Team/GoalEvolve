@@ -1,0 +1,106 @@
+{
+  "artifact_id": "mempool_aes_r58_parent",
+  "contract": {
+    "baseline_metrics": {
+      "dynamic_power_pw": 275930000000.0,
+      "leakage_power_pw": 3070000000.0,
+      "tns_abs_ns": 3680.33
+    },
+    "contract_id": "GC_611809e3691f98eb",
+    "design": "mempool_group",
+    "metrics": [
+      {
+        "baseline": 3680.33,
+        "hard": true,
+        "minimize": true,
+        "name": "tns_abs_ns",
+        "target": 1850.0000000000002,
+        "tolerance": 0.0,
+        "weight": 1.0
+      },
+      {
+        "baseline": 275930000000.0,
+        "hard": true,
+        "minimize": true,
+        "name": "dynamic_power_pw",
+        "target": 185000000000.0,
+        "tolerance": 0.0,
+        "weight": 1.0
+      },
+      {
+        "baseline": 3070000000.0,
+        "hard": true,
+        "minimize": true,
+        "name": "leakage_power_pw",
+        "target": 1210000000.0,
+        "tolerance": 0.0,
+        "weight": 1.0
+      }
+    ],
+    "schema_version": "goalevolve.v2.goal-contract.v1",
+    "source_fingerprint": {
+      "source_git_commit": "d231bd8f98d2a0adb8369002b2c1e7aa8e7877ed"
+    }
+  },
+  "design": "mempool_group",
+  "goal_distances": {
+    "dynamic_power_pw": {
+      "baseline": 275930000000.0,
+      "normalized_residual": 0.23534954517450077,
+      "target": 185000000000.0,
+      "unmet_target_percent": 35.1027027027027,
+      "value": 249940000000.0
+    },
+    "leakage_power_pw": {
+      "baseline": 3070000000.0,
+      "normalized_residual": 0.6026058631921825,
+      "target": 1210000000.0,
+      "unmet_target_percent": 152.89256198347107,
+      "value": 3060000000.0
+    },
+    "tns_abs_ns": {
+      "baseline": 3680.33,
+      "normalized_residual": 0.24347001491714057,
+      "target": 1850.0000000000002,
+      "unmet_target_percent": 48.43513513513513,
+      "value": 2746.05
+    }
+  },
+  "parent": {
+    "evaluation_mode": "power_then_timing",
+    "goal_distance": 0.36047514109460793,
+    "metrics": {
+      "drv_count": 814.0,
+      "dynamic_power_pw": 249940000000.0,
+      "leakage_power_pw": 3060000000.0,
+      "runtime_s": 491.0,
+      "tns_abs_ns": 2746.05
+    },
+    "parent_id": "preexperiment:aes_best_r58_target_1850",
+    "source_commit": "d231bd8f98d2a0adb8369002b2c1e7aa8e7877ed",
+    "source_hash": "ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d",
+    "timing_recipe_id": "mt1_sampled"
+  },
+  "provenance": {
+    "reference_campaign": "runtime/mempool_group_campaign/evolution_r58_target_1850",
+    "reference_evidence": "stage_baselines/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d_power_then_timing_94d03f611279ceab",
+    "reference_source": "parents/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d/source",
+    "reference_source_manifest": {
+      "content_sha256": "118248e3a1cec3bc9fe0f1b35fdc26a4c41a2ab0f7ade310861dd9d8af2e644e",
+      "directory_count": 682,
+      "external_symlinks": [],
+      "regular_file_count": 11935,
+      "symlink_count": 372,
+      "verified_no_external_symlinks": true
+    },
+    "reference_tcl": "stage_baselines/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d_power_then_timing_94d03f611279ceab/evaluate.tcl"
+  },
+  "recorded_flow_metrics": {
+    "drv_count": 814.0,
+    "dynamic_power_pw": 249940000000.0,
+    "leakage_power_pw": 3060000000.0,
+    "runtime_s": 491.0,
+    "tns_abs_ns": 2746.05
+  },
+  "schema": "goalevolve.ae2-selection.v1"
+}

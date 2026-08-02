@@ -1,0 +1,14 @@
+{
+  "artifact_id": "nvdla_c_rmp_path_cone_halo_timing",
+  "design": "nvdla_c",
+  "metrics": {
+    "drv_count": 476.0,
+    "dynamic_power_pw": 583700000000.0,
+    "leakage_power_pw": 17300000000.0,
+    "runtime_s": 124.0,
+    "tns_abs_ns": 8.93
+  },
+  "parent_id": "schedule:rmp_path_cone_halo_timing",
+  "source_commit": "baseline",
+  "source_hash": "baseline"
+}

@@ -1,0 +1,14 @@
+{
+  "artifact_id": "ariane_r11_student3",
+  "design": "ariane",
+  "metrics": {
+    "drv_count": 146.0,
+    "dynamic_power_pw": 594100000000.0,
+    "leakage_power_pw": 17900000000.0,
+    "runtime_s": 378.0,
+    "tns_abs_ns": 689.13
+  },
+  "parent_id": "round_011:student_3:electric_normalization",
+  "source_commit": "f37b1be0b97ff6c9714fe8fac394673e3fef4f6fc064b60fd4501e700fb06f21",
+  "source_hash": "1d6475a8066ae156c2211d549f5fa1bc38edee9de10bc77813cea029a18c9c63"
+}

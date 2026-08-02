@@ -1,0 +1,106 @@
+{
+  "artifact_id": "ariane_r11_student3",
+  "contract": {
+    "baseline_metrics": {
+      "dynamic_power_pw": 593100000000.0,
+      "leakage_power_pw": 17900000000.0,
+      "tns_abs_ns": 721.34
+    },
+    "contract_id": "GC_ca1f3828df630b76",
+    "design": "ariane",
+    "metrics": [
+      {
+        "baseline": 721.34,
+        "hard": false,
+        "minimize": true,
+        "name": "tns_abs_ns",
+        "target": 1850.0,
+        "tolerance": 0.0,
+        "weight": 1.0
+      },
+      {
+        "baseline": 593100000000.0,
+        "hard": false,
+        "minimize": true,
+        "name": "dynamic_power_pw",
+        "target": 622999999999.9999,
+        "tolerance": 0.0,
+        "weight": 1.0
+      },
+      {
+        "baseline": 17900000000.0,
+        "hard": false,
+        "minimize": true,
+        "name": "leakage_power_pw",
+        "target": 17600000000.0,
+        "tolerance": 0.0,
+        "weight": 1.0
+      }
+    ],
+    "schema_version": "goalevolve.v2.goal-contract.v1",
+    "source_fingerprint": {
+      "source_git_commit": "d231bd8f98d2a0adb8369002b2c1e7aa8e7877ed"
+    }
+  },
+  "design": "ariane",
+  "goal_distances": {
+    "dynamic_power_pw": {
+      "baseline": 593100000000.0,
+      "normalized_residual": 0.0,
+      "target": 622999999999.9999,
+      "unmet_target_percent": 0.0,
+      "value": 594100000000.0
+    },
+    "leakage_power_pw": {
+      "baseline": 17900000000.0,
+      "normalized_residual": 0.01675977653631285,
+      "target": 17600000000.0,
+      "unmet_target_percent": 1.7045454545454546,
+      "value": 17900000000.0
+    },
+    "tns_abs_ns": {
+      "baseline": 721.34,
+      "normalized_residual": 0.0,
+      "target": 1850.0,
+      "unmet_target_percent": 0.0,
+      "value": 689.13
+    }
+  },
+  "parent": {
+    "evaluation_mode": "power_then_timing",
+    "goal_distance": 0.00558659217877095,
+    "metrics": {
+      "drv_count": 146.0,
+      "dynamic_power_pw": 594100000000.0,
+      "leakage_power_pw": 17900000000.0,
+      "runtime_s": 378.0,
+      "tns_abs_ns": 689.13
+    },
+    "parent_id": "round_011:student_3:electric_normalization",
+    "source_commit": "f37b1be0b97ff6c9714fe8fac394673e3fef4f6fc064b60fd4501e700fb06f21",
+    "source_hash": "1d6475a8066ae156c2211d549f5fa1bc38edee9de10bc77813cea029a18c9c63",
+    "timing_recipe_id": "mt1_sampled"
+  },
+  "provenance": {
+    "reference_campaign": "runtime/ariane_evolution/campaign_r58_lpower_17600000000",
+    "reference_evidence": "rounds/round_011/students/student_3/artifacts",
+    "reference_source": "parents/1d6475a8066ae156c2211d549f5fa1bc38edee9de10bc77813cea029a18c9c63/source",
+    "reference_source_manifest": {
+      "content_sha256": "06ce7d21c2e8d19542ab7101a094c01c5f2775f349b3fcbed8a578f010585045",
+      "directory_count": 682,
+      "external_symlinks": [],
+      "regular_file_count": 11935,
+      "symlink_count": 372,
+      "verified_no_external_symlinks": true
+    },
+    "reference_tcl": "rounds/round_011/students/student_3/artifacts/contest_output/evaluate.tcl"
+  },
+  "recorded_flow_metrics": {
+    "drv_count": 146.0,
+    "dynamic_power_pw": 594100000000.0,
+    "leakage_power_pw": 17900000000.0,
+    "runtime_s": 378.0,
+    "tns_abs_ns": 689.13
+  },
+  "schema": "goalevolve.ae2-selection.v1"
+}

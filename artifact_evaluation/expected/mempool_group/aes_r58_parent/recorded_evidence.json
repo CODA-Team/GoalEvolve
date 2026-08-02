@@ -1,0 +1,47 @@
+{
+  "artifacts": {
+    "checkpoint_metrics": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/mempool_group_campaign/evolution_r58_target_1850/stage_baselines/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d_power_then_timing_94d03f611279ceab/checkpoint_metrics.json",
+    "checkpoint_post_route_db": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/mempool_group_campaign/evolution_r58_target_1850/stage_baselines/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d_power_then_timing_94d03f611279ceab/post_route.odb",
+    "evaluation_log": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/mempool_group_campaign/evolution_r58_target_1850/stage_baselines/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d_power_then_timing_94d03f611279ceab/evaluation.log",
+    "metrics_csv": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/mempool_group_campaign/evolution_r58_target_1850/stage_baselines/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d_power_then_timing_94d03f611279ceab/metrics.csv",
+    "official_4of4_log": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/mempool_group_campaign/evolution_r58_target_1850/stage_baselines/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d_power_then_timing_94d03f611279ceab/official_4of4.log",
+    "openroad_binary": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/mempool_group_campaign/evolution_r58_target_1850/stage_baselines/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d_power_then_timing_94d03f611279ceab/workspace/build_goalevolve/bin/openroad",
+    "sfinal_observation": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/mempool_group_campaign/evolution_r58_target_1850/stage_baselines/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d_power_then_timing_94d03f611279ceab/sfinal_observation.json"
+  },
+  "checks": [
+    {
+      "detail": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/mempool_group_campaign/evolution_r58_target_1850/stage_baselines/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d_power_then_timing_94d03f611279ceab/workspace/build_goalevolve/bin/openroad",
+      "name": "build",
+      "passed": true
+    },
+    {
+      "detail": "official_openroad_flow",
+      "name": "flow",
+      "passed": true
+    },
+    {
+      "detail": "official_parse_log",
+      "name": "metrics",
+      "passed": true
+    },
+    {
+      "detail": "official_4of4_pass",
+      "name": "lec",
+      "passed": true
+    }
+  ],
+  "evaluation_mode": "power_then_timing",
+  "metrics": {
+    "drv_count": 814.0,
+    "dynamic_power_pw": 249940000000.0,
+    "leakage_power_pw": 3060000000.0,
+    "runtime_s": 491.0,
+    "tns_abs_ns": 2746.05
+  },
+  "ok": true,
+  "parent_id": "preexperiment:aes_best_r58_target_1850",
+  "power_stage_tns_ceiling_ns": null,
+  "schema_version": "goalevolve.v2.stage-baseline.v1",
+  "source_hash": "ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d",
+  "timing_recipe_id": "mt1_sampled"
+}

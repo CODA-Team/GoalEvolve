@@ -82,10 +82,11 @@ GoalEvolve/
 | Track | Purpose |
 |---|---|
 | AE-1 | Set up the project environment and check the release interfaces. |
-| AE-2 | Rebuild the released evolved OpenROAD source and replay the AES result in Table 1. |
+| AE-2 | Rebuild one released evolved OpenROAD source and replay its captured result. |
 | AE-3 | Launch a GoalEvolve campaign for a supplied design or rerun full source evolution. |
 
-Use AE-1 and AE-2 to set up the release and reproduce its Table 1 AES artifact.
+Use AE-1 and AE-2 to set up the release and reproduce one of its eight fixed
+OpenROAD artifacts.
 
 Use AE-3 to evolve a design toward predefined QoR goals.
 
@@ -133,15 +134,17 @@ fixed-source snapshots, benchmark inputs, ASAP7 data, official parser/checker,
 and Python interface. A separately prepared compatible OpenROAD environment can
 be used instead by setting `OPENROAD_EXE` to its executable.
 
-## AE-2: Reproduce Table 1 with evolved OpenROAD
+## AE-2: Reproduce a fixed evolved OpenROAD artifact
 
-AE-2 rebuilds the released evolved AES OpenROAD source, runs the captured
-post-route flow, and compares its metrics and official 4/4 validity result with
-the fixed Table 1 evidence. Required AES inputs, ASAP7 data, the checker, and
-the frozen evolved source are included in the repository.
+Each of the eight AE-2 artifacts contains its own frozen OpenROAD source
+snapshot and recorded Tcl schedule. AE-2 rebuilds the selected snapshot, runs
+its captured post-route flow, and compares its metrics and official 4/4
+validity result with the fixed evidence. Required benchmark inputs, ASAP7 data,
+the checker, and the frozen sources are included in the repository.
 
 First confirm that the p0 executable prepared by AE-1 starts in the current
-environment, then rebuild and replay the evolved source:
+environment. Then AE-2 stages and builds the selected artifact's own frozen
+OpenROAD source before replaying its Tcl:
 
 ```bash
 source outputs/toolchain/activate.sh
@@ -150,14 +153,24 @@ export OPENROAD_EXE="$PWD/outputs/toolchain/openroad-p0/build/bin/openroad"
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2-preflight \
   --artifact aes_r54_student1 --openroad "$OPENROAD_EXE" --verbose
 
-unset OPENROAD_EXE
+# Build and replay this artifact's own immutable OpenROAD source snapshot.
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2 \
   --artifact aes_r54_student1 --rebuild --jobs 8 --verbose
 ```
 
-`--verbose` streams configure, build, and flow logs to the terminal. The replay
-endpoint is `global_route + estimate_parasitics`; its numerical tolerances and
+`--verbose` streams configure, build, and flow logs to the terminal. Each
+artifact preserves its recorded evaluation mode; its numerical tolerances and
 expected evidence are versioned in [release_manifest.json](artifact_evaluation/release_manifest.json).
+The selected modes include `power_then_timing`, NVDLA-A `power_only`, and
+NVDLA-C `timing_only`. See
+[AE2_SELECTIONS.md](artifact_evaluation/AE2_SELECTIONS.md) for all artifact
+IDs, source snapshots, Tcl schedules, QoR, and distances to target. Substitute
+any listed ID for `aes_r54_student1` to replay that design.
+
+`--openroad` is intentionally accepted only by `ae2-preflight`: it checks that
+the prepared host environment can launch OpenROAD. A formal AE-2 replay never
+uses that external binary; it builds or reuses
+`outputs/ae2/<released-artifact>/build/bin/openroad` from the selected source.
 
 ## AE-3: Run a new source-evolution campaign
 
@@ -255,7 +268,7 @@ outputs/
 ├── baseline/
 │   └── <design>/                      # Measured p0 baseline evidence
 ├── ae2/
-│   └── aes_r54_student1/
+│   └── <released-artifact>/
 │       ├── report/                    # Rebuild, preflight, and manifest comparison
 │       └── contest_output/            # Flow logs, QoR metrics, and 4/4 result
 └── ae3/
@@ -265,8 +278,8 @@ outputs/
         └── parent.json                # Current promoted source parent
 ```
 
-For AE-2, inspect `report/ae2_report.json` for the Table 1 comparison and
-`contest_output/` for the underlying flow. For AE-3, inspect the design's
+For AE-2, inspect `report/ae2_report.json` for the fixed-artifact comparison
+and `contest_output/` for the underlying flow. For AE-3, inspect the design's
 `rounds/` and `parent.json` for candidate history and the current result.
 
 ## Testing and validation

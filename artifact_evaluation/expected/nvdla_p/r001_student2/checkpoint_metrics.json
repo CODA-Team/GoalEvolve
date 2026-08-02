@@ -1,0 +1,54 @@
+{
+  "schema_version": "goalevolve.v2.checkpoints.v1",
+  "checkpoints": {
+    "pre_repair": {
+      "tns_abs_ns": 141.912682955,
+      "wns_abs_ns": 0.271430302584,
+      "leakage_power_pw": 296000000.0,
+      "total_power_pw": 38600000000.0,
+      "dynamic_power_pw": 38304000000.0
+    },
+    "post_repair_design": {
+      "tns_abs_ns": 141.912682955,
+      "wns_abs_ns": 0.271430302584,
+      "leakage_power_pw": 296000000.0,
+      "total_power_pw": 38600000000.0,
+      "dynamic_power_pw": 38304000000.0
+    },
+    "post_repair_power": {
+      "tns_abs_ns": 183.301329525,
+      "wns_abs_ns": 0.450099525946,
+      "leakage_power_pw": 256000000.0,
+      "total_power_pw": 38000000000.0,
+      "dynamic_power_pw": 37744000000.0
+    },
+    "post_repair_timing": {
+      "tns_abs_ns": 177.167100227,
+      "wns_abs_ns": 0.409450929196,
+      "leakage_power_pw": 257000000.0,
+      "total_power_pw": 38000000000.0,
+      "dynamic_power_pw": 37743000000.0
+    },
+    "post_optimization_repair_design": {
+      "tns_abs_ns": 177.16864921,
+      "wns_abs_ns": 0.409450929196,
+      "leakage_power_pw": 257000000.0,
+      "total_power_pw": 38000000000.0,
+      "dynamic_power_pw": 37743000000.0
+    },
+    "post_placement": {
+      "tns_abs_ns": 177.16864921,
+      "wns_abs_ns": 0.409450929196,
+      "leakage_power_pw": 257000000.0,
+      "total_power_pw": 38000000000.0,
+      "dynamic_power_pw": 37743000000.0
+    },
+    "post_route": {
+      "tns_abs_ns": 160.62100371,
+      "wns_abs_ns": 0.398673966235,
+      "leakage_power_pw": 257000000.0,
+      "total_power_pw": 38000000000.0,
+      "dynamic_power_pw": 37743000000.0
+    }
+  }
+}

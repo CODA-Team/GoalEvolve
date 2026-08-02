@@ -1,0 +1,10 @@
+{
+  "distance_gain": 0.0036363636363636598,
+  "goal_distance": 0.737090909090909,
+  "integrity_ok": true,
+  "mechanism_fired": true,
+  "reasons": [
+    "official_checks_passed_and_power_residual_improved"
+  ],
+  "state": "validated"
+}

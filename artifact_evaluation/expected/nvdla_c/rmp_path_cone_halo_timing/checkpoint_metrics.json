@@ -1,0 +1,40 @@
+{
+  "schema_version": "goalevolve.v2.checkpoints.v1",
+  "checkpoints": {
+    "pre_repair": {
+      "tns_abs_ns": 11.233725379,
+      "wns_abs_ns": 0.189491261379,
+      "leakage_power_pw": 17300000000.0,
+      "total_power_pw": 601000000000.0,
+      "dynamic_power_pw": 583700000000.0
+    },
+    "post_repair_design": {
+      "tns_abs_ns": 11.233725379,
+      "wns_abs_ns": 0.189491261379,
+      "leakage_power_pw": 17300000000.0,
+      "total_power_pw": 601000000000.0,
+      "dynamic_power_pw": 583700000000.0
+    },
+    "post_repair_timing": {
+      "tns_abs_ns": 9.66499529987,
+      "wns_abs_ns": 0.204824329961,
+      "leakage_power_pw": 17300000000.0,
+      "total_power_pw": 601000000000.0,
+      "dynamic_power_pw": 583700000000.0
+    },
+    "post_placement": {
+      "tns_abs_ns": 9.66499529987,
+      "wns_abs_ns": 0.204824329961,
+      "leakage_power_pw": 17300000000.0,
+      "total_power_pw": 601000000000.0,
+      "dynamic_power_pw": 583700000000.0
+    },
+    "post_route": {
+      "tns_abs_ns": 8.93070620511,
+      "wns_abs_ns": 0.19874347175,
+      "leakage_power_pw": 17300000000.0,
+      "total_power_pw": 601000000000.0,
+      "dynamic_power_pw": 583700000000.0
+    }
+  }
+}

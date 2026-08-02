@@ -1,0 +1,43 @@
+Loading data...
+  Load time: 0.09s
+  Pre: 20524 nodes, 22983 nets | Post: 20177 nodes, 22636 nets
+
+Check 1: Physical Cell Locations...
+
+=== Check 1: Physical Cells ===
+PASS: 0 violations
+  Time: 0.00s
+
+=== Logic Cell Movement Statistics ===
+  Matched logic cells: 19246
+  Number of cells that moved: 0
+  Average movement: 0.00 units
+  Max movement: 0.00 units
+
+Check 2: Macro Locations...
+
+=== Check 2: Macros ===
+PASS: 0 violations
+  Time: 0.00s
+
+Check 3: I/O Locations...
+
+=== Check 3: I/O ===
+PASS: 0 violations
+  Time: 0.00s
+
+Check 4: Flip-Flop Integrity...
+  FFs in pre_opt netlist   : 1616
+  FFs in post_opt netlist  : 1616
+  Matched by instance name : 1616
+  Sub-test failures: T1(count)=0  T2(clock)=0
+
+=== Check 4: Flip-Flop Integrity ===
+PASS: 0 violations
+  Time: 0.30s
+
+==================================================
+SUMMARY: 4/4 checks passed
+TOTAL TIME: 0.41s
+RESULT: VALID
+
