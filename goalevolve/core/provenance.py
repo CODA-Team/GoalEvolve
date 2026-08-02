@@ -18,7 +18,23 @@ def toolchain_fingerprint(*, source_root: Path | None = None) -> dict[str, Any]:
                 completed = subprocess.run([str(openroad_bin), "-version"], text=True, capture_output=True, check=False, timeout=30)
                 payload["openroad_version"] = (completed.stdout or completed.stderr).strip()
                 break
-        completed = subprocess.run(["git", "rev-parse", "HEAD"], cwd=source_root, text=True, capture_output=True, check=False, timeout=15)
-        if completed.returncode == 0:
-            payload["source_git_commit"] = completed.stdout.strip()
+        top_level = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=source_root,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=15,
+        )
+        if top_level.returncode == 0 and Path(top_level.stdout.strip()).resolve() == source_root.resolve():
+            completed = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=source_root,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=15,
+            )
+            if completed.returncode == 0:
+                payload["source_git_commit"] = completed.stdout.strip()
     return payload

@@ -54,9 +54,20 @@ class GoalContract:
         if len(names) != len(set(names)):
             raise ValueError("GoalContract metric names must be unique")
         if not self.contract_id:
-            body = asdict(self)
-            body["contract_id"] = ""
-            object.__setattr__(self, "contract_id", f"GC_{sha256_json(body)[:16]}")
+            object.__setattr__(self, "contract_id", f"GC_{sha256_json(self.decision_payload())[:16]}")
+
+    def decision_payload(self) -> dict[str, Any]:
+        """Return the immutable QoR semantics, excluding runtime provenance."""
+        return {
+            "schema_version": self.schema_version,
+            "design": self.design,
+            "baseline_metrics": self.baseline_metrics,
+            "metrics": [asdict(metric) for metric in self.metrics],
+        }
+
+    def has_same_decision_contract(self, other: "GoalContract") -> bool:
+        """Compare QoR semantics without treating a framework upgrade as a new goal."""
+        return self.decision_payload() == other.decision_payload()
 
     def evaluate(self, metrics: Mapping[str, Any]) -> tuple[float, dict[str, float | None], list[str]]:
         residuals: dict[str, float | None] = {}

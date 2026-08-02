@@ -58,20 +58,53 @@ class GoalEvolveEngine:
         existing = load_json(self.state_root / "contract.json")
         if isinstance(existing, dict):
             existing_contract = GoalContract.from_dict(existing)
-            if existing_contract.contract_id != self.contract.contract_id:
+            if not existing_contract.has_same_decision_contract(self.contract):
                 raise RuntimeError("state root already has a different frozen goal contract")
-            print(f"[GoalEvolve][campaign] resume contract={existing_contract.contract_id}", flush=True)
+            self._record_runtime_provenance(existing_contract=existing_contract)
+            print(
+                f"[GoalEvolve][campaign] resume contract={existing_contract.contract_id} "
+                f"runtime_contract={self.contract.contract_id}",
+                flush=True,
+            )
             parent = self._load_parent()
             self._epd().ensure_baseline(parent)
             return parent
         distance, _, _ = self.contract.evaluate(baseline_metrics)
         parent = Parent("baseline", dict(baseline_metrics), source_commit, source_hash, distance)
         atomic_json(self.state_root / "contract.json", self.contract.to_dict())
+        self._record_runtime_provenance(existing_contract=None)
         atomic_json(self.state_root / "parent.json", parent.to_dict())
         atomic_json(self.state_root / "plugins.json", {"planner": self.planner.name, "teacher": self.teacher.name if self.teacher else "none", "student_editor": self.student_editor.name if self.student_editor else "none", "evaluator": self.evaluator.name, "workspace": self.workspace_provider.name})
         self._epd().ensure_baseline(parent)
         print(f"[GoalEvolve][campaign] initialized contract={self.contract.contract_id} baseline_distance={distance:.8f}", flush=True)
         return parent
+
+    def _record_runtime_provenance(self, *, existing_contract: GoalContract | None) -> None:
+        """Append non-decision runtime provenance without mutating the QoR contract."""
+        path = self.state_root / "runtime_provenance.json"
+        payload = load_json(path, {}) or {}
+        entries = [
+            dict(item)
+            for item in list(payload.get("entries") or ())
+            if isinstance(item, Mapping)
+        ]
+        entry = {
+            "runtime_contract_id": self.contract.contract_id,
+            "runtime_source_fingerprint": dict(self.contract.source_fingerprint),
+            "frozen_contract_id": existing_contract.contract_id if existing_contract else self.contract.contract_id,
+            "frozen_source_fingerprint": (
+                dict(existing_contract.source_fingerprint) if existing_contract else dict(self.contract.source_fingerprint)
+            ),
+        }
+        if entry not in entries:
+            entries.append(entry)
+            atomic_json(
+                path,
+                {
+                    "schema_version": "goalevolve.v2.runtime-provenance.v1",
+                    "entries": entries,
+                },
+            )
 
     def run(self, *, rounds: int, baseline_metrics: dict[str, float] | None = None) -> Parent:
         parent = self._load_parent() if (self.state_root / "parent.json").is_file() else self.initialize(baseline_metrics=baseline_metrics or self.contract.baseline_metrics)

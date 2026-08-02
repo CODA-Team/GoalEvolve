@@ -65,6 +65,45 @@ class GoalEvolveV2Tests(unittest.TestCase):
                 target_metrics={"dynamic_power_pw": 50.0},
             )
 
+    def test_campaign_resume_allows_provenance_change_but_not_qor_contract_change(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "campaign"
+            common = {
+                "design": "resume",
+                "baseline_metrics": {"tns_abs_ns": 100.0},
+                "target_metrics": {"tns_abs_ns": 50.0},
+            }
+            first = build_contract(
+                **common,
+                source_fingerprint={"source_git_commit": "framework_before"},
+            )
+            resumed = build_contract(
+                **common,
+                source_fingerprint={"source_git_commit": "framework_after"},
+            )
+            engine = GoalEvolveEngine(
+                first, root, DiversePlanner(), MockEvaluator(), IsolatedWorkspace(), StrictEvidencePromotion()
+            )
+            engine.initialize(baseline_metrics=dict(first.baseline_metrics))
+            resumed_engine = GoalEvolveEngine(
+                resumed, root, DiversePlanner(), MockEvaluator(), IsolatedWorkspace(), StrictEvidencePromotion()
+            )
+            resumed_engine.initialize(baseline_metrics=dict(resumed.baseline_metrics))
+            history = load_json(root / "runtime_provenance.json")
+            changed_target = build_contract(
+                design="resume",
+                baseline_metrics={"tns_abs_ns": 100.0},
+                target_metrics={"tns_abs_ns": 40.0},
+                source_fingerprint={"source_git_commit": "framework_after"},
+            )
+            changed_engine = GoalEvolveEngine(
+                changed_target, root, DiversePlanner(), MockEvaluator(), IsolatedWorkspace(), StrictEvidencePromotion()
+            )
+            with self.assertRaisesRegex(RuntimeError, "different frozen goal contract"):
+                changed_engine.initialize(baseline_metrics=dict(changed_target.baseline_metrics))
+
+            self.assertEqual(len(history["entries"]), 2)
+
     def test_epd_baseline_is_not_counted_as_pending_strategy(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             epd = EvolutionProgramDatabase(Path(temporary))
