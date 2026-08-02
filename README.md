@@ -35,6 +35,7 @@ GoalEvolve/
 │   └── dashboard_static/        # Browser interface for persisted campaign state
 ├── artifact_evaluation/         # Deterministic artifact-evaluation entry points
 │   ├── lineage/                 # Immutable OpenROAD source snapshots
+│   │   └── openroad_power/p0/    # P0 source manifest and prebuilt rsz/rmp AST graph
 │   └── expected/                # Fixed QoR/evidence manifests and portable Tcl
 ├── experiments/                 # Reviewed design profiles and campaign examples
 ├── config/                      # Schema, global Codex policy, templates, and credential example
@@ -46,6 +47,34 @@ GoalEvolve/
 ```
 
 `goalevolve/cli.py` is the public command implementation. `artifact_evaluation/lineage/` is immutable input to fixed replay; fresh Students never edit it in place. All generated content belongs under `outputs/`.
+
+## P0 Source Graph
+
+The project-owned P0 snapshot includes a checked-in tree-sitter graph for
+`src/rsz` and `src/rmp` at
+`artifact_evaluation/lineage/openroad_power/p0/repository_graph/`. Its
+`manifest.json`, `graph.json`, and `doc_cards.json` identify every parsed file,
+source symbol, include/call relation, and recoverable parser error using the P0
+content hash. It indexes production C++ implementations and headers only: module
+test directories are excluded. Each Codex Teacher round derives an incremental
+graph for the immutable campaign parent at
+`<state_root>/knowledge/repository_graph/<source_hash>/`; unchanged source
+facts reuse P0 records while changed files are reparsed.
+
+The Teacher receives a bounded induced AST subgraph and Doc Cards within that
+design's patch roots, with only relations whose endpoints are present in the
+packet, and must still inspect the parent with `rg`/`sed`. The controller validates
+every `path::symbol` source anchor against the current graph and file digest.
+For an overloaded function, it must cite the Doc Card's full declarator, for
+example `src/rsz/src/RecoverPower.cc::rsz::RecoverPower::recoverPower(const float recover_power_percent, bool verbose)`.
+Multiple `Source Evidence` anchors in Teacher Markdown use semicolons, so
+commas inside C++ parameter lists remain intact.
+`round_NNN/search_policy.json` is advisory evidence derived from the EPD and
+completed rounds. After two retained-parent rounds it records the actual tried
+hooks and a suggested `avoid_exact_source_hooks` frontier. This asks the Teacher
+to use a new hook or a materially distinct decision boundary, but cannot select
+a parent, change Student roles, reject a valid mechanism, or bypass the official
+promotion gate.
 
 ## Dependencies
 

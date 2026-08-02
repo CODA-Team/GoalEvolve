@@ -256,7 +256,7 @@ def _source_diff(
     allowed_roots: tuple[str, ...] = (),
 ) -> str:
     chunks: list[str] = []
-    suffixes = {".cc", ".cpp", ".cxx", ".hh", ".hpp", ".tcl"}
+    suffixes = {".cc", ".cpp", ".cxx", ".hh", ".hpp", ".h", ".tcl"}
     for path in _evolution_source_files(candidate, suffixes, allowed_roots=allowed_roots):
         if not path.is_file() or path.suffix not in suffixes:
             continue
@@ -279,7 +279,7 @@ def _tree_hash(root: Path, *, allowed_roots: tuple[str, ...] = ()) -> str:
     digest = hashlib.sha256()
     for path in _evolution_source_files(
         root,
-        {".cc", ".cpp", ".cxx", ".hh", ".hpp", ".tcl"},
+        {".cc", ".cpp", ".cxx", ".hh", ".hpp", ".h", ".tcl"},
         allowed_roots=allowed_roots,
     ):
         relative = path.relative_to(root)

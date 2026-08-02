@@ -49,6 +49,28 @@ def _items(value: str) -> tuple[str, ...]:
     return tuple(values)
 
 
+def _source_evidence_items(value: str) -> tuple[str, ...]:
+    """Parse source anchors without splitting commas in C++ declarators.
+
+    New Teacher output separates anchors with semicolons.  Older plans that
+    used commas remain readable only when the comma begins another complete
+    source path, so ``method(int count, double ratio)`` stays one anchor.
+    """
+
+    if not value or value.strip().lower() in {"none", "n/a", "-"}:
+        return ()
+    anchors: list[str] = []
+    legacy_next_anchor = re.compile(
+        r"\s*,\s*(?=[^,;\s]+\.(?:cc|cpp|cxx|h|hh|hpp)::)"
+    )
+    for segment in value.split(";"):
+        for item in legacy_next_anchor.split(segment):
+            normalized = item.strip().strip("`").strip()
+            if normalized:
+                anchors.append(normalized)
+    return tuple(anchors)
+
+
 def _bullet_items(section: str) -> tuple[str, ...]:
     """Read a compact Markdown list without granting arbitrary prose authority."""
     values = []
@@ -76,7 +98,7 @@ def _evolution_idea_records(section: str) -> tuple[dict[str, object], ...]:
                 "predicted_stage_effect": _field(block, "Predicted Stage Effect"),
                 "source_hooks": _items(_field(block, "Source Hooks")),
                 "expected_signals": _items(_field(block, "Expected Signals")),
-                "source_evidence": _items(_field(block, "Source Evidence")),
+                "source_evidence": _source_evidence_items(_field(block, "Source Evidence")),
                 "evaluation_recipe": _field(block, "Evaluation Recipe"),
                 "falsification_condition": _field(block, "Falsification Condition"),
                 "paper_card_ids": _items(_field(block, "Paper Card References")),
@@ -107,7 +129,7 @@ def _source_investigation_records(section: str) -> tuple[dict[str, object], ...]
     """Parse the Teacher's source-read evidence without treating it as a patch plan."""
     records: list[dict[str, object]] = []
     for heading, block in _blocks(section):
-        evidence = _items(_field(block, "Source Evidence"))
+        evidence = _source_evidence_items(_field(block, "Source Evidence"))
         observation = _field(block, "Observed Control Point")
         if evidence or observation:
             records.append(
@@ -134,7 +156,7 @@ def parse_teacher_plan(text: str) -> dict[str, object]:
                 "selection_rationale": _field(block, "Selection Rationale"),
                 "source_hooks": _items(_field(block, "Source Hooks")),
                 "expected_signals": _items(_field(block, "Expected Signals")),
-                "source_evidence": _items(_field(block, "Source Evidence")),
+                "source_evidence": _source_evidence_items(_field(block, "Source Evidence")),
                 "evaluation_recipe": _field(block, "Evaluation Recipe"),
                 "falsification_condition": _field(block, "Falsification Condition"),
                 "epd_record_ids": _items(_field(block, "EPD References")),
@@ -295,7 +317,7 @@ def render_teacher_plan(
                 f"- Predicted Stage Effect: {raw.get('predicted_stage_effect') or ''}",
                 f"- Source Hooks: {', '.join(str(item) for item in raw.get('source_hooks') or ()) or 'none'}",
                 f"- Expected Signals: {', '.join(str(item) for item in raw.get('expected_signals') or ()) or 'none'}",
-                f"- Source Evidence: {', '.join(str(item) for item in raw.get('source_evidence') or ()) or 'none'}",
+                f"- Source Evidence: {'; '.join(str(item) for item in raw.get('source_evidence') or ()) or 'none'}",
                 f"- Evaluation Recipe: {raw.get('evaluation_recipe') or ''}",
                 f"- Falsification Condition: {raw.get('falsification_condition') or ''}",
                 f"- Paper Card References: {', '.join(str(item) for item in raw.get('paper_card_ids') or ()) or 'none'}",
@@ -325,7 +347,7 @@ def render_teacher_plan(
                 f"- Selection Rationale: {assignment.get('selection_rationale') or 'Controller-provided source-verified candidate.'}",
                 f"- Source Hooks: {', '.join(str(item) for item in assignment.get('source_hooks') or ()) or 'none'}",
                 f"- Expected Signals: {', '.join(str(item) for item in assignment.get('expected_signals') or ()) or 'none'}",
-                f"- Source Evidence: {', '.join(str(item) for item in assignment.get('source_evidence') or ()) or 'none'}",
+                f"- Source Evidence: {'; '.join(str(item) for item in assignment.get('source_evidence') or ()) or 'none'}",
                 f"- Evaluation Recipe: {assignment.get('evaluation_recipe') or ''}",
                 f"- Falsification Condition: {assignment.get('falsification_condition') or 'No verified contract improvement.'}",
                 f"- EPD References: {', '.join(str(item) for item in assignment.get('epd_record_ids') or ()) or 'none'}",

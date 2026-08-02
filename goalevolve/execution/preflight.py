@@ -29,7 +29,7 @@ def preflight_candidate(
     violations: list[str] = []
     if not changed:
         violations.append("missing_changed_files_in_unified_diff")
-    if require_cpp_patch and not any(path.endswith((".cc", ".cpp", ".cxx", ".hh", ".hpp")) for path in changed):
+    if require_cpp_patch and not any(path.endswith((".cc", ".cpp", ".cxx", ".hh", ".hpp", ".h")) for path in changed):
         violations.append("missing_cpp_patch")
     normalized = tuple(root.rstrip("/") for root in allowed_patch_roots)
     for path in changed:

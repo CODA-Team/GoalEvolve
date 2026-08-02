@@ -67,6 +67,10 @@ fi
 
 CONDA_RUN=("${CONDA_COMMAND}" run --no-capture-output --prefix "${CONDA_PREFIX}")
 "${CONDA_RUN[@]}" python -c 'import sys; assert sys.version_info >= (3, 11)'
+# Keep existing project environments synchronized with pyproject.toml as well
+# as provisioning the bindings for a newly-created environment.yml install.
+"${CONDA_RUN[@]}" python -m pip install --disable-pip-version-check --upgrade \
+    'tree-sitter==0.26.0' 'tree-sitter-cpp==0.23.4'
 CODEX_BIN="${CODEX_PREFIX}/node_modules/.bin"
 if [[ ${INSTALL_CODEX_CLI} -eq 1 ]]; then
     printf '[INFO] Installing the Codex CLI into project-generated state.\n'

@@ -50,7 +50,7 @@ class SourceScopeResolver:
                 children[:] = [child for child in children if child not in ignored_parts]
                 for filename in filenames:
                     path = Path(directory) / filename
-                    if path.suffix not in {".cc", ".cpp", ".cxx", ".hh", ".hpp"}:
+                    if path.suffix not in {".cc", ".cpp", ".cxx", ".hh", ".hpp", ".h"}:
                         continue
                     try:
                         text = path.read_text(encoding="utf-8", errors="ignore")

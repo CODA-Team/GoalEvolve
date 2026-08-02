@@ -25,6 +25,25 @@ outputs/                   被忽略的 build、session 与 campaign
 
 `goalevolve/cli.py` 是真实 CLI 实现，不存在兼容转发模块。冻结源码 artifact 与新 campaign 严格分离：前者是 AE-2 输入，绝不能成为可变 Student workspace。
 
+## P0 源码图与 Doc Card
+
+项目内 P0 快照已经预构建 `src/rsz` 与 `src/rmp` 的 tree-sitter 源码图，位置为
+`artifact_evaluation/lineage/openroad_power/p0/repository_graph/`。其中
+`manifest.json`、`graph.json`、`doc_cards.json` 以 P0 内容 hash 记录文件、符号、
+include/call 关系及可恢复的 parser 错误。图只索引生产 C++ 实现与头文件，不包含
+模块 `test/tests` 目录。每轮 Codex Teacher 以这一 P0 图为基线，为不可变 campaign parent 在
+`<state_root>/knowledge/repository_graph/<source_hash>/` 建立增量图；未变化文件复用
+P0 事实，变化文件才重新解析。
+
+Teacher 只接收当前 design 允许 patch roots 内的受限 AST 诱导子图和 Doc Card，图中仅保留
+两端都在该包内的关系，仍必须用 `rg`/`sed` 检查 live parent。Controller 会同时校验 `path::symbol` anchor 的 AST 唯一性与文件
+digest。函数重载时必须使用 Doc Card 的完整 declarator，例如
+`src/rsz/src/RecoverPower.cc::rsz::RecoverPower::recoverPower(const float recover_power_percent, bool verbose)`；
+Teacher Markdown 的多个 `Source Evidence` anchor 使用分号分隔，因此 C++ 参数列表中的逗号不会被拆开。
+`round_NNN/search_policy.json` 仅汇总 EPD 和已完成轮次的建议。连续两轮保留 parent 后，它会记录真实尝试过的
+hook 和建议的 `avoid_exact_source_hooks` 前沿，要求 Teacher 换用新 hook 或说明实质不同的决策边界；它不能选择 parent、
+修改 Student 角色、拒绝一个可验证机制或绕过正式 promotion gate。
+
 ## 三类 artifact evaluation
 
 | 类型 | 证明内容 | 是否使用 API key | 是否有稳定 pass/fail |

@@ -116,6 +116,8 @@ class CodexTeacher:
         previous_review: dict[str, object],
         decision_context: dict[str, object] | None = None,
         source_index: dict[str, object] | None = None,
+        repository_graph: dict[str, object] | None = None,
+        search_policy: dict[str, object] | None = None,
         source_root: Path | None = None,
         paper_cards: Sequence[dict[str, object]] = (),
     ) -> TeacherPlan:
@@ -133,6 +135,8 @@ class CodexTeacher:
             fallback=fallback,
             decision_context=decision_context,
             source_index=source_index,
+            repository_graph=repository_graph,
+            search_policy=search_policy,
             source_root=source_root,
             paper_cards=paper_cards,
         )
@@ -223,6 +227,8 @@ class CodexTeacher:
             "epd": epd,
             "observations": observations,
             "timing_schedule_memory": schedule_memory,
+            "repository_graph": repository_graph or {},
+            "search_policy": search_policy or {},
             "previous_review": previous_review,
             "teacher_markdown": markdown,
             "parsed_markdown": parsed,
@@ -499,7 +505,7 @@ class CodexTeacher:
         return selected
 
     @staticmethod
-    def _plan_prompt(*, parent: Parent, diagnosis: Diagnosis, epd: dict[str, object], observations: dict[str, object], schedule_memory: dict[str, object] | None = None, previous_review: dict[str, object], fallback: Sequence[Hypothesis], contract=None, decision_context: dict[str, object] | None = None, source_index: dict[str, object] | None = None, source_root: Path | None = None, paper_cards: Sequence[dict[str, object]] = ()) -> str:
+    def _plan_prompt(*, parent: Parent, diagnosis: Diagnosis, epd: dict[str, object], observations: dict[str, object], schedule_memory: dict[str, object] | None = None, previous_review: dict[str, object], fallback: Sequence[Hypothesis], contract=None, decision_context: dict[str, object] | None = None, source_index: dict[str, object] | None = None, repository_graph: dict[str, object] | None = None, search_policy: dict[str, object] | None = None, source_root: Path | None = None, paper_cards: Sequence[dict[str, object]] = ()) -> str:
         contract_view = contract.to_dict() if contract is not None and hasattr(contract, "to_dict") else {}
         # Put the decision semantics in the structured stage payload as well
         # as in controller code.  This prevents the model from interpreting
@@ -537,7 +543,7 @@ class CodexTeacher:
             [
                 "# GoalEvolve Persistent Teacher: diagnose and plan",
                 "",
-                "You are the Teacher. Diagnose the frozen-goal gap using only the supplied compact EPD, parent checkpoint trajectory, live source structure, paper-card references, and empirical observation memory. You do not edit source code.",
+                "You are the Teacher. Diagnose the frozen-goal gap using only the supplied compact EPD, parent checkpoint trajectory, P0-rooted source graph, live source structure, paper-card references, and empirical observation memory. You do not edit source code.",
                 "The frozen QoR decision contract is exactly TNS, dynamic power, and leakage power. Runtime is execution telemetry only: never use it to choose, rank, retain, suppress, or promote a mechanism. The controller owns source validation, evaluation, and promotion.",
                 "You own mechanism creation and assignment. The Controller supplies role envelopes, not candidate mechanisms. For every Explorer, inspect the live source with at least two successful rg/sed commands, locate a real hook, and create a new bounded idea. Do not copy, paraphrase, or treat a paper card as a candidate mechanism: it is only topical context. Avoid every invalid, validated, and promising Explorer family in EPD unless both the source hook and the decision boundary are materially different. For an Integrator, choose a compatible historical pair from the supplied EPD options and explain how each decision boundary will coexist in the current parent. For an Enhancer, choose one promising EPD attempt and explain the stage evidence that prevented stable post-route gain before proposing one bounded strengthening. You may devise the implementation approach, but must name real source paths and symbols. Never change Tcl or benchmark inputs.",
                 "",
@@ -577,6 +583,15 @@ class CodexTeacher:
                 "## Compact Source Structure Index",
                 json.dumps(source_index or {}, ensure_ascii=False, indent=2),
                 "",
+                "## P0-rooted Source Graph and Doc Cards",
+                json.dumps(repository_graph or {}, ensure_ascii=False, indent=2),
+                "This is an AST-derived localization aid. It is rooted in the frozen project P0 snapshot and incrementally refreshed for the current parent. It does not replace live rg/sed inspection or authorize a patch by itself.",
+                "Use a Doc Card's full `declarator` verbatim when a function name is overloaded. Separate multiple Source Evidence anchors with semicolons, never commas, because a C++ declarator may contain commas.",
+                "",
+                "## Evidence-only Search Policy",
+                json.dumps(search_policy or {}, ensure_ascii=False, indent=2),
+                "This policy is advisory. The listed incumbent is the only current parent; only the deterministic Controller can promote a candidate or alter roles. When `avoid_exact_source_hooks` is nonempty, do not repeat that exact source hook with the same decision boundary: either use a different AST-grounded hook or explain the materially distinct boundary and falsification condition.",
+                "",
                 "## Paper Card References",
                 json.dumps(list(paper_cards), ensure_ascii=False, indent=2),
                 "These are topics only. Their IDs may be cited, but they do not authorize reuse of an old patch recipe.",
@@ -598,7 +613,7 @@ class CodexTeacher:
                 "- Idea: <bounded source-level idea>",
                 "- Predicted Stage Effect: <expected phase/QoR movement>",
                 "- Source Hooks: <supplied controller hook(s)>",
-                "- Source Evidence: <path::symbol, one anchor for every Source Hook>",
+                "- Source Evidence: <path::symbol; one anchor for every Source Hook>",
                 "- Evaluation Recipe: <one controller recipe ID from the supplied menu>",
                 "- Expected Signals: <new mechanism telemetry signal names>",
                 "- Falsification Condition: <official evidence condition>",
@@ -619,7 +634,7 @@ class CodexTeacher:
                 "- Claim: <bounded executable idea>",
                 "- Selection Rationale: <why this is one of the best experiments now>",
                 "- Source Hooks: <comma-separated real source paths>",
-                "- Source Evidence: <comma-separated path::symbol anchors>",
+                "- Source Evidence: <semicolon-separated path::symbol anchors; use a full Doc Card declarator for overloads>",
                 "- Evaluation Recipe: <the same controller recipe ID as its referenced idea>",
                 "- Expected Signals: <comma-separated new telemetry signals>",
                 "- Falsification Condition: <official evidence condition>",
@@ -651,7 +666,7 @@ class CodexTeacher:
                 "## Prior Markdown",
                 prior_markdown or "<no usable prior Markdown>",
                 "## Required Format",
-                "## Diagnosis Summary\n<text>\n\n## Source Investigation\n### investigation_1\n- Source Evidence: <path::symbol>\n- Observed Control Point: <text>\n\n## Evolution Ideas\n### idea_1\n- Idea: <text>\n- Predicted Stage Effect: <text>\n- Source Hooks: <path>\n- Source Evidence: <path::symbol>\n- Evaluation Recipe: <controller recipe ID from the prior plan>\n- Expected Signals: <signal>\n- Falsification Condition: <text>\n- Paper Card References: none\n- Priority: 0\n\n## Parent Policy\n<text>\n- Retire Pending Ideas: none\n\n## Student Assignments\n### student_1\n- Role: explorer\n- Candidate: \n- EPD Idea: idea_1\n- Claim: <text>\n- Selection Rationale: <text>\n- Source Hooks: <path>\n- Source Evidence: <path::symbol>\n- Evaluation Recipe: <same controller recipe ID>\n- Expected Signals: <signal>\n- Falsification Condition: <text>\n- EPD References: none",
+                "## Diagnosis Summary\n<text>\n\n## Source Investigation\n### investigation_1\n- Source Evidence: <path::symbol>\n- Observed Control Point: <text>\n\n## Evolution Ideas\n### idea_1\n- Idea: <text>\n- Predicted Stage Effect: <text>\n- Source Hooks: <path>\n- Source Evidence: <path::symbol; another/path::symbol>\n- Evaluation Recipe: <controller recipe ID from the prior plan>\n- Expected Signals: <signal>\n- Falsification Condition: <text>\n- Paper Card References: none\n- Priority: 0\n\n## Parent Policy\n<text>\n- Retire Pending Ideas: none\n\n## Student Assignments\n### student_1\n- Role: explorer\n- Candidate: \n- EPD Idea: idea_1\n- Claim: <text>\n- Selection Rationale: <text>\n- Source Hooks: <path>\n- Source Evidence: <path::symbol; another/path::symbol>\n- Evaluation Recipe: <same controller recipe ID>\n- Expected Signals: <signal>\n- Falsification Condition: <text>\n- EPD References: none",
             ]
         )
 
@@ -709,7 +724,7 @@ def source_inspection_audit(event_paths: Iterable[Path]) -> dict[str, object]:
             command = str(item.get("command") or "")
             if not re.search(r"\b(?:rg|sed|awk|head|tail)\b", command):
                 continue
-            if not re.search(r"(?:src/(?:rsz|rmp|grt)/|\.cc\b|\.hh\b|\.hpp\b)", command):
+            if not re.search(r"(?:src/(?:rsz|rmp|grt)/|\.cc\b|\.hh\b|\.hpp\b|\.h\b)", command):
                 continue
             commands.append(command)
     return {

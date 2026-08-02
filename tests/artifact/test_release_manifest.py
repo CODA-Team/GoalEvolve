@@ -8,9 +8,33 @@ from pathlib import Path
 
 from artifact_evaluation import runner
 from artifact_evaluation.runner import _artifact, _artifacts, ae1
+from goalevolve.core.io import sha256_file
+from goalevolve.planning.repository_graph import RepositoryGraphIndex
 
 
 class ReleaseArtifactTests(unittest.TestCase):
+    def test_checked_in_p0_repository_graph_matches_the_frozen_source(self) -> None:
+        source_root = runner.PROJECT_ROOT / "artifact_evaluation/lineage/openroad_power/p0/source"
+        with tempfile.TemporaryDirectory() as directory:
+            graph = RepositoryGraphIndex(
+                state_root=Path(directory) / "state",
+            ).build_p0()
+        manifest = json.loads(
+            (source_root.parent / "source_manifest.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(graph.source_hash, manifest["content_sha256"])
+        self.assertEqual(graph.base_source_hash, manifest["content_sha256"])
+        self.assertEqual(graph.allowed_patch_roots, ("src/rmp", "src/rsz"))
+        self.assertTrue((graph.artifact_root / "manifest.json").is_file())
+        self.assertTrue((graph.artifact_root / "graph.json").is_file())
+        self.assertTrue((graph.artifact_root / "doc_cards.json").is_file())
+        self.assertTrue(graph.files)
+        for path, source_file in graph.files.items():
+            self.assertTrue((source_root / path).is_file(), path)
+            self.assertEqual(source_file.digest, sha256_file(source_root / path), path)
+            self.assertNotIn("/test/", path)
+            self.assertNotIn("/tests/", path)
+
     def test_ae2_stages_a_private_source_copy(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

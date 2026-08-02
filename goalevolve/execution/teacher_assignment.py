@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 from ..core.models import Hypothesis
+from ..core.io import sha256_file, sha256_json
+from ..planning.repository_graph import RepositoryGraph, RepositoryGraphIndex
 from ..planning.timing_recovery import (
     recipe_for_source_hooks,
     recipe_is_compatible_with_source_hooks,
@@ -23,7 +25,7 @@ from ..planning.timing_recovery import (
 )
 
 
-_CPP_SUFFIXES = frozenset({".cc", ".cpp", ".cxx", ".hh", ".hpp"})
+_CPP_SUFFIXES = frozenset({".cc", ".cpp", ".cxx", ".hh", ".hpp", ".h"})
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _WORDS = re.compile(r"[a-z0-9_]+")
 
@@ -121,33 +123,39 @@ def source_structure_index(
     source_root: Path,
     allowed_patch_roots: Sequence[str],
     max_symbols_per_file: int = 24,
+    repository_graph: RepositoryGraph | None = None,
 ) -> dict[str, dict[str, object]]:
-    """Return a compact live-source index for the Teacher, not an AST gate."""
-    roots = [source_root / root.strip("/") for root in allowed_patch_roots if root.strip("/")]
-    roots = [root for root in roots if root.is_dir()] or [source_root / "src"]
+    """Return the legacy compact shape using AST-derived graph facts.
+
+    The public function name remains for callers outside the engine.  New
+    execution passes the already-built P0-rooted parent graph so the source is
+    parsed once per round rather than falling back to regex discovery.
+    """
+    graph = repository_graph or RepositoryGraphIndex(state_root=source_root.parent).build_parent(
+        source_root=source_root,
+        source_hash=_compatibility_source_hash(source_root, allowed_patch_roots),
+        allowed_patch_roots=allowed_patch_roots,
+    )
+    allowed = tuple(root.strip("/") for root in allowed_patch_roots if root.strip("/"))
     files: dict[str, dict[str, object]] = {}
-    function = re.compile(r"(?:^|\n)\s*[\w:<>~,&*\s]+\s+([A-Za-z_]\w*)\s*\([^;{}]*\)\s*(?:const\s*)?\{")
-    metric = re.compile(r"METRIC\|([A-Za-z0-9_]+)")
-    ignored = {"test", "tests", "third-party", "build", "__pycache__"}
-    for root in roots:
-        if not root.is_dir():
+    for path, source_file in graph.files.items():
+        if allowed and not any(path == root or path.startswith(root + "/") for root in allowed):
             continue
-        for path in root.rglob("*"):
-            relative_parts = path.relative_to(source_root).parts if path.exists() else ()
-            if not path.is_file() or path.suffix not in _CPP_SUFFIXES or ignored.intersection(relative_parts):
-                continue
-            try:
-                text = path.read_text(encoding="utf-8", errors="ignore")
-                relative = str(path.relative_to(source_root))
-            except (OSError, ValueError):
-                continue
-            files[relative] = {
-                "symbols": sorted(set(function.findall(text)))[:max_symbols_per_file],
-                "existing_metric_signals": sorted(set(metric.findall(text)))[:max_symbols_per_file],
-            }
-    # The prompt needs a map, not an embedded second source tree. Retain a
-    # compact, deterministic sample from each permitted root and direct Codex
-    # to inspect the authoritative snapshot with rg for all final anchors.
+        files[path] = {
+            "symbols": [
+                graph.symbols[symbol_id].qualified_name
+                for symbol_id in source_file.symbol_ids[:max_symbols_per_file]
+                if symbol_id in graph.symbols
+            ],
+            "existing_metric_signals": sorted(
+                {
+                    signal
+                    for symbol_id in source_file.symbol_ids
+                    if symbol_id in graph.symbols
+                    for signal in graph.symbols[symbol_id].metric_signals
+                }
+            )[:max_symbols_per_file],
+        }
     grouped: dict[str, list[tuple[str, dict[str, object]]]] = {}
     for relative, metadata in sorted(files.items()):
         group = next(
@@ -168,6 +176,20 @@ def source_structure_index(
     return compact
 
 
+def _compatibility_source_hash(source_root: Path, allowed_patch_roots: Sequence[str]) -> str:
+    """Content identity for an external caller of the legacy index API."""
+
+    records: list[tuple[str, str]] = []
+    for configured_root in allowed_patch_roots:
+        root = source_root / configured_root.strip("/")
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*")):
+            if path.is_file() and path.suffix in _CPP_SUFFIXES:
+                records.append((path.relative_to(source_root).as_posix(), sha256_file(path)))
+    return sha256_json(records)
+
+
 def materialize_teacher_assignments(
     *,
     assignments: Sequence[Mapping[str, object]],
@@ -178,6 +200,7 @@ def materialize_teacher_assignments(
     historical_ideas: Sequence[Mapping[str, object]],
     paper_card_ids: Sequence[str] = (),
     teacher_context: Mapping[str, object] | None = None,
+    repository_graph: RepositoryGraph | None = None,
 ) -> AssignmentMaterialization:
     """Validate Markdown assignments and construct executable hypotheses.
 
@@ -226,7 +249,7 @@ def materialize_teacher_assignments(
         rationale = str(row.get("selection_rationale") or "").strip()
         hooks = _items(row.get("source_hooks"))
         signals = _items(row.get("expected_signals"))
-        evidence = _items(row.get("source_evidence"))
+        evidence = _source_evidence_items(row.get("source_evidence"))
         falsification = str(row.get("falsification_condition") or "").strip()
         if not claim or not rationale or not hooks or not signals or not evidence or not falsification:
             errors.append(f"incomplete_assignment:{student_id}")
@@ -236,6 +259,7 @@ def materialize_teacher_assignments(
             hooks=hooks,
             source_evidence=evidence,
             allowed_patch_roots=allowed_patch_roots,
+            repository_graph=repository_graph,
         )
         if source_errors:
             errors.extend(f"{student_id}:{error}" for error in source_errors)
@@ -354,12 +378,27 @@ def _items(value: object) -> tuple[str, ...]:
     return tuple(dict.fromkeys(str(item).strip().strip("`") for item in values if str(item).strip()))
 
 
+def _source_evidence_items(value: object) -> tuple[str, ...]:
+    if not isinstance(value, str):
+        return _items(value)
+    anchors: list[str] = []
+    legacy_next_anchor = re.compile(
+        r"\s*,\s*(?=[^,;\s]+\.(?:cc|cpp|cxx|h|hh|hpp)::)"
+    )
+    for segment in value.split(";"):
+        anchors.extend(legacy_next_anchor.split(segment))
+    return tuple(
+        dict.fromkeys(item.strip().strip("`") for item in anchors if item.strip())
+    )
+
+
 def _source_admission_errors(
     *,
     source_root: Path,
     hooks: Sequence[str],
     source_evidence: Sequence[str],
     allowed_patch_roots: Sequence[str],
+    repository_graph: RepositoryGraph | None = None,
 ) -> tuple[str, ...]:
     allowed = tuple(root.strip("/") for root in allowed_patch_roots if root.strip("/"))
     errors: list[str] = []
@@ -387,15 +426,30 @@ def _source_admission_errors(
         if not symbols:
             errors.append(f"missing_source_evidence:{hook}")
             continue
-        try:
-            contents = path.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
-            errors.append(f"unreadable_source_hook:{hook}")
-            continue
         for symbol in symbols:
+            evidence_anchor = f"{hook}::{symbol}"
+            if repository_graph is not None:
+                graph_file = repository_graph.files.get(hook)
+                if graph_file is None:
+                    errors.append(f"unverified_source_symbol:{evidence_anchor}")
+                    continue
+                if sha256_file(path) != graph_file.digest:
+                    errors.append(f"stale_repository_graph:{hook}")
+                    continue
+                resolution = repository_graph.resolve_anchor(evidence_anchor)
+                if resolution.status == "ambiguous":
+                    errors.append(f"ambiguous_source_symbol:{evidence_anchor}")
+                elif not resolution.resolved:
+                    errors.append(f"unverified_source_symbol:{evidence_anchor}")
+                continue
+            try:
+                contents = path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                errors.append(f"unreadable_source_hook:{hook}")
+                continue
             token = symbol.split("(", 1)[0].strip()
             if not token or token not in contents:
-                errors.append(f"unverified_source_symbol:{hook}::{symbol}")
+                errors.append(f"unverified_source_symbol:{evidence_anchor}")
     return tuple(errors)
 
 
@@ -423,7 +477,7 @@ def _same_or_compatible_idea(
     if not same_hooks:
         return False
     same_grounding = (
-        set(source_evidence) == set(_items(idea.get("source_evidence")))
+        set(source_evidence) == set(_source_evidence_items(idea.get("source_evidence")))
         and set(expected_signals) == set(_items(idea.get("expected_signals")))
     )
     return same_grounding or _text_similarity(claim, str(idea.get("idea") or "")) >= 0.72

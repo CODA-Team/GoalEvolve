@@ -1817,8 +1817,8 @@ class DiversePlanner:
             *(f"metric:{item}" for item in getattr(decision, "observed_metrics", ())),
             *(f"symbol:{item}" for item in getattr(decision, "observed_symbols", ())),
         )
-        exact_stage_paths = tuple(path for path in stage_patch_paths if path.endswith((".cc", ".hh", ".cpp", ".hpp", ".tcl")))
-        allowed_paths = tuple(path for path in hooks if path.endswith((".cc", ".hh", ".cpp", ".hpp", ".tcl"))) if epd_records else (exact_stage_paths or tuple(path for path in hooks if path.endswith((".cc", ".hh", ".cpp", ".hpp", ".tcl"))))
+        exact_stage_paths = tuple(path for path in stage_patch_paths if path.endswith((".cc", ".hh", ".cpp", ".hpp", ".h", ".tcl")))
+        allowed_paths = tuple(path for path in hooks if path.endswith((".cc", ".hh", ".cpp", ".hpp", ".h", ".tcl"))) if epd_records else (exact_stage_paths or tuple(path for path in hooks if path.endswith((".cc", ".hh", ".cpp", ".hpp", ".h", ".tcl"))))
         claim = card.claim_template
         if role_mode == "epd_integration":
             claim = "Integrate only compatible source-backed decisions from the selected EPD mechanisms; preserve guards, rollback, and telemetry semantics. " + claim

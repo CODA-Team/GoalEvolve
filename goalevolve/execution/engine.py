@@ -14,6 +14,8 @@ from ..planning.epd import EvolutionProgramDatabase
 from ..core.io import atomic_json, load_json, sha256_json
 from ..core.models import CandidateResult, EvidenceVerdict, Hypothesis, Parent
 from ..planning.observations import ObservationMemory
+from ..planning.repository_graph import RepositoryGraphIndex
+from ..planning.search_policy import SearchPolicyBuilder
 from ..core.plugins import Evaluator, Planner, PromotionPolicy, StudentEditor, Teacher, WorkspaceProvider
 from ..agents.prompting import review_packet, student_packet, teacher_packet
 from .preflight import preflight_candidate
@@ -23,7 +25,6 @@ from .workspace import clone_source_tree
 from .teacher_assignment import (
     build_role_templates,
     materialize_teacher_assignments,
-    source_structure_index,
 )
 from ..evaluation.leaderboard import update_unified_leaderboard
 
@@ -306,12 +307,30 @@ class GoalEvolveEngine:
                 if not role_templates:
                     raise RuntimeError("teacher_role_schedule_has_no_actionable_students")
                 parent_source = self.state_root / "parents" / parent.source_hash / "source"
-                source_index = source_structure_index(
+                allowed_patch_roots = tuple(
+                    getattr(self.evaluator, "config", object()).allowed_patch_roots
+                ) if hasattr(getattr(self.evaluator, "config", object()), "allowed_patch_roots") else ()
+                repository_graph = RepositoryGraphIndex(state_root=self.state_root).build_parent(
                     source_root=parent_source,
-                    allowed_patch_roots=tuple(getattr(self.evaluator, "config", object()).allowed_patch_roots)
-                    if hasattr(getattr(self.evaluator, "config", object()), "allowed_patch_roots")
-                    else (),
+                    source_hash=parent.source_hash,
+                    allowed_patch_roots=allowed_patch_roots,
                 )
+                source_index = repository_graph.compact_index()
+                repository_graph_packet = repository_graph.focus(
+                    metric_hints=self._teacher_reference_symptoms(
+                        diagnosis=round_diagnosis,
+                        decision_context=decision_context,
+                    ),
+                    allowed_patch_roots=allowed_patch_roots,
+                )
+                search_policy = SearchPolicyBuilder(self.state_root).build(
+                    parent=parent,
+                    diagnosis=round_diagnosis,
+                    epd_portfolio=epd_portfolio,
+                    repository_graph=repository_graph,
+                    allowed_patch_roots=allowed_patch_roots,
+                )
+                SearchPolicyBuilder.persist(round_root=round_root, policy=search_policy)
                 retriever = getattr(self.planner, "retriever", None)
                 paper_cards = (
                     retriever.paper_card_references(
@@ -336,6 +355,8 @@ class GoalEvolveEngine:
                     previous_review=previous_review,
                     decision_context=decision_context,
                     source_index=source_index,
+                    repository_graph=repository_graph_packet,
+                    search_policy=search_policy,
                     source_root=parent_source,
                     paper_cards=paper_cards,
                 )
@@ -353,9 +374,10 @@ class GoalEvolveEngine:
                         ),
                         templates=role_templates,
                         source_root=parent_source,
-                        allowed_patch_roots=tuple(getattr(self.evaluator.config, "allowed_patch_roots", ())),
+                        allowed_patch_roots=allowed_patch_roots,
                         historical_ideas=epd_database.ideas(),
                         paper_card_ids=tuple(str(row.get("card_id") or "") for row in paper_cards),
+                        repository_graph=repository_graph,
                         teacher_context={
                             "diagnosis_summary": plan.get("diagnosis_summary"),
                             "parent_policy": plan.get("parent_policy"),
@@ -409,6 +431,8 @@ class GoalEvolveEngine:
                 teacher_plan_payload["hypotheses"] = [item.to_dict() for item in hypotheses]
                 teacher_plan_payload["role_schedule"] = role_schedule
                 teacher_plan_payload["source_index"] = source_index
+                teacher_plan_payload["repository_graph"] = repository_graph_packet
+                teacher_plan_payload["search_policy"] = search_policy
                 teacher_plan_payload["paper_cards"] = paper_cards
                 cited_cards = [
                     str(card_id)

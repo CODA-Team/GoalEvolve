@@ -255,6 +255,27 @@ Retain the verified timing guard.
         self.assertEqual(review["mechanism_actions"][0]["action"], "refine")
         self.assertEqual(review["next_round_constraints"], "Retain the verified timing guard.")
 
+    def test_teacher_markdown_protocol_preserves_overload_declarator_commas(self) -> None:
+        from goalevolve.agents.markdown_protocol import parse_teacher_plan
+
+        parsed = parse_teacher_plan(
+            """## Student Assignments
+### student_1
+- Role: explorer
+- Source Evidence: src/rsz/Foo.cc::rsz::Foo::run(int count, double ratio); src/rmp/Bar.cpp::rmp::Bar::run()
+
+### student_2
+- Role: explorer
+- Source Evidence: src/rsz/Foo.cc::rsz::Foo::run(int count, double ratio), src/rmp/Bar.cpp::rmp::Bar::run()
+"""
+        )
+        expected = (
+            "src/rsz/Foo.cc::rsz::Foo::run(int count, double ratio)",
+            "src/rmp/Bar.cpp::rmp::Bar::run()",
+        )
+        self.assertEqual(parsed["assignments"][0]["source_evidence"], expected)
+        self.assertEqual(parsed["assignments"][1]["source_evidence"], expected)
+
     def test_teacher_markdown_protocol_preserves_structured_pending_idea_fields(self) -> None:
         from goalevolve.agents.markdown_protocol import parse_teacher_plan
 
@@ -377,6 +398,592 @@ Retain parent.
         self.assertEqual(hypothesis.source_hooks, ("src/rsz/src/Timing.cc",))
         self.assertEqual(hypothesis.allowed_patch_paths, ())
         self.assertEqual(hypothesis.teacher_idea_reference, "idea_3")
+
+    def test_repository_graph_extracts_qualified_symbols_and_includes(self) -> None:
+        from goalevolve.planning.repository_graph import RepositoryGraphIndex
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            header = source / "src/rsz/Foo.hh"
+            implementation = source / "src/rsz/Foo.cc"
+            rmp = source / "src/rmp/Bar.cc"
+            header.parent.mkdir(parents=True)
+            rmp.parent.mkdir(parents=True)
+            header.write_text(
+                "namespace rsz { class Foo { public: void run(); }; }\n",
+                encoding="utf-8",
+            )
+            implementation.write_text(
+                '#include "Foo.hh"\n'
+                "namespace rsz { void Foo::run() { helper(); } void helper() {} }\n",
+                encoding="utf-8",
+            )
+            rmp.write_text(
+                "namespace rmp { class Bar { public: void restructure(); }; }\n",
+                encoding="utf-8",
+            )
+
+            graph = RepositoryGraphIndex(
+                state_root=root / "state",
+                p0_source_root=source,
+                p0_artifact_root=root / "p0_graph",
+            ).build_p0(
+                source_hash="p0_content",
+                allowed_patch_roots=("src/rsz", "src/rmp"),
+            )
+
+            symbol = graph.symbol_for_anchor("src/rsz/Foo.cc::rsz::Foo::run")
+            self.assertIsNotNone(symbol)
+            self.assertEqual(symbol.qualified_name, "rsz::Foo::run")
+            self.assertEqual(
+                graph.edges_of_kind("includes"),
+                (("file:src/rsz/Foo.cc", "file:src/rsz/Foo.hh"),),
+            )
+            self.assertEqual(graph.base_source_hash, "p0_content")
+            self.assertEqual(graph.allowed_patch_roots, ("src/rmp", "src/rsz"))
+            self.assertTrue((graph.artifact_root / "manifest.json").is_file())
+            self.assertTrue((graph.artifact_root / "graph.json").is_file())
+            self.assertTrue((graph.artifact_root / "doc_cards.json").is_file())
+            cards = graph.doc_cards()
+            self.assertEqual(cards["file:src/rsz/Foo.cc"]["source_hash"], "p0_content")
+            self.assertEqual(cards[symbol.symbol_id]["source_hash"], "p0_content")
+
+    def test_repository_graph_excludes_module_test_sources(self) -> None:
+        from goalevolve.planning.repository_graph import RepositoryGraphIndex
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            production = source / "src/rsz/src/Timing.cc"
+            test = source / "src/rsz/test/cpp/TestTiming.cc"
+            production.parent.mkdir(parents=True)
+            test.parent.mkdir(parents=True)
+            production.write_text("namespace rsz { void timing() {} }\n", encoding="utf-8")
+            test.write_text("namespace rsz { void testTiming() {} }\n", encoding="utf-8")
+            graph = RepositoryGraphIndex(
+                state_root=root / "state",
+                p0_source_root=source,
+                p0_artifact_root=root / "p0_graph",
+            ).build_p0(source_hash="p0")
+
+        self.assertIn("src/rsz/src/Timing.cc", graph.files)
+        self.assertNotIn("src/rsz/test/cpp/TestTiming.cc", graph.files)
+
+    def test_source_structure_index_is_an_ast_backed_compatibility_view(self) -> None:
+        from goalevolve.execution.teacher_assignment import source_structure_index
+        from goalevolve.planning.repository_graph import RepositoryGraphIndex
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            hook = source / "src/rsz/Timing.cc"
+            hook.parent.mkdir(parents=True)
+            hook.write_text(
+                "namespace rsz { void adjustTiming() {} }\n",
+                encoding="utf-8",
+            )
+            graph = RepositoryGraphIndex(
+                state_root=root / "state",
+                p0_source_root=source,
+                p0_artifact_root=root / "p0_graph",
+            ).build_p0(source_hash="p0", allowed_patch_roots=("src/rsz",))
+            index = source_structure_index(
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                repository_graph=graph,
+            )
+
+        self.assertEqual(index["src/rsz"]["sampled_files"]["src/rsz/Timing.cc"]["symbols"], ["rsz::adjustTiming"])
+        self.assertEqual(set(index), {"src/rsz"})
+
+    def test_source_structure_index_legacy_call_builds_a_fresh_ast_view(self) -> None:
+        from goalevolve.execution.teacher_assignment import source_structure_index
+
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "source"
+            hook = source / "src/rmp/Restructure.h"
+            hook.parent.mkdir(parents=True)
+            hook.write_text(
+                "namespace rmp { struct Restructure { void run(); }; }\n",
+                encoding="utf-8",
+            )
+            index = source_structure_index(
+                source_root=source,
+                allowed_patch_roots=("src/rmp",),
+            )
+
+        self.assertEqual(index["src/rmp"]["sampled_files"]["src/rmp/Restructure.h"]["symbols"], ["rmp::Restructure"])
+
+    def test_parent_graph_reuses_p0_facts_and_reparses_only_changed_files(self) -> None:
+        from goalevolve.planning.repository_graph import RepositoryGraphIndex
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            p0_source = root / "p0" / "source"
+            foo = p0_source / "src/rsz/Foo.cc"
+            bar = p0_source / "src/rmp/Bar.cc"
+            foo.parent.mkdir(parents=True)
+            bar.parent.mkdir(parents=True)
+            foo.write_text("namespace rsz { void foo() {} }\n", encoding="utf-8")
+            bar.write_text("namespace rmp { void bar() {} }\n", encoding="utf-8")
+            index = RepositoryGraphIndex(
+                state_root=root / "state",
+                p0_source_root=p0_source,
+                p0_artifact_root=root / "p0" / "repository_graph",
+            )
+            p0_graph = index.build_p0(
+                allowed_patch_roots=("src/rsz", "src/rmp"),
+            )
+            parent_source = root / "parent" / "source"
+            shutil.copytree(p0_source, parent_source)
+            (parent_source / "src/rmp/Bar.cc").write_text(
+                "namespace rmp { void bar_after_patch() {} }\n",
+                encoding="utf-8",
+            )
+
+            parent_graph = index.build_parent(
+                source_root=parent_source,
+                source_hash="parent_after_one_patch",
+                allowed_patch_roots=("src/rsz", "src/rmp"),
+            )
+
+            self.assertEqual(parent_graph.base_source_hash, p0_graph.source_hash)
+            self.assertEqual(parent_graph.allowed_patch_roots, ("src/rmp", "src/rsz"))
+            self.assertEqual(parent_graph.artifact_root, root / "state/knowledge/repository_graph/parent_after_one_patch")
+            self.assertEqual(parent_graph.reused_files, ("src/rsz/Foo.cc",))
+            self.assertEqual(parent_graph.reparsed_files, ("src/rmp/Bar.cc",))
+            foo_card = parent_graph.doc_card("src/rsz/Foo.cc::rsz::foo")
+            self.assertEqual(foo_card["source_digest"], p0_graph.doc_card("src/rsz/Foo.cc::rsz::foo")["source_digest"])
+
+    def test_controller_uses_graph_for_unique_qualified_source_anchor(self) -> None:
+        from goalevolve.execution.teacher_assignment import (
+            build_role_templates,
+            materialize_teacher_assignments,
+        )
+        from goalevolve.planning.repository_graph import RepositoryGraphIndex
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            hook = source / "src/rsz/Timing.cc"
+            hook.parent.mkdir(parents=True)
+            hook.write_text("namespace rsz { void adjustTiming() {} }\n", encoding="utf-8")
+            graph = RepositoryGraphIndex(
+                state_root=root / "state",
+                p0_source_root=source,
+                p0_artifact_root=root / "p0_graph",
+            ).build_p0(source_hash="p0", allowed_patch_roots=("src/rsz",))
+            templates = build_role_templates(
+                student_ids=("student_1",),
+                round_index=1,
+                decision_context={"evaluation_mode": "timing_only"},
+                portfolio={},
+                suspend_explorers=False,
+            )
+            result = materialize_teacher_assignments(
+                assignments=(
+                    {
+                        "student_id": "student_1",
+                        "role": "explorer",
+                        "idea_reference": "idea_1",
+                        "claim": "Rank the local timing work by post-route debt.",
+                        "selection_rationale": "The timing residual is dominant.",
+                        "source_hooks": ("src/rsz/Timing.cc",),
+                        "source_evidence": ("src/rsz/Timing.cc::rsz::adjustTiming",),
+                        "expected_signals": ("timing_work_examined",),
+                        "falsification_condition": "No official timing improvement.",
+                    },
+                ),
+                evolution_ideas=(
+                    {
+                        "reference": "idea_1",
+                        "idea": "Rank the local timing work by post-route debt.",
+                        "source_hooks": ("src/rsz/Timing.cc",),
+                        "source_evidence": ("src/rsz/Timing.cc::rsz::adjustTiming",),
+                        "expected_signals": ("timing_work_examined",),
+                    },
+                ),
+                templates=templates,
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                historical_ideas=(),
+                repository_graph=graph,
+            )
+        self.assertEqual(result.errors, ())
+
+    def test_controller_accepts_a_header_hook_with_a_unique_graph_anchor(self) -> None:
+        from goalevolve.execution.teacher_assignment import (
+            build_role_templates,
+            materialize_teacher_assignments,
+        )
+        from goalevolve.planning.repository_graph import RepositoryGraphIndex
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            hook = source / "src/rsz/RecoverPower.h"
+            hook.parent.mkdir(parents=True)
+            hook.write_text("namespace rsz { inline void inspectHeader() {} }\n", encoding="utf-8")
+            graph = RepositoryGraphIndex(
+                state_root=root / "state",
+                p0_source_root=source,
+                p0_artifact_root=root / "p0_graph",
+            ).build_p0(source_hash="p0")
+            templates = build_role_templates(
+                student_ids=("student_1",),
+                round_index=1,
+                decision_context={"evaluation_mode": "timing_only"},
+                portfolio={},
+                suspend_explorers=False,
+            )
+            result = materialize_teacher_assignments(
+                assignments=(
+                    {
+                        "student_id": "student_1",
+                        "role": "explorer",
+                        "idea_reference": "idea_1",
+                        "claim": "Inspect the header-local timing boundary.",
+                        "selection_rationale": "The header declares the active boundary.",
+                        "source_hooks": ("src/rsz/RecoverPower.h",),
+                        "source_evidence": ("src/rsz/RecoverPower.h::rsz::inspectHeader",),
+                        "expected_signals": ("header_boundary_examined",),
+                        "falsification_condition": "No official timing improvement.",
+                    },
+                ),
+                evolution_ideas=(
+                    {
+                        "reference": "idea_1",
+                        "idea": "Inspect the header-local timing boundary.",
+                        "source_hooks": ("src/rsz/RecoverPower.h",),
+                        "source_evidence": ("src/rsz/RecoverPower.h::rsz::inspectHeader",),
+                        "expected_signals": ("header_boundary_examined",),
+                    },
+                ),
+                templates=templates,
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                historical_ideas=(),
+                repository_graph=graph,
+            )
+        self.assertEqual(result.errors, ())
+
+    def test_controller_rejects_ambiguous_short_graph_source_anchor(self) -> None:
+        from goalevolve.execution.teacher_assignment import (
+            build_role_templates,
+            materialize_teacher_assignments,
+        )
+        from goalevolve.planning.repository_graph import RepositoryGraphIndex
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            hook = source / "src/rsz/Timing.cc"
+            hook.parent.mkdir(parents=True)
+            hook.write_text(
+                "namespace first { void run() {} } namespace second { void run() {} }\n",
+                encoding="utf-8",
+            )
+            graph = RepositoryGraphIndex(
+                state_root=root / "state",
+                p0_source_root=source,
+                p0_artifact_root=root / "p0_graph",
+            ).build_p0(source_hash="p0", allowed_patch_roots=("src/rsz",))
+            templates = build_role_templates(
+                student_ids=("student_1",),
+                round_index=1,
+                decision_context={"evaluation_mode": "timing_only"},
+                portfolio={},
+                suspend_explorers=False,
+            )
+            result = materialize_teacher_assignments(
+                assignments=(
+                    {
+                        "student_id": "student_1",
+                        "role": "explorer",
+                        "idea_reference": "idea_1",
+                        "claim": "Rank local work by post-route debt.",
+                        "selection_rationale": "The timing residual is dominant.",
+                        "source_hooks": ("src/rsz/Timing.cc",),
+                        "source_evidence": ("src/rsz/Timing.cc::run",),
+                        "expected_signals": ("timing_work_examined",),
+                        "falsification_condition": "No official timing improvement.",
+                    },
+                ),
+                evolution_ideas=(
+                    {
+                        "reference": "idea_1",
+                        "idea": "Rank local work by post-route debt.",
+                        "source_hooks": ("src/rsz/Timing.cc",),
+                        "source_evidence": ("src/rsz/Timing.cc::run",),
+                        "expected_signals": ("timing_work_examined",),
+                    },
+                ),
+                templates=templates,
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                historical_ideas=(),
+                repository_graph=graph,
+            )
+        self.assertEqual(
+            result.errors,
+            ("student_1:ambiguous_source_symbol:src/rsz/Timing.cc::run",),
+        )
+
+    def test_repository_graph_resolves_an_overload_with_its_declarator(self) -> None:
+        from goalevolve.planning.repository_graph import RepositoryGraphIndex
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            implementation = source / "src/rsz/Foo.cc"
+            implementation.parent.mkdir(parents=True)
+            implementation.write_text(
+                "namespace rsz { void Foo::run(int count) {} void Foo::run(double ratio) {} }\n",
+                encoding="utf-8",
+            )
+            graph = RepositoryGraphIndex(
+                state_root=root / "state",
+                p0_source_root=source,
+                p0_artifact_root=root / "p0_graph",
+            ).build_p0(source_hash="p0")
+
+        short = graph.resolve_anchor("src/rsz/Foo.cc::rsz::Foo::run")
+        overload = graph.resolve_anchor("src/rsz/Foo.cc::rsz::Foo::run(int count)")
+        self.assertEqual(short.status, "ambiguous")
+        self.assertEqual(overload.status, "resolved")
+        self.assertEqual(overload.symbols[0].declarator, "Foo::run(int count)")
+
+    def test_controller_rejects_source_evidence_from_a_stale_graph_file(self) -> None:
+        from goalevolve.execution.teacher_assignment import (
+            build_role_templates,
+            materialize_teacher_assignments,
+        )
+        from goalevolve.planning.repository_graph import RepositoryGraphIndex
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            hook = source / "src/rsz/Timing.cc"
+            hook.parent.mkdir(parents=True)
+            hook.write_text("namespace rsz { void adjustTiming() {} }\n", encoding="utf-8")
+            graph = RepositoryGraphIndex(
+                state_root=root / "state",
+                p0_source_root=source,
+                p0_artifact_root=root / "p0_graph",
+            ).build_p0(source_hash="p0", allowed_patch_roots=("src/rsz",))
+            hook.write_text("namespace rsz { void adjustTiming() { int changed = 1; } }\n", encoding="utf-8")
+            templates = build_role_templates(
+                student_ids=("student_1",),
+                round_index=1,
+                decision_context={"evaluation_mode": "timing_only"},
+                portfolio={},
+                suspend_explorers=False,
+            )
+            result = materialize_teacher_assignments(
+                assignments=(
+                    {
+                        "student_id": "student_1",
+                        "role": "explorer",
+                        "idea_reference": "idea_1",
+                        "claim": "Rank the local timing work by post-route debt.",
+                        "selection_rationale": "The timing residual is dominant.",
+                        "source_hooks": ("src/rsz/Timing.cc",),
+                        "source_evidence": ("src/rsz/Timing.cc::rsz::adjustTiming",),
+                        "expected_signals": ("timing_work_examined",),
+                        "falsification_condition": "No official timing improvement.",
+                    },
+                ),
+                evolution_ideas=(
+                    {
+                        "reference": "idea_1",
+                        "idea": "Rank the local timing work by post-route debt.",
+                        "source_hooks": ("src/rsz/Timing.cc",),
+                        "source_evidence": ("src/rsz/Timing.cc::rsz::adjustTiming",),
+                        "expected_signals": ("timing_work_examined",),
+                    },
+                ),
+                templates=templates,
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                historical_ideas=(),
+                repository_graph=graph,
+            )
+
+        self.assertEqual(
+            result.errors,
+            ("student_1:stale_repository_graph:src/rsz/Timing.cc",),
+        )
+
+    def test_search_policy_keeps_current_parent_as_only_incumbent(self) -> None:
+        from goalevolve.planning.repository_graph import RepositoryGraphIndex
+        from goalevolve.planning.search_policy import SearchPolicyBuilder
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            hook = source / "src/rsz/Timing.cc"
+            hook.parent.mkdir(parents=True)
+            hook.write_text("namespace rsz { void adjustTiming() {} }\n", encoding="utf-8")
+            graph = RepositoryGraphIndex(
+                state_root=root,
+                p0_source_root=source,
+                p0_artifact_root=root / "p0_graph",
+            ).build_p0(source_hash="p0", allowed_patch_roots=("src/rsz",))
+            policy = SearchPolicyBuilder(root).build(
+                parent=self.parent,
+                diagnosis=SimpleNamespace(
+                    dominant_bottleneck="tns_abs_ns",
+                    to_dict=lambda: {"dominant_bottleneck": "tns_abs_ns"},
+                ),
+                epd_portfolio={
+                    "records": [
+                        {
+                            "record_id": "EPD_VALIDATED",
+                            "epd_status": "validated",
+                            "elite_score": 0.3,
+                            "source_hooks": ("src/rsz/Timing.cc",),
+                        }
+                    ]
+                },
+                repository_graph=graph,
+            )
+
+        self.assertEqual(policy["hill_climb"]["incumbent_parent_id"], self.parent.parent_id)
+        self.assertEqual(policy["hill_climb"]["alternative_parent_ids"], [])
+        self.assertFalse(policy["promotion_authority"])
+        self.assertEqual(policy["elite_record_ids"], ["EPD_VALIDATED"])
+
+    def test_search_policy_requires_diversification_after_two_completed_no_promotion_rounds(self) -> None:
+        from goalevolve.planning.repository_graph import RepositoryGraphIndex
+        from goalevolve.planning.search_policy import SearchPolicyBuilder
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            hook = source / "src/rmp/Restructure.cc"
+            hook.parent.mkdir(parents=True)
+            hook.write_text("namespace rmp { void restructure() {} }\n", encoding="utf-8")
+            graph = RepositoryGraphIndex(
+                state_root=root,
+                p0_source_root=source,
+                p0_artifact_root=root / "p0_graph",
+            ).build_p0(source_hash="p0", allowed_patch_roots=("src/rmp",))
+            for round_index in (1, 2):
+                atomic_json(
+                    root / "rounds" / f"round_{round_index:03d}" / "round.json",
+                    {"round": round_index, "promoted_student": None},
+                )
+            policy = SearchPolicyBuilder(root).build(
+                parent=self.parent,
+                diagnosis=SimpleNamespace(
+                    dominant_bottleneck="leakage_power_pw",
+                    to_dict=lambda: {"dominant_bottleneck": "leakage_power_pw"},
+                ),
+                epd_portfolio={"records": []},
+                repository_graph=graph,
+            )
+
+        self.assertEqual(policy["no_promotion_streak"], 2)
+        self.assertTrue(policy["diversification"]["required"])
+
+    def test_search_policy_exposes_failed_hook_frontier_after_stagnation(self) -> None:
+        from goalevolve.planning.repository_graph import RepositoryGraphIndex
+        from goalevolve.planning.search_policy import SearchPolicyBuilder
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            hook = source / "src/rmp/Restructure.cc"
+            hook.parent.mkdir(parents=True)
+            hook.write_text("namespace rmp { void restructure() {} }\n", encoding="utf-8")
+            graph = RepositoryGraphIndex(
+                state_root=root,
+                p0_source_root=source,
+                p0_artifact_root=root / "p0_graph",
+            ).build_p0(source_hash="p0")
+            for round_index in (1, 2):
+                atomic_json(
+                    root / "rounds" / f"round_{round_index:03d}" / "round.json",
+                    {
+                        "round": round_index,
+                        "promoted_student": None,
+                        "teacher_plan": {
+                            "hypotheses": [
+                                {
+                                    "hypothesis_id": f"r{round_index}_student_1",
+                                    "source_hooks": ["src/rmp/Restructure.cc"],
+                                }
+                            ]
+                        },
+                        "results": [
+                            {
+                                "student_id": "student_1",
+                                "hypothesis_id": f"r{round_index}_student_1",
+                                "verdict": {
+                                    "state": "refuted",
+                                    "distance_gain": -0.02,
+                                    "mechanism_fired": True,
+                                    "reasons": ["official_contract_not_improved"],
+                                },
+                            }
+                        ],
+                    },
+                )
+            policy = SearchPolicyBuilder(root).build(
+                parent=self.parent,
+                diagnosis=SimpleNamespace(dominant_bottleneck="tns_abs_ns", to_dict=lambda: {}),
+                epd_portfolio={"records": []},
+                repository_graph=graph,
+            )
+
+        self.assertEqual(len(policy["stagnation"]["recent_nonpromoted_attempts"]), 2)
+        self.assertEqual(
+            policy["stagnation"]["repeated_hook_frontier"],
+            [
+                {
+                    "source_hook": "src/rmp/Restructure.cc",
+                    "attempt_count": 2,
+                    "activation_count": 2,
+                    "best_distance_gain": -0.02,
+                    "last_evidence_state": "refuted",
+                }
+            ],
+        )
+        self.assertEqual(
+            policy["diversification"]["avoid_exact_source_hooks"],
+            ["src/rmp/Restructure.cc"],
+        )
+
+    def test_search_policy_filters_graph_cards_to_current_patch_roots(self) -> None:
+        from goalevolve.planning.repository_graph import RepositoryGraphIndex
+        from goalevolve.planning.search_policy import SearchPolicyBuilder
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            rsz = source / "src/rsz/Timing.cc"
+            rmp = source / "src/rmp/Restructure.cc"
+            rsz.parent.mkdir(parents=True)
+            rmp.parent.mkdir(parents=True)
+            rsz.write_text("namespace rsz { void timing() {} }\n", encoding="utf-8")
+            rmp.write_text("namespace rmp { void restructure() {} }\n", encoding="utf-8")
+            graph = RepositoryGraphIndex(
+                state_root=root,
+                p0_source_root=source,
+                p0_artifact_root=root / "p0_graph",
+            ).build_p0(source_hash="p0")
+            policy = SearchPolicyBuilder(root).build(
+                parent=self.parent,
+                diagnosis=SimpleNamespace(dominant_bottleneck="tns_abs_ns", to_dict=lambda: {}),
+                epd_portfolio={"records": []},
+                repository_graph=graph,
+                allowed_patch_roots=("src/rsz",),
+            )
+
+        cards = policy["repository_graph"]["focus"]["cards"]
+        self.assertTrue(cards)
+        self.assertTrue(all(card["path"].startswith("src/rsz/") for card in cards))
 
     def test_controller_selects_an_executing_recipe_for_a_phase_specific_teacher_hook(self) -> None:
         from goalevolve.execution.teacher_assignment import (
@@ -780,6 +1387,88 @@ Keep the checked parent.
         )
         self.assertLess(prompt.index("## Source Investigation"), prompt.index("## Evolution Ideas"))
 
+    def test_teacher_prompt_includes_p0_rooted_doc_card_packet(self) -> None:
+        prompt = CodexTeacher._plan_prompt(
+            parent=self.parent,
+            diagnosis=SimpleNamespace(to_dict=lambda: {}),
+            epd={},
+            observations={},
+            previous_review={},
+            fallback=(replace(self.hypothesis, student_id="student_1"),),
+            repository_graph={
+                "source_hash": "parent_hash",
+                "base_source_hash": "frozen_p0",
+                "artifact_root": "/state/knowledge/repository_graph/parent_hash",
+                "cards": [{"path": "src/rsz/Timing.cc", "qualified_name": "rsz::adjustTiming"}],
+            },
+        )
+        self.assertIn("## P0-rooted Source Graph and Doc Cards", prompt)
+        self.assertIn("frozen_p0", prompt)
+        self.assertIn("rsz::adjustTiming", prompt)
+
+    def test_repository_graph_focus_filters_cards_to_allowed_patch_roots(self) -> None:
+        from goalevolve.planning.repository_graph import RepositoryGraphIndex
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            rsz = source / "src/rsz/Timing.cc"
+            rmp = source / "src/rmp/Restructure.cc"
+            rsz.parent.mkdir(parents=True)
+            rmp.parent.mkdir(parents=True)
+            rsz.write_text("namespace rsz { void timing() {} }\n", encoding="utf-8")
+            rmp.write_text("namespace rmp { void restructure() {} }\n", encoding="utf-8")
+            graph = RepositoryGraphIndex(
+                state_root=root / "state",
+                p0_source_root=source,
+                p0_artifact_root=root / "p0_graph",
+            ).build_p0(source_hash="p0")
+            packet = graph.focus(allowed_patch_roots=("src/rsz",))
+
+        self.assertTrue(packet["cards"])
+        self.assertTrue(all(card["path"].startswith("src/rsz/") for card in packet["cards"]))
+
+    def test_repository_graph_focus_emits_a_closed_induced_subgraph(self) -> None:
+        from goalevolve.planning.repository_graph import RepositoryGraphIndex
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            header = source / "src/rsz/Foo.hh"
+            implementation = source / "src/rsz/Foo.cc"
+            header.parent.mkdir(parents=True)
+            header.write_text("namespace rsz { class Foo {}; }\n", encoding="utf-8")
+            implementation.write_text(
+                '#include "Foo.hh"\n'
+                "namespace rsz { void run() { helper(); } void helper() {} }\n",
+                encoding="utf-8",
+            )
+            graph = RepositoryGraphIndex(
+                state_root=root / "state",
+                p0_source_root=source,
+                p0_artifact_root=root / "p0_graph",
+            ).build_p0(source_hash="p0")
+            packet = graph.focus(
+                anchor_hints=("src/rsz/Foo.cc::rsz::run",),
+                allowed_patch_roots=("src/rsz",),
+                max_cards=3,
+            )
+
+        card_ids = {card["card_id"] for card in packet["cards"]}
+        self.assertTrue(packet["edges"])
+        self.assertEqual(packet["simplification"]["selected_symbol_count"], 3)
+        self.assertGreaterEqual(packet["simplification"]["one_hop_call_neighbor_count"], 1)
+        self.assertTrue(any(edge["kind"] == "calls" for edge in packet["edges"]))
+        self.assertTrue(any(edge["kind"] == "includes" for edge in packet["edges"]))
+        self.assertIn("rsz::run", {card.get("qualified_name") for card in packet["cards"]})
+        self.assertIn("rsz::helper", {card.get("qualified_name") for card in packet["cards"]})
+        self.assertTrue(
+            all(edge["source"] in card_ids and edge["target"] in card_ids for edge in packet["edges"])
+        )
+        for card in packet["cards"]:
+            for field in ("contains", "includes", "included_by", "calls", "called_by"):
+                self.assertTrue(set(card.get(field, ())).issubset(card_ids))
+
     def test_codex_teacher_retries_invalid_markdown_in_the_same_thread(self) -> None:
         from goalevolve.agents.codex_runtime import CodexTurn
         from goalevolve.agents.teacher import CodexTeacher, CodexTeacherConfig
@@ -1040,10 +1729,16 @@ Keep the checked parent.
             engine.initialize(baseline_metrics=dict(self.parent.metrics))
             engine.run(rounds=1)
             plan = load_json(root / "campaign" / "rounds" / "round_001" / "teacher_plan.json")
+            self.assertTrue((root / "campaign" / "rounds" / "round_001" / "search_policy.json").is_file())
         hypotheses = list(plan["hypotheses"])
         self.assertEqual([row["source_hooks"] for row in hypotheses], [["src/rsz/src/Teacher.cc"], ["src/rsz/src/Teacher.cc"]])
         self.assertTrue(all(row["retrieval_ids"][0].startswith("teacher_idea:") for row in hypotheses))
         self.assertNotIn("planner_card", str(hypotheses))
+        self.assertEqual(plan["repository_graph"]["source_hash"], "baseline")
+        self.assertTrue(plan["repository_graph"]["base_source_hash"])
+        self.assertIn("knowledge/repository_graph/baseline", plan["repository_graph"]["artifact_root"])
+        self.assertEqual(plan["search_policy"]["hill_climb"]["incumbent_parent_id"], "baseline")
+        self.assertFalse(plan["search_policy"]["promotion_authority"])
 
     def test_epd_role_portfolio_uses_distinct_validated_qor_islands(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -2283,6 +2978,19 @@ Keep the checked parent.
         report = preflight_candidate(mixed, allowed_patch_roots=("src/rsz",), allowed_patch_paths=mixed.hypothesis.allowed_patch_paths)
         self.assertFalse(report.ok)
         self.assertIn("outside_assigned_patch_scope:src/rsz/src/policy/SetupCritVtSwapPolicy.cc", report.violations)
+
+    def test_preflight_accepts_a_header_only_cpp_patch(self) -> None:
+        candidate = CandidateResult(
+            "student",
+            self.hypothesis,
+            {},
+            {},
+            [],
+            "+++ b/src/rsz/include/rsz/RecoverPower.h\n+// documented boundary\n",
+            "commit",
+        )
+        report = preflight_candidate(candidate, allowed_patch_roots=("src/rsz",))
+        self.assertTrue(report.ok)
 
     def test_timing_recovery_prefers_direct_repair_timing_cards(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -1,0 +1,750 @@
+{
+  "allowed_patch_roots": [
+    "src/rmp",
+    "src/rsz"
+  ],
+  "base_source_hash": "32efd545fbebf4e487404f0661744fab7e41c0b3eda1f8b5762fe70857cc1d48",
+  "files": {
+    "src/rmp/include/rmp/MakeRestructure.h": {
+      "digest": "215fc41490cf919bddfdcc38ee5794ef55a13afb03bf6a077c522ee06e65a268",
+      "parse_error": false
+    },
+    "src/rmp/include/rmp/Restructure.h": {
+      "digest": "4ca3d912f51c1fef2f1c8368267c00ffcfe2fbbaaea661c17784644ee52585ed",
+      "parse_error": false
+    },
+    "src/rmp/src/MakeRestructure.cpp": {
+      "digest": "08fd02693925cf24861173924e44ab1e685e9ec19a2de98c7b7823345d81bcc9",
+      "parse_error": false
+    },
+    "src/rmp/src/Restructure.cpp": {
+      "digest": "9867ed9a339d9c28d3988263564541398335f0088d63e6aa9b25e6f798df9095",
+      "parse_error": false
+    },
+    "src/rmp/src/annealing_strategy.cpp": {
+      "digest": "922cad9845f3c480dfa8cd572f0d847e06847a7c58c6aa3205f1564649334118",
+      "parse_error": false
+    },
+    "src/rmp/src/annealing_strategy.h": {
+      "digest": "6a1734a4d38b1d21a8fec5161f0bf3082b955b3f9ffe5edbe8aa8de6b8c31b64",
+      "parse_error": false
+    },
+    "src/rmp/src/delay_optimization_strategy.cpp": {
+      "digest": "44e26c4c2d5e0641cf6f29dbccf24f7d81c0a6c4ff4f2fa08c1185da81bb9201",
+      "parse_error": true
+    },
+    "src/rmp/src/delay_optimization_strategy.h": {
+      "digest": "f3870b75dc90f7535e9ed08c9c02824bb1c4378ee25f2c17b9d1ba9737fe17b3",
+      "parse_error": false
+    },
+    "src/rmp/src/genetic_strategy.cpp": {
+      "digest": "10cd284c340fe44834a0b44eb073d33e619051ed64262ae673cac3fdaf982e20",
+      "parse_error": false
+    },
+    "src/rmp/src/genetic_strategy.h": {
+      "digest": "18d254a24f50617c01fdf2f1d1a942362ab5fbb603be36f61c200c14d7f11f14",
+      "parse_error": false
+    },
+    "src/rmp/src/gia.cpp": {
+      "digest": "454c70cbafedd478729eb92a1bc372326999f5fd8fe22aa5c1d85335eb69abcc",
+      "parse_error": false
+    },
+    "src/rmp/src/gia.h": {
+      "digest": "2ad86808af739b6fe0923a15ed15e08688778b378c5b408afda4a5053a299ff4",
+      "parse_error": false
+    },
+    "src/rmp/src/logic_optimization_strategy.h": {
+      "digest": "837b39aff38c6026b69bd1f021f42461193a19ed9a4510c90b9047845b43a509",
+      "parse_error": false
+    },
+    "src/rmp/src/resynthesis_strategy.h": {
+      "digest": "a2bae93dfa22b3ba4dc34089298c5bb68c2ec44b8b3fddad4ad3457f8c7fdc3c",
+      "parse_error": false
+    },
+    "src/rmp/src/slack_tuning_strategy.cpp": {
+      "digest": "57e1e52e45e0a6bd35fe2739212372bf5ac65dd549764f07cee0922cdc4b0215",
+      "parse_error": false
+    },
+    "src/rmp/src/slack_tuning_strategy.h": {
+      "digest": "49b846e1424547eb42dada8e042f59edd34458be17ca628e3a824b0de6c0d0e8",
+      "parse_error": false
+    },
+    "src/rmp/src/utils.cpp": {
+      "digest": "6ef79a5e888f569cf46c75182ec93d718d9caac968fe21810e7286514837f8c6",
+      "parse_error": false
+    },
+    "src/rmp/src/utils.h": {
+      "digest": "1f5b59f8b5c3e16cb739e98058c106b5cff5f1ba6979eeaec06ed8fc8a3c21d5",
+      "parse_error": false
+    },
+    "src/rmp/src/zero_slack_strategy.cpp": {
+      "digest": "d6d6dd07e52f759754952c814f73248c4344c2385b824ac3f9e4799aedf42921",
+      "parse_error": false
+    },
+    "src/rmp/src/zero_slack_strategy.h": {
+      "digest": "738194cc5bf7aee5a5744dbb116389d3ff402e1af464299e5f4d3f27124159e1",
+      "parse_error": false
+    },
+    "src/rsz/include/rsz/MakeResizer.hh": {
+      "digest": "06e1c90b0d065d3ebcd0d0bb65b677b3fc70028773cf05c46d3cf4347dd35962",
+      "parse_error": false
+    },
+    "src/rsz/include/rsz/OdbCallBack.hh": {
+      "digest": "76935b86a2d3717cf209a7cff15682eecc4299c4293122bea2b02433bec18b42",
+      "parse_error": false
+    },
+    "src/rsz/include/rsz/Resizer.hh": {
+      "digest": "d0883f8f9131b293aed9efbbc00ee510b328038e3f5f728d1d626aec4bcf8f1b",
+      "parse_error": false
+    },
+    "src/rsz/src/BufferedNet.cc": {
+      "digest": "f09dcf5b961aff09bc1d920a190540e777b3723bab03c4d9e0003a7a4811d28a",
+      "parse_error": false
+    },
+    "src/rsz/src/BufferedNet.hh": {
+      "digest": "98e1363077816198dce0198f1429969fa460f22c999ceefbf0780bfbd23732da",
+      "parse_error": false
+    },
+    "src/rsz/src/ConcreteSwapArithModules.cc": {
+      "digest": "804906ad0f6c32801a92eca2c563e9b857366b7a043fcc2d8af4f1e8df49ef2e",
+      "parse_error": false
+    },
+    "src/rsz/src/ConcreteSwapArithModules.hh": {
+      "digest": "5b1802ddc4b43b13fb19cdf994274c905c315ca9e6d63972b13d5fe2aadc2777",
+      "parse_error": false
+    },
+    "src/rsz/src/DelayEstimator.cc": {
+      "digest": "96fbb9436a2c9ab29b37d474bac997ffb8896fe4d6650ff6d23779affb630bb7",
+      "parse_error": false
+    },
+    "src/rsz/src/DelayEstimator.hh": {
+      "digest": "8b648f2db7490964f0108252bf03d8129312585b69a82cc0a743f9ef286bd2d4",
+      "parse_error": false
+    },
+    "src/rsz/src/DelayEstimatorReporter.cc": {
+      "digest": "dc44e29c9e3918430b8e1fb9a5831283c86a1a6e97b0621df0d0fafba15066bc",
+      "parse_error": false
+    },
+    "src/rsz/src/DelayEstimatorReporter.hh": {
+      "digest": "1e65ac139a19f2e502796827c55f005831d387df0376673ff21f6ad6a0a436f0",
+      "parse_error": false
+    },
+    "src/rsz/src/Graphics.cc": {
+      "digest": "5e859af6ace2cf08bd0e1520b61a893d720d3609a9fe8ff527ff051ebcc5deef",
+      "parse_error": false
+    },
+    "src/rsz/src/Graphics.hh": {
+      "digest": "4ce1eeb81508138c338bbcd9ddd1ccec92f3b369f831e89fdb635d2b9bbbeba4",
+      "parse_error": false
+    },
+    "src/rsz/src/MakeResizer.cc": {
+      "digest": "d4bf6351bd5dd5e85c63d52660b54bf5857504e1d0f421b52aebe23daba70d97",
+      "parse_error": false
+    },
+    "src/rsz/src/MoveCommitter.cc": {
+      "digest": "31cf82719c958dd8bf1a94445877a7fa7ab37c8260215e7d6fa4e670295cffb6",
+      "parse_error": false
+    },
+    "src/rsz/src/MoveCommitter.hh": {
+      "digest": "586fe28a9a0d64156a52b62a46547b5b7ca2df9c3b38bd6c47460596d456f73e",
+      "parse_error": false
+    },
+    "src/rsz/src/MoveTracker.cc": {
+      "digest": "3a41f8ece1ddc7a88892584e4b374c3c1bc2011c38da9177ef352c2a9496f21c",
+      "parse_error": false
+    },
+    "src/rsz/src/MoveTracker.hh": {
+      "digest": "5e5fca5d3d5b5993dc6ff7fbe95b6ce8e40ff3a4ce6bb597d90eef360c353868",
+      "parse_error": false
+    },
+    "src/rsz/src/OdbCallBack.cc": {
+      "digest": "f78e3f5ef31df597c1921fd2924eda9d76bac4f9725d5b39ecf8d998e6c86dca",
+      "parse_error": false
+    },
+    "src/rsz/src/Optimizer.cc": {
+      "digest": "9de1df4f63e379e460378deb022c972b3ed0d29af353fb6cd99eff53478d6984",
+      "parse_error": false
+    },
+    "src/rsz/src/Optimizer.hh": {
+      "digest": "1f7fb556392a94bc2e815a03c43a7d4cfdd675c835e35db642ccd85731b63996",
+      "parse_error": false
+    },
+    "src/rsz/src/OptimizerTypes.cc": {
+      "digest": "e43d089e54fee17e6101d3f2d05c6b9f89d58574b0b9cc551a2eab219243ea54",
+      "parse_error": false
+    },
+    "src/rsz/src/OptimizerTypes.hh": {
+      "digest": "77bbe71534c4cb77d2da7f1b5a799c950e5dbc4be87197538f9aa94e2ba0f8a0",
+      "parse_error": false
+    },
+    "src/rsz/src/PreChecks.cc": {
+      "digest": "98cf71e4f4bfe3cfe7d81539f362bf55ecf1bb3a49f67eb5d5c6188966b3ab54",
+      "parse_error": false
+    },
+    "src/rsz/src/PreChecks.hh": {
+      "digest": "907aacf4757a21d2d4a697f788482ea07c109ca6bfbaee05a0347300adb91580",
+      "parse_error": false
+    },
+    "src/rsz/src/Rebuffer.cc": {
+      "digest": "06450279898f87b83faa53b3f4499429c0122578bfbc1c9e22574f860858e415",
+      "parse_error": false
+    },
+    "src/rsz/src/Rebuffer.hh": {
+      "digest": "95aed0eb8927865e6a7968f4c0640ab30e8aa9ae6d08b3fb1dae2397e0db2cfb",
+      "parse_error": false
+    },
+    "src/rsz/src/RecoverPower.cc": {
+      "digest": "591ecf99a81ee661a6862b4f7d562fc155d6ff443a9dbcd8aea4a45ea74c1b7d",
+      "parse_error": false
+    },
+    "src/rsz/src/RecoverPower.hh": {
+      "digest": "f7ba451e1c2794697f49196f4fc2d48fd1fa2fe27a987ef731e131cf6b64b350",
+      "parse_error": false
+    },
+    "src/rsz/src/RepairDesign.cc": {
+      "digest": "01398dbfb6989402cc816958b22566b5785f7f5518e64c7521480c185f705be2",
+      "parse_error": false
+    },
+    "src/rsz/src/RepairDesign.hh": {
+      "digest": "60f9e2b13b6dfb3251bc51b0e04eae96beb1143ab838d4f95d1830b851aa707a",
+      "parse_error": false
+    },
+    "src/rsz/src/RepairHold.cc": {
+      "digest": "6dfa7bcbfaada2fe13abe8742bebdb27b7382dcbac92b5ea92bc9a02f97d2186",
+      "parse_error": false
+    },
+    "src/rsz/src/RepairHold.hh": {
+      "digest": "19afd9a075d9ffb426ca58b24e76988f5498cbe73739a4591adffacb68f46d15",
+      "parse_error": false
+    },
+    "src/rsz/src/RepairSetupContext.hh": {
+      "digest": "8bd529552946fe65ecb71d870a6c0a0a2a958878d32eb8acced7d42e6fad57f6",
+      "parse_error": false
+    },
+    "src/rsz/src/RepairTargetCollector.cc": {
+      "digest": "d407a045f08237f6b2e4d57dcd2104edd92d304b2de19a199bdd550384cb6eb9",
+      "parse_error": false
+    },
+    "src/rsz/src/RepairTargetCollector.hh": {
+      "digest": "657f6174495b077bdf3e232dc7353b0957a81bbbf00a8f681cf4e8d5f7e1e525",
+      "parse_error": false
+    },
+    "src/rsz/src/Resizer.cc": {
+      "digest": "d3a49c4c84b84887c2b3ac7dc93669dbfc4e467d4a949945a17d786b1bdf4e27",
+      "parse_error": true
+    },
+    "src/rsz/src/ResizerObserver.hh": {
+      "digest": "57d6d5b4f85141972cc04fe8e536a59f2a73c2669b91bc2671cedd518b36adbc",
+      "parse_error": false
+    },
+    "src/rsz/src/SwapArithModules.hh": {
+      "digest": "a5357ac8ff30e7282d6c7915fb5cb019e61a57f5962d6ceb2a919da86a117be3",
+      "parse_error": false
+    },
+    "src/rsz/src/move/BufferCandidate.cc": {
+      "digest": "6b9da3907e5f9b6516abfc219f8c69e05ea2e7018b60c3226f8e623e7665c4df",
+      "parse_error": false
+    },
+    "src/rsz/src/move/BufferCandidate.hh": {
+      "digest": "9656bd602782f3226beeaad76d802392075cdb4e23c5587b5d580c7ced0c021c",
+      "parse_error": false
+    },
+    "src/rsz/src/move/BufferGenerator.cc": {
+      "digest": "b4703b76efda84bafdb59c8296af109bf96259c0a7b159e5a2c49743050f3c4a",
+      "parse_error": false
+    },
+    "src/rsz/src/move/BufferGenerator.hh": {
+      "digest": "fa7e8f2ed83bf0a7e313660e25aab322a2c3b04804521472d573bc7d6c11373b",
+      "parse_error": false
+    },
+    "src/rsz/src/move/CloneCandidate.cc": {
+      "digest": "67103595a35db7aeb7376b7622c2f89d390f19249fbd8e0a38f47316a449fd27",
+      "parse_error": false
+    },
+    "src/rsz/src/move/CloneCandidate.hh": {
+      "digest": "9a4f0b3eb518b7d8ba93eba0fdd4cd37dbf43d63ca77fa8ab4c8fb7b4da47e6e",
+      "parse_error": false
+    },
+    "src/rsz/src/move/CloneGenerator.cc": {
+      "digest": "5cee61a05b0e8f35d40dc6479de623622cb8ef9b6f5130396a27f929e9e36f43",
+      "parse_error": false
+    },
+    "src/rsz/src/move/CloneGenerator.hh": {
+      "digest": "7f3ba59284d0f0b0ceeeb9e586988aa4d1e8857878a1038d25024f9fcf9c297e",
+      "parse_error": false
+    },
+    "src/rsz/src/move/MeasuredVtSwapCandidate.cc": {
+      "digest": "ba6dda8e9fc257468b87f7e457f34e2f2934d633271b62868b40181004658451",
+      "parse_error": false
+    },
+    "src/rsz/src/move/MeasuredVtSwapCandidate.hh": {
+      "digest": "ec9405459fea2de9a2d0bd2f6ca1aff2ae59c69eba1548b78a169b2a8b43ab9a",
+      "parse_error": false
+    },
+    "src/rsz/src/move/MeasuredVtSwapGenerator.cc": {
+      "digest": "c2052af45c0cd7adfc6b7383d4d62a77521d89cd082078be2018d988514f2ee4",
+      "parse_error": false
+    },
+    "src/rsz/src/move/MeasuredVtSwapGenerator.hh": {
+      "digest": "667b20509ef50a78e31ae21a4502d7e2803c04b0f93954f0fed4203d9f94fa0b",
+      "parse_error": false
+    },
+    "src/rsz/src/move/MoveCandidate.cc": {
+      "digest": "d2d90ec5d5c371de1a66ae0b1035ab07a829c18c17ad7dc6ef5e41a8a77bf148",
+      "parse_error": false
+    },
+    "src/rsz/src/move/MoveCandidate.hh": {
+      "digest": "82e0d32b0c054b0b89299a73d93bb98c2ff6e43ed0934838e712a13a3df0c6a1",
+      "parse_error": false
+    },
+    "src/rsz/src/move/MoveGenerator.cc": {
+      "digest": "dbe8c8231c7ed7260540762677fa3d79fb86f2c5054bfcd4f3e5c82b9bb031a7",
+      "parse_error": false
+    },
+    "src/rsz/src/move/MoveGenerator.hh": {
+      "digest": "dd207462f8afdc35d296dcb1aae95bb0fa683efa1677f288b04c0b42bafc34ae",
+      "parse_error": false
+    },
+    "src/rsz/src/move/PowerRecoveryCandidate.cc": {
+      "digest": "1dbf467dfd4846661174cd3ae3570be5c6564ebb1bdd4253221b77ad23a1ae35",
+      "parse_error": false
+    },
+    "src/rsz/src/move/PowerRecoveryCandidate.hh": {
+      "digest": "bb177bc5ad6104ea295696e1dc3518f31da0a4cbf3c2bbdd5b6ae2d5ad7e3a2f",
+      "parse_error": false
+    },
+    "src/rsz/src/move/RerouteCandidate.cc": {
+      "digest": "743fac5aade4c61112e893dfc8cf3dbeaf790b61a49e9974bd7e16a700d741c5",
+      "parse_error": false
+    },
+    "src/rsz/src/move/RerouteCandidate.hh": {
+      "digest": "35a0db26bc59f10741d9600b45a5e052bc8ccb7f7590705fc0dc9149a539f3f3",
+      "parse_error": false
+    },
+    "src/rsz/src/move/RerouteGenerator.cc": {
+      "digest": "9038c0662bcfd7a3af40dbd5894bb6044db6209fb42e310b7cd175a07f1fb6b4",
+      "parse_error": false
+    },
+    "src/rsz/src/move/RerouteGenerator.hh": {
+      "digest": "0fa433255298e1581c38b845ea81a7f34081a38d9c072befb9e4637005211e99",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SizeDownCandidate.cc": {
+      "digest": "a88f8dbcb00df2f7462174a2c3ecb15303d60278dc2d8198305ccff2b38b77ff",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SizeDownCandidate.hh": {
+      "digest": "e1dbf9c5c7f98a9382da4e3cdf9b6dae4231703a2d87004c89f4390e90abb819",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SizeDownGenerator.cc": {
+      "digest": "23941072d688a230ae5a9ceecb4bc089043be28f066cf97b90eeaab7b20b37a1",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SizeDownGenerator.hh": {
+      "digest": "b694e303b397bef48215548225e11d545d0f3030eda47b6fccee9a95669015bf",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SizeUpCandidate.cc": {
+      "digest": "d1b78dc2ba651573624ea0dad9514bc71ce7f3daf307841d6bd879cd0188de72",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SizeUpCandidate.hh": {
+      "digest": "20625d12fbe0d114bb2944afe927b29c298d4804814f5a55a4f2d7b1bb3956fa",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SizeUpGenerator.cc": {
+      "digest": "876f4d6bd43e51ed49ba6a19d582d05abca58397428199023a67bf5f629f974b",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SizeUpGenerator.hh": {
+      "digest": "e118c8b0c5ef34c1c4b4943ae9cec70d5da1b4cc5125d4c127150ca482925dba",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SizeUpMatchCandidate.cc": {
+      "digest": "a9af0fd9cc6aaad92d30661cf0529d2609832b447d403932ed9330f0ee6deab3",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SizeUpMatchCandidate.hh": {
+      "digest": "d1681734e9a6b0c483a50a9c1dcfdfbf957872f697a8ea501f745e17b1bea470",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SizeUpMatchGenerator.cc": {
+      "digest": "aaba98c8d57761b9e412fb462dee502dfec09067bf353443872c0366a9c5ac79",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SizeUpMatchGenerator.hh": {
+      "digest": "5bb0a0865b04471af561b57fbaddf50603ba41ed9e9febebb8bcc36c217bfaf1",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SizeUpMtCandidate.cc": {
+      "digest": "3b03eace18f8008594309c4e0acf0a518e3439bbf9e28f4df42f8e9931f3422b",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SizeUpMtCandidate.hh": {
+      "digest": "80f1d6ffa431f61ce5fafe1f1286045a8a77558437a520a702d521e35dcdc1c1",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SizeUpMtGenerator.cc": {
+      "digest": "e26c40ead05968213cca2538a9255fe66f4673b949411a3d466ea3f9c478bf0a",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SizeUpMtGenerator.hh": {
+      "digest": "2d58b941d0b6fd99a425c74f464c3a918a9daa10c1e9935d488a64bf95d98bb2",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SplitLoadCandidate.cc": {
+      "digest": "50e2b580ad652207fb10797c0e2082c552da784d59f4f77e50d51cbf018c5431",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SplitLoadCandidate.hh": {
+      "digest": "318d1f3ce56159bc05768afe7f4b279b9f30f1a5c9c06dfd2df5cf9de0ec28e9",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SplitLoadGenerator.cc": {
+      "digest": "3a2d805517ae4b31c17cc9907b5d85849ef86d2742bc44ced9e5d6a7d9c692ad",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SplitLoadGenerator.hh": {
+      "digest": "7a8a66d5a5b23d769e52f41856aba7fe84b24ec30a01ab2165cb61909cf34110",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SwapPinsCandidate.cc": {
+      "digest": "360bf5e8c66da97e78b4a0fc0e153b127d59a805eb96101ab90d390bc2fe3a43",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SwapPinsCandidate.hh": {
+      "digest": "6a5a5cc68106638e4e091c5f3ff167bd1c9702b52db170b5dec9c6f3380b879c",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SwapPinsGenerator.cc": {
+      "digest": "3e2f8e25c1e7497a1f6bb0ff0b29619eda87fb4c88ddf7375b6efa76fe7dba50",
+      "parse_error": false
+    },
+    "src/rsz/src/move/SwapPinsGenerator.hh": {
+      "digest": "91e75d31e1519396547995bf8e22ef8cc7e8d7e6390080c975b2e049c358a52b",
+      "parse_error": false
+    },
+    "src/rsz/src/move/UnbufferCandidate.cc": {
+      "digest": "2b477376de319e68cb2d398520fa418f3ebd5781de13815d8040e6867f3d2d51",
+      "parse_error": false
+    },
+    "src/rsz/src/move/UnbufferCandidate.hh": {
+      "digest": "e040f287476a3145554073a71e27c966803b14827b163e3d0a0789536004c5ab",
+      "parse_error": false
+    },
+    "src/rsz/src/move/UnbufferGenerator.cc": {
+      "digest": "88a4523f1eae1093248dd278fcb9d6b48e72b5138c38b64b80f794b1dfd62cdd",
+      "parse_error": false
+    },
+    "src/rsz/src/move/UnbufferGenerator.hh": {
+      "digest": "1cc9ed1d5b2bee181139eb2911bd7bcebb66f5ae711ac2b5c4f53db99d66880e",
+      "parse_error": false
+    },
+    "src/rsz/src/move/VtSwapCandidate.cc": {
+      "digest": "10c4e4f7c69b763be82ca18d9f25f547c6059ec4e87d654539c2797f4cd7435c",
+      "parse_error": false
+    },
+    "src/rsz/src/move/VtSwapCandidate.hh": {
+      "digest": "a11ae958c61018ca2ecda43cde39eebf7c4670bc28c2f851032f9ffd853be9cd",
+      "parse_error": false
+    },
+    "src/rsz/src/move/VtSwapGenerator.cc": {
+      "digest": "275032a632ec07667dbda085cbace77ace6362d167b5b3eef184a5bf79444d3e",
+      "parse_error": false
+    },
+    "src/rsz/src/move/VtSwapGenerator.hh": {
+      "digest": "a7c29eb6f18412f0ce05224486464164746bffa0191eb926e36cd7b84a1d881d",
+      "parse_error": false
+    },
+    "src/rsz/src/move/VtSwapMtCandidate.cc": {
+      "digest": "c2088e56b700cd19f832696c502ec39d640347e44bf98d3e0d15d11abbea3b8b",
+      "parse_error": false
+    },
+    "src/rsz/src/move/VtSwapMtCandidate.hh": {
+      "digest": "3364d2bf02eaf2b8cdda33bcefb876a119ef253a0433c7ea68064dbd4c22ce1c",
+      "parse_error": false
+    },
+    "src/rsz/src/move/VtSwapMtGenerator.cc": {
+      "digest": "7b4681dac73f867971caf1e062e1d634dcad9e9455199dd568f329fcf1fbf35c",
+      "parse_error": false
+    },
+    "src/rsz/src/move/VtSwapMtGenerator.hh": {
+      "digest": "88099d36ad26db4c5a35d523bd034f27dcd0fa8f76e7dedc4c8b871377745ae6",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/MeasuredCriticalPathPolicy.cc": {
+      "digest": "29b9671fcc6afb6a4d37163861b10bb76ab61276f6087a915f8a2a0ba3c61b63",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/MeasuredCriticalPathPolicy.hh": {
+      "digest": "9e09c5951175532ae307a969ae7934ee58dc3be9b40b3426f61a98d80e9ee477",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/MeasuredVtSwapPolicy.cc": {
+      "digest": "f81f24e419536210a344cd6fd32f9e2b43bdb2144a76bbc818de437dadf2d162",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/MeasuredVtSwapPolicy.hh": {
+      "digest": "ffd552d9bece4969377b0c0ee69aa972ce351ac497b63f3fa7e3f2021150c348",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/OptimizationPolicy.cc": {
+      "digest": "a266e4906bc33a819c106db2e89079825dbaa60c04f1fe1b99be843152333f2b",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/OptimizationPolicy.hh": {
+      "digest": "2b3aed9a6893c7939bf6d40a8fc29f6c8d9ebe8ebabc7be37bc4acd172266c7a",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/PowerRecoveryPlusPolicy.cc": {
+      "digest": "34041bd7398f46ca9f5204c13655dd152f5d944a6f302e3ebdd5f16ea98cbf23",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/PowerRecoveryPlusPolicy.hh": {
+      "digest": "c6137932ccff728a4b675d9951c22507e645612e59e5c1a2ad6da821f8557fb2",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/RepairPowerPolicy.cc": {
+      "digest": "1e5046f00fdd4eec5d0a82311b9c31bb01a85300699ab5d281e3567ba2044ef8",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/RepairPowerPolicy.hh": {
+      "digest": "cddb9b3f6de7c07b3ae9f7329c56c2a74857780c5192caec374105294c31b9e3",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/SetupCritVtSwapPolicy.cc": {
+      "digest": "61a11f6e8ee00a99a1a8f21713d94f686d9aa3fa501f2e7c8d96969c5e14f986",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/SetupCritVtSwapPolicy.hh": {
+      "digest": "4d09641391e8157fd3e207d1a7427fea8fdb04d72e78c17ab6e4eaf97be321ab",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/SetupDirectionalPolicy.cc": {
+      "digest": "9343e525a986471bf68e630a0a35bae6effaa4efa39b5aa736bbc36eb2e009bb",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/SetupDirectionalPolicy.hh": {
+      "digest": "1b78fbb92fb7609929de2186f65fff293a7d823d4c3d8113093ea6b784fd2b95",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/SetupLastGaspPolicy.cc": {
+      "digest": "a3c1e8f7cf2bf44d7a2d3644c7a465cd97e79053c7980a8ea3b3a0cfe550f32a",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/SetupLastGaspPolicy.hh": {
+      "digest": "c060877565fbd41213dd2058e9a54d024ca30bcad7b1415190ee04b80bafa8c0",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/SetupLegacyBase.cc": {
+      "digest": "b2d56d8ff1eea2e3508c9bb892ee2cbaa5e9f714aa47b362e704c63f0ed685da",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/SetupLegacyBase.hh": {
+      "digest": "7b75248fde7b297ca0a34c8b5ec11606f0bbf69d388d4c01c359c4e176fd15ac",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/SetupLegacyMtPolicy.cc": {
+      "digest": "1ea43cc31f966191fb46dd63c3118e51f14840e6a365df6b0e0f9e5529f974ff",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/SetupLegacyMtPolicy.hh": {
+      "digest": "e1e3000c0503df1a6c14049f82ead1adc32415d98e671c881d367b1d961e995d",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/SetupLegacyPolicy.cc": {
+      "digest": "9d4628189216053ce9edc7dbcfc933da51a8c0c63b7e0ac3f307fea66818f4d0",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/SetupLegacyPolicy.hh": {
+      "digest": "bb8ba76786dbf7910380782ed3c3cfce23bb5776de2058d7a3e3b0500df6b0f6",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/SetupMt1Policy.cc": {
+      "digest": "83bf909810918509168e319da0b9be8061a41270cec0af0cde1b47b5fe456577",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/SetupMt1Policy.hh": {
+      "digest": "68add08cc2501e0b3efe771cd2b43dc1bf57382778a43aea82e597d482674632",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/SetupReroutePolicy.cc": {
+      "digest": "b650aeb54c59907f2dbecfe0ef59e80e06cb5cb54bd250fc40c69d1da28b4028",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/SetupReroutePolicy.hh": {
+      "digest": "f0d13a9ab6e34ae9ec41a92abe5dc33b6901a57149ffc888eddc596636a194d7",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/SetupTnsPolicy.cc": {
+      "digest": "37a01a47379cd4481ef91654a172241ffd637a9fc37b0509bba97a9e7b715577",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/SetupTnsPolicy.hh": {
+      "digest": "060b2e4692a69fe0e07b4b420caff31898354ebbf2a9cd0ccabd5e3aaca8a096",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/SetupWnsPolicy.cc": {
+      "digest": "e0e67f3eec037f8b2ed4cfff8e08ffda1fc101080b674c7b6f4a5ed35089cfb6",
+      "parse_error": false
+    },
+    "src/rsz/src/policy/SetupWnsPolicy.hh": {
+      "digest": "cce9c1d0de8ae03eee5c64faaab29c12d907bcdf44beb6e3e9fc88bde857cc6e",
+      "parse_error": false
+    }
+  },
+  "graph_digest": "dfe8e3e974e4b5b6414c95a2e641e27be7253f458049d75c495d22569cb8c6e9",
+  "reparsed_files": [
+    "src/rmp/include/rmp/MakeRestructure.h",
+    "src/rmp/include/rmp/Restructure.h",
+    "src/rmp/src/MakeRestructure.cpp",
+    "src/rmp/src/Restructure.cpp",
+    "src/rmp/src/annealing_strategy.cpp",
+    "src/rmp/src/annealing_strategy.h",
+    "src/rmp/src/delay_optimization_strategy.cpp",
+    "src/rmp/src/delay_optimization_strategy.h",
+    "src/rmp/src/genetic_strategy.cpp",
+    "src/rmp/src/genetic_strategy.h",
+    "src/rmp/src/gia.cpp",
+    "src/rmp/src/gia.h",
+    "src/rmp/src/logic_optimization_strategy.h",
+    "src/rmp/src/resynthesis_strategy.h",
+    "src/rmp/src/slack_tuning_strategy.cpp",
+    "src/rmp/src/slack_tuning_strategy.h",
+    "src/rmp/src/utils.cpp",
+    "src/rmp/src/utils.h",
+    "src/rmp/src/zero_slack_strategy.cpp",
+    "src/rmp/src/zero_slack_strategy.h",
+    "src/rsz/include/rsz/MakeResizer.hh",
+    "src/rsz/include/rsz/OdbCallBack.hh",
+    "src/rsz/include/rsz/Resizer.hh",
+    "src/rsz/src/BufferedNet.cc",
+    "src/rsz/src/BufferedNet.hh",
+    "src/rsz/src/ConcreteSwapArithModules.cc",
+    "src/rsz/src/ConcreteSwapArithModules.hh",
+    "src/rsz/src/DelayEstimator.cc",
+    "src/rsz/src/DelayEstimator.hh",
+    "src/rsz/src/DelayEstimatorReporter.cc",
+    "src/rsz/src/DelayEstimatorReporter.hh",
+    "src/rsz/src/Graphics.cc",
+    "src/rsz/src/Graphics.hh",
+    "src/rsz/src/MakeResizer.cc",
+    "src/rsz/src/MoveCommitter.cc",
+    "src/rsz/src/MoveCommitter.hh",
+    "src/rsz/src/MoveTracker.cc",
+    "src/rsz/src/MoveTracker.hh",
+    "src/rsz/src/OdbCallBack.cc",
+    "src/rsz/src/Optimizer.cc",
+    "src/rsz/src/Optimizer.hh",
+    "src/rsz/src/OptimizerTypes.cc",
+    "src/rsz/src/OptimizerTypes.hh",
+    "src/rsz/src/PreChecks.cc",
+    "src/rsz/src/PreChecks.hh",
+    "src/rsz/src/Rebuffer.cc",
+    "src/rsz/src/Rebuffer.hh",
+    "src/rsz/src/RecoverPower.cc",
+    "src/rsz/src/RecoverPower.hh",
+    "src/rsz/src/RepairDesign.cc",
+    "src/rsz/src/RepairDesign.hh",
+    "src/rsz/src/RepairHold.cc",
+    "src/rsz/src/RepairHold.hh",
+    "src/rsz/src/RepairSetupContext.hh",
+    "src/rsz/src/RepairTargetCollector.cc",
+    "src/rsz/src/RepairTargetCollector.hh",
+    "src/rsz/src/Resizer.cc",
+    "src/rsz/src/ResizerObserver.hh",
+    "src/rsz/src/SwapArithModules.hh",
+    "src/rsz/src/move/BufferCandidate.cc",
+    "src/rsz/src/move/BufferCandidate.hh",
+    "src/rsz/src/move/BufferGenerator.cc",
+    "src/rsz/src/move/BufferGenerator.hh",
+    "src/rsz/src/move/CloneCandidate.cc",
+    "src/rsz/src/move/CloneCandidate.hh",
+    "src/rsz/src/move/CloneGenerator.cc",
+    "src/rsz/src/move/CloneGenerator.hh",
+    "src/rsz/src/move/MeasuredVtSwapCandidate.cc",
+    "src/rsz/src/move/MeasuredVtSwapCandidate.hh",
+    "src/rsz/src/move/MeasuredVtSwapGenerator.cc",
+    "src/rsz/src/move/MeasuredVtSwapGenerator.hh",
+    "src/rsz/src/move/MoveCandidate.cc",
+    "src/rsz/src/move/MoveCandidate.hh",
+    "src/rsz/src/move/MoveGenerator.cc",
+    "src/rsz/src/move/MoveGenerator.hh",
+    "src/rsz/src/move/PowerRecoveryCandidate.cc",
+    "src/rsz/src/move/PowerRecoveryCandidate.hh",
+    "src/rsz/src/move/RerouteCandidate.cc",
+    "src/rsz/src/move/RerouteCandidate.hh",
+    "src/rsz/src/move/RerouteGenerator.cc",
+    "src/rsz/src/move/RerouteGenerator.hh",
+    "src/rsz/src/move/SizeDownCandidate.cc",
+    "src/rsz/src/move/SizeDownCandidate.hh",
+    "src/rsz/src/move/SizeDownGenerator.cc",
+    "src/rsz/src/move/SizeDownGenerator.hh",
+    "src/rsz/src/move/SizeUpCandidate.cc",
+    "src/rsz/src/move/SizeUpCandidate.hh",
+    "src/rsz/src/move/SizeUpGenerator.cc",
+    "src/rsz/src/move/SizeUpGenerator.hh",
+    "src/rsz/src/move/SizeUpMatchCandidate.cc",
+    "src/rsz/src/move/SizeUpMatchCandidate.hh",
+    "src/rsz/src/move/SizeUpMatchGenerator.cc",
+    "src/rsz/src/move/SizeUpMatchGenerator.hh",
+    "src/rsz/src/move/SizeUpMtCandidate.cc",
+    "src/rsz/src/move/SizeUpMtCandidate.hh",
+    "src/rsz/src/move/SizeUpMtGenerator.cc",
+    "src/rsz/src/move/SizeUpMtGenerator.hh",
+    "src/rsz/src/move/SplitLoadCandidate.cc",
+    "src/rsz/src/move/SplitLoadCandidate.hh",
+    "src/rsz/src/move/SplitLoadGenerator.cc",
+    "src/rsz/src/move/SplitLoadGenerator.hh",
+    "src/rsz/src/move/SwapPinsCandidate.cc",
+    "src/rsz/src/move/SwapPinsCandidate.hh",
+    "src/rsz/src/move/SwapPinsGenerator.cc",
+    "src/rsz/src/move/SwapPinsGenerator.hh",
+    "src/rsz/src/move/UnbufferCandidate.cc",
+    "src/rsz/src/move/UnbufferCandidate.hh",
+    "src/rsz/src/move/UnbufferGenerator.cc",
+    "src/rsz/src/move/UnbufferGenerator.hh",
+    "src/rsz/src/move/VtSwapCandidate.cc",
+    "src/rsz/src/move/VtSwapCandidate.hh",
+    "src/rsz/src/move/VtSwapGenerator.cc",
+    "src/rsz/src/move/VtSwapGenerator.hh",
+    "src/rsz/src/move/VtSwapMtCandidate.cc",
+    "src/rsz/src/move/VtSwapMtCandidate.hh",
+    "src/rsz/src/move/VtSwapMtGenerator.cc",
+    "src/rsz/src/move/VtSwapMtGenerator.hh",
+    "src/rsz/src/policy/MeasuredCriticalPathPolicy.cc",
+    "src/rsz/src/policy/MeasuredCriticalPathPolicy.hh",
+    "src/rsz/src/policy/MeasuredVtSwapPolicy.cc",
+    "src/rsz/src/policy/MeasuredVtSwapPolicy.hh",
+    "src/rsz/src/policy/OptimizationPolicy.cc",
+    "src/rsz/src/policy/OptimizationPolicy.hh",
+    "src/rsz/src/policy/PowerRecoveryPlusPolicy.cc",
+    "src/rsz/src/policy/PowerRecoveryPlusPolicy.hh",
+    "src/rsz/src/policy/RepairPowerPolicy.cc",
+    "src/rsz/src/policy/RepairPowerPolicy.hh",
+    "src/rsz/src/policy/SetupCritVtSwapPolicy.cc",
+    "src/rsz/src/policy/SetupCritVtSwapPolicy.hh",
+    "src/rsz/src/policy/SetupDirectionalPolicy.cc",
+    "src/rsz/src/policy/SetupDirectionalPolicy.hh",
+    "src/rsz/src/policy/SetupLastGaspPolicy.cc",
+    "src/rsz/src/policy/SetupLastGaspPolicy.hh",
+    "src/rsz/src/policy/SetupLegacyBase.cc",
+    "src/rsz/src/policy/SetupLegacyBase.hh",
+    "src/rsz/src/policy/SetupLegacyMtPolicy.cc",
+    "src/rsz/src/policy/SetupLegacyMtPolicy.hh",
+    "src/rsz/src/policy/SetupLegacyPolicy.cc",
+    "src/rsz/src/policy/SetupLegacyPolicy.hh",
+    "src/rsz/src/policy/SetupMt1Policy.cc",
+    "src/rsz/src/policy/SetupMt1Policy.hh",
+    "src/rsz/src/policy/SetupReroutePolicy.cc",
+    "src/rsz/src/policy/SetupReroutePolicy.hh",
+    "src/rsz/src/policy/SetupTnsPolicy.cc",
+    "src/rsz/src/policy/SetupTnsPolicy.hh",
+    "src/rsz/src/policy/SetupWnsPolicy.cc",
+    "src/rsz/src/policy/SetupWnsPolicy.hh"
+  ],
+  "reused_files": [],
+  "schema_version": "goalevolve.repository_graph.v6",
+  "source_hash": "32efd545fbebf4e487404f0661744fab7e41c0b3eda1f8b5762fe70857cc1d48"
+}
