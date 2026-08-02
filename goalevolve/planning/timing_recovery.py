@@ -252,6 +252,21 @@ _SOURCE_BOUND_RECIPES: dict[str, tuple[str, ...]] = {
     ),
 }
 
+# Some policy classes are selected by a controller *mode*, rather than a
+# repair_timing recipe.  Keep these separate from the recipe mapping above:
+# ``power_only`` and ``power_then_timing`` both dispatch ``REPAIR_POWER``
+# before their optional downstream work, while ``timing_only`` never does.
+# ``POWER_RECOVERY_PLUS`` has a source implementation but no controller-owned
+# recipe currently invokes it, so a Teacher cannot attribute an experiment to
+# that policy yet.
+_SOURCE_BOUND_EVALUATION_MODES: dict[str, tuple[str, ...]] = {
+    "src/rsz/src/policy/RepairPowerPolicy.cc": (
+        "power_only",
+        "power_then_timing",
+    ),
+    "src/rsz/src/policy/PowerRecoveryPlusPolicy.cc": (),
+}
+
 
 def teacher_selectable_recipe_ids(evaluation_mode: str) -> tuple[str, ...]:
     """Return controller-owned schedules that a Teacher may name in Markdown.
@@ -276,10 +291,16 @@ def teacher_selectable_recipe_ids(evaluation_mode: str) -> tuple[str, ...]:
 def recipe_is_compatible_with_source_hooks(
     recipe_id: str,
     source_hooks: Sequence[str],
+    *,
+    evaluation_mode: str | None = None,
 ) -> bool:
-    """Whether a declared controller recipe reaches every constrained hook."""
+    """Whether a declared controller envelope reaches every constrained hook."""
     if recipe_id not in TIMING_RECOVERY_RECIPES:
         return False
+    for hook in source_hooks:
+        modes = _SOURCE_BOUND_EVALUATION_MODES.get(str(hook).replace("\\", "/"))
+        if modes is not None and (evaluation_mode is None or evaluation_mode not in modes):
+            return False
     required_sets = _required_recipe_sets(source_hooks)
     return all(recipe_id in choices for choices in required_sets)
 

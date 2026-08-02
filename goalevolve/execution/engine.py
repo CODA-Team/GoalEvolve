@@ -332,16 +332,17 @@ class GoalEvolveEngine:
         )
         atomic_json(round_root / "epd_role_portfolio.json", epd_portfolio)
         recovered_markdown = (
-            self._controller_repair_markdown(teacher_plan_payload)
+            self._recoverable_teacher_markdown(teacher_plan_payload)
             if saved_teacher_plan is not None
+            and list(teacher_plan_payload.get("controller_assignment_errors") or ())
             else ""
         )
         if recovered_markdown:
-            # The old parser accepted semicolon-separated hooks as one path,
-            # so the first persisted hypothesis list still contains the
-            # Teacher's placeholder envelopes. Reparse the already completed
-            # repair turn and run the normal deterministic controller checks;
-            # never ask the Teacher to plan a second time for this round.
+            # A Controller rejection happens before any Student is started,
+            # so it is safe to revalidate the latest structurally valid plan
+            # against the current controller/source contract.  Completed
+            # Student work instead leaves no assignment error and therefore
+            # continues through the immutable-allocation recovery path below.
             role_templates, role_schedule = self._teacher_role_schedule(
                 round_index=round_index,
                 diagnosis=round_diagnosis,
@@ -383,7 +384,14 @@ class GoalEvolveEngine:
             recovery_repairs = list(
                 teacher_plan_payload.get("controller_assignment_repairs") or ()
             )
-            if materialized.errors:
+            recovered_repair_count = len(recovery_repairs)
+            repair_budget = max(
+                1,
+                int(getattr(getattr(self.teacher, "config", None), "max_plan_format_repairs", 1)),
+            )
+            for _ in range(repair_budget):
+                if not materialized.errors:
+                    break
                 repair = self.teacher.repair_plan_after_controller_validation(
                     state_root=self.state_root,
                     round_root=round_root,
@@ -443,9 +451,9 @@ class GoalEvolveEngine:
             teacher_plan_payload["role_schedule"] = role_schedule
             teacher_plan_payload["source_index"] = repository_graph.compact_index()
             teacher_plan_payload["recovery"] = {
-                "kind": "semicolon_source_hook_parser_migration",
+                "kind": "controller_assignment_revalidation",
                 "source": "controller_assignment_repair",
-                "teacher_reinvoked": False,
+                "teacher_reinvoked": len(recovery_repairs) > recovered_repair_count,
             }
             teacher_plan_payload.pop("controller_assignment_errors", None)
             atomic_json(round_root / "teacher_plan.json", teacher_plan_payload)
@@ -453,7 +461,8 @@ class GoalEvolveEngine:
             saved_teacher_plan = (hypotheses, teacher_plan_payload)
             print(
                 f"[GoalEvolve][round={round_index:03d}][recovery] "
-                "revalidated_controller_repair=true teacher_reinvoked=false",
+                "revalidated_controller_repair=true "
+                f"teacher_reinvoked={str(len(recovery_repairs) > recovered_repair_count).lower()}",
                 flush=True,
             )
         if saved_teacher_plan is None:
@@ -1100,6 +1109,23 @@ class GoalEvolveEngine:
             return ""
         markdown = str(repair.get("teacher_markdown") or "").strip()
         return markdown
+
+    @staticmethod
+    def _recoverable_teacher_markdown(payload: Mapping[str, object]) -> str:
+        """Return the newest structurally valid plan for a pre-Student retry."""
+        repairs = list(payload.get("controller_assignment_repairs") or ())
+        repair = payload.get("controller_assignment_repair")
+        if isinstance(repair, Mapping) and repair not in repairs:
+            repairs.append(repair)
+        for item in reversed(repairs):
+            if not isinstance(item, Mapping):
+                continue
+            if not bool(item.get("teacher_ok")) or list(item.get("format_errors") or ()):
+                continue
+            markdown = str(item.get("teacher_markdown") or "").strip()
+            if markdown:
+                return markdown
+        return str(payload.get("teacher_markdown") or "").strip()
 
     @staticmethod
     def _incomplete_teacher_plan(

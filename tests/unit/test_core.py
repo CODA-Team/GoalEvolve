@@ -1462,6 +1462,27 @@ Keep the checked parent.
         payload["controller_assignment_errors"] = ["student_2:missing_source_hook:src/rsz/src/Missing.cc"]
         self.assertEqual(GoalEvolveEngine._controller_repair_markdown(payload), "")
 
+    def test_incomplete_controller_recovery_uses_last_structurally_valid_repair(self) -> None:
+        payload = {
+            "teacher_markdown": "## original plan",
+            "controller_assignment_repairs": [
+                {
+                    "teacher_ok": True,
+                    "format_errors": [],
+                    "teacher_markdown": "## valid repair",
+                },
+                {
+                    "teacher_ok": True,
+                    "format_errors": ["teacher_source_inspection_not_observed"],
+                    "teacher_markdown": "## audit-invalid repair",
+                },
+            ],
+        }
+        self.assertEqual(
+            GoalEvolveEngine._recoverable_teacher_markdown(payload),
+            "## valid repair",
+        )
+
     def test_source_hook_materialization_requires_an_executed_policy_recipe(self) -> None:
         from goalevolve.execution.teacher_assignment import (
             build_role_templates,
@@ -1501,6 +1522,41 @@ Keep the checked parent.
                 historical_ideas=(),
             )
         self.assertIn("incompatible_evaluation_recipe:student_1:legacy_setup", result.errors)
+
+    def test_repair_power_policy_requires_a_power_executing_mode(self) -> None:
+        from goalevolve.planning.timing_recovery import (
+            recipe_is_compatible_with_source_hooks,
+        )
+
+        hooks = ("src/rsz/src/policy/RepairPowerPolicy.cc",)
+        self.assertFalse(
+            recipe_is_compatible_with_source_hooks(
+                "legacy_setup", hooks, evaluation_mode="timing_only"
+            )
+        )
+        self.assertTrue(
+            recipe_is_compatible_with_source_hooks(
+                "legacy_setup", hooks, evaluation_mode="power_only"
+            )
+        )
+        self.assertTrue(
+            recipe_is_compatible_with_source_hooks(
+                "legacy_deep", hooks, evaluation_mode="power_then_timing"
+            )
+        )
+
+    def test_unexecuted_power_recovery_plus_policy_is_rejected(self) -> None:
+        from goalevolve.planning.timing_recovery import (
+            recipe_is_compatible_with_source_hooks,
+        )
+
+        self.assertFalse(
+            recipe_is_compatible_with_source_hooks(
+                "legacy_setup",
+                ("src/rsz/src/policy/PowerRecoveryPlusPolicy.cc",),
+                evaluation_mode="power_only",
+            )
+        )
 
     def test_teacher_source_inspection_audit_requires_successful_source_reads(self) -> None:
         from goalevolve.agents.teacher import source_inspection_audit
@@ -1624,8 +1680,12 @@ Keep the checked parent.
                 message.write_text(next(self.messages), encoding="utf-8")
                 events = artifact_root / "events.jsonl"
                 events.write_text(
-                    "{\"type\": \"item.completed\", \"item\": {\"type\": \"command_execution\", \"command\": \"rg -n adjustTiming src/rsz/src/Timing.cc\", \"exit_code\": 0}}\n"
-                    "{\"type\": \"item.completed\", \"item\": {\"type\": \"command_execution\", \"command\": \"sed -n '1,80p' src/rsz/src/Timing.cc\", \"exit_code\": 0}}\n",
+                    (
+                        "{\"type\": \"item.completed\", \"item\": {\"type\": \"command_execution\", \"command\": \"rg -n adjustTiming src/rsz/src/Timing.cc\", \"exit_code\": 0}}\n"
+                        "{\"type\": \"item.completed\", \"item\": {\"type\": \"command_execution\", \"command\": \"sed -n '1,80p' src/rsz/src/Timing.cc\", \"exit_code\": 0}}\n"
+                        if len(self.calls) == 1
+                        else ""
+                    ),
                     encoding="utf-8",
                 )
                 return CodexTurn(

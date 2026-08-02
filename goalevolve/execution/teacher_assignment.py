@@ -279,7 +279,11 @@ def materialize_teacher_assignments(
             if declared_recipe_id not in teacher_selectable_recipe_ids(template.evaluation_mode):
                 errors.append(f"invalid_evaluation_recipe:{student_id}:{declared_recipe_id}")
                 continue
-            if not recipe_is_compatible_with_source_hooks(declared_recipe_id, hooks):
+            if not recipe_is_compatible_with_source_hooks(
+                declared_recipe_id,
+                hooks,
+                evaluation_mode=template.evaluation_mode,
+            ):
                 errors.append(f"incompatible_evaluation_recipe:{student_id}:{declared_recipe_id}")
                 continue
             executing_recipe_id = recipe_for_source_hooks(hooks, declared_recipe_id)

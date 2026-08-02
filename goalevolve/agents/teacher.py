@@ -163,6 +163,7 @@ class CodexTeacher:
             require_evaluation_recipe=True,
         ) if turn.ok else ("teacher_turn_failed",)
         validation_attempts.append({"attempt": 0, "operation_id": turn.operation_id, "errors": list(errors)})
+        initial_artifacts = turn.artifacts
         repair_turns: list[dict[str, str]] = []
         for repair_index in range(1, self.config.max_plan_format_repairs + 1):
             if not errors:
@@ -202,7 +203,7 @@ class CodexTeacher:
         source_audit = source_inspection_audit(
             tuple(
                 Path(path)
-                for artifacts in (turn.artifacts, *repair_turns)
+                for artifacts in (initial_artifacts, *repair_turns)
                 if (path := artifacts.get("codex_events"))
             )
         )
@@ -339,9 +340,17 @@ class CodexTeacher:
             require_source_investigation=require_explorer_ideas,
             require_evaluation_recipe=True,
         ) if turn.ok else ("teacher_turn_failed",)
+        # Controller repairs retain the same round and immutable parent
+        # snapshot.  Include the initial planning turn and earlier repair
+        # turns so a Markdown-only correction does not discard verified live
+        # source investigation from this exact snapshot.
         source_audit = source_inspection_audit(
-            (Path(turn.artifacts["codex_events"]),)
-        ) if turn.artifacts.get("codex_events") else {"satisfied": False, "successful_source_commands": 0, "commands": []}
+            tuple(
+                path
+                for path in sorted((round_root / "teacher" / "plan").glob("**/events.jsonl"))
+                if path.is_file()
+            )
+        )
         if require_explorer_ideas and not bool(source_audit["satisfied"]):
             structural_errors = tuple([*structural_errors, "teacher_source_inspection_not_observed"])
         return {
