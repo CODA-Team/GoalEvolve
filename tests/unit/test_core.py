@@ -3170,6 +3170,89 @@ Keep the checked parent.
         )
         self.assertTrue(GoalEvolveEngine._repairable_engineering_failure(candidate))
 
+    def test_electrical_constraint_context_preserves_rmp_assignment(self) -> None:
+        hypothesis = Hypothesis(
+            "rmp_electrical_guard",
+            "rmp_area_electrical_guard",
+            "Restore area-mode ABC candidates that introduce electrical violations.",
+            ("src/rmp/src/Restructure.cpp",),
+            ("rmp_area_electrical_rejects",),
+            ("teacher_idea:idea_1",),
+            "rmp_area_electrical_guard",
+            evaluation_mode="power_only",
+            timing_recipe_id="rmp_area_power",
+        )
+        candidate = CandidateResult(
+            "student_1",
+            hypothesis,
+            {"drv_count": 160.0},
+            {},
+            [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+            "+++ b/src/rmp/src/Restructure.cpp\n+guard\n",
+            "candidate",
+        )
+
+        context = GoalEvolveEngine._constraint_failure_context(
+            candidate=candidate,
+            workspace=Path("/tmp/rmp-workspace"),
+        )
+
+        self.assertIn("mechanism_family: rmp_area_electrical_guard", context)
+        self.assertIn("source_hooks: src/rmp/src/Restructure.cpp", context)
+        self.assertIn("evaluation_recipe: rmp_area_power", context)
+        self.assertIn("Restore area-mode ABC candidates", context)
+        self.assertNotIn("repair_power mechanism", context)
+
+    def test_constraint_repair_skips_parent_inherited_drv(self) -> None:
+        candidate = CandidateResult(
+            "student_1",
+            self.hypothesis,
+            {"drv_count": 160.0},
+            {},
+            [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+            "+++ b/src/rsz/src/RecoverPower.cc\n+change\n",
+            "candidate",
+        )
+        parent = Parent(
+            "baseline",
+            {"drv_count": 160.0},
+            "base",
+            "hash",
+            1.0,
+        )
+
+        self.assertFalse(
+            GoalEvolveEngine._repairable_constraint_failure(
+                candidate=candidate,
+                parent=parent,
+            )
+        )
+
+    def test_constraint_repair_handles_new_drv_regression(self) -> None:
+        candidate = CandidateResult(
+            "student_1",
+            self.hypothesis,
+            {"drv_count": 160.0},
+            {},
+            [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+            "+++ b/src/rsz/src/RecoverPower.cc\n+change\n",
+            "candidate",
+        )
+        parent = Parent(
+            "baseline",
+            {"drv_count": 0.0},
+            "base",
+            "hash",
+            1.0,
+        )
+
+        self.assertTrue(
+            GoalEvolveEngine._repairable_constraint_failure(
+                candidate=candidate,
+                parent=parent,
+            )
+        )
+
     def test_stage_patch_scope_rejects_mixed_power_and_timing_edits(self) -> None:
         mixed = CandidateResult(
             "student",

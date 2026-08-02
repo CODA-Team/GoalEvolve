@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from typing import Iterable
 
 
 def _update_text(digest: object, value: str) -> None:
@@ -16,9 +17,14 @@ def _update_text(digest: object, value: str) -> None:
     digest.update(b"\0")
 
 
-def snapshot_metadata(source: Path) -> dict[str, object]:
+def snapshot_metadata(
+    source: Path,
+    *,
+    capture_excludes: Iterable[str] = (),
+) -> dict[str, object]:
     """Hash names, regular-file contents, and symlink targets deterministically."""
     source = source.resolve()
+    excluded_names = {str(name) for name in capture_excludes if str(name)}
     digest = hashlib.sha256()
     regular_files = 0
     symlinks = 0
@@ -28,7 +34,9 @@ def snapshot_metadata(source: Path) -> dict[str, object]:
     for root, directory_names, file_names in os.walk(source, followlinks=False):
         # os.walk preserves the filesystem's enumeration order unless this is
         # sorted in-place. The manifest must be stable across machines.
-        directory_names.sort()
+        directory_names[:] = sorted(
+            name for name in directory_names if name not in excluded_names
+        )
         root_path = Path(root)
         for name in sorted(directory_names):
             path = root_path / name
@@ -98,7 +106,10 @@ def main() -> int:
     manifest_path = args.manifest.resolve()
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     source = manifest_path.parent / "source"
-    observed = snapshot_metadata(source)
+    observed = snapshot_metadata(
+        source,
+        capture_excludes=manifest.get("capture_excludes") or (),
+    )
     if not args.verify:
         print(json.dumps(observed, indent=2, sort_keys=True))
         return 0

@@ -5,8 +5,10 @@ import unittest
 import json
 import subprocess
 from pathlib import Path
+from unittest.mock import patch
 
 from artifact_evaluation import runner
+from artifact_evaluation import import_v2_ae2_records as release_import
 from artifact_evaluation.runner import _artifact, _artifacts, ae1
 from goalevolve.core.io import sha256_file
 from goalevolve.planning.repository_graph import RepositoryGraphIndex
@@ -42,6 +44,84 @@ class ReleaseArtifactTests(unittest.TestCase):
             self.assertEqual(source_file.digest, sha256_file(source_root / path), path)
             self.assertNotIn("/test/", path)
             self.assertNotIn("/tests/", path)
+
+    def test_snapshot_verification_honors_manifest_capture_excludes(self) -> None:
+        manifest = runner.PROJECT_ROOT / "artifact_evaluation/lineage/openroad_power/p0/source_manifest.json"
+        source = manifest.parent / "source"
+
+        self.assertTrue(runner._snapshot_matches(source=source, manifest_path=manifest))
+
+    def test_release_import_captures_python_bytecode_as_an_exclusion(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "Version.hh").write_text("frozen\n", encoding="utf-8")
+            bytecode = source / "__pycache__"
+            bytecode.mkdir()
+            (bytecode / "Version.cpython-312.pyc").write_bytes(b"host-generated")
+            campaign = root / "campaign"
+            (campaign / "flow").mkdir(parents=True)
+            (campaign / "evidence").mkdir(parents=True)
+            (campaign / "parent.json").write_text(
+                json.dumps(
+                    {
+                        "parent_id": "parent",
+                        "source_hash": "hash",
+                        "source_commit": "commit",
+                        "metrics": {"tns_abs_ns": 1.0},
+                        "evaluation_mode": "power_only",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (campaign / "contract.json").write_text(
+                json.dumps(
+                    {
+                        "metrics": [
+                            {"name": "tns_abs_ns", "baseline": 2.0, "target": 1.0}
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (campaign / "flow" / "metrics.csv").write_text(
+                "tns,total_power,leakage_power,slew_over_count,tool_runtime\n-1,2,1,0,1\n",
+                encoding="utf-8",
+            )
+            (campaign / "flow" / "evaluate.tcl").write_text(
+                "puts {minimal flow}\n",
+                encoding="utf-8",
+            )
+            (campaign / "evidence" / "evidence.json").write_text(
+                json.dumps({"checks": []}),
+                encoding="utf-8",
+            )
+
+            selection = release_import.Selection(
+                "test_artifact",
+                "test_design",
+                "campaign",
+                "../source",
+                "flow",
+                "evidence",
+                "test_design/test_artifact",
+                "test_design/test_artifact",
+            )
+            lineage = root / "lineage"
+            expected = root / "expected"
+            with patch.object(release_import, "PROJECT_ROOT", root), patch.object(
+                release_import, "LINEAGE_ROOT", lineage
+            ), patch.object(release_import, "EXPECTED_ROOT", expected):
+                release_import.import_selection(root, selection, copy_sources=True)
+
+            manifest = json.loads(
+                (expected / "test_design/test_artifact/source_manifest.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(manifest["capture_excludes"], ["__pycache__"])
+            self.assertEqual(manifest["regular_file_count"], 1)
 
     def test_ae2_stages_a_private_source_copy(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

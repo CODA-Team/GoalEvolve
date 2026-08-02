@@ -1,4 +1,5 @@
 {
+  "capture_excludes": ["__pycache__"],
   "content_sha256": "56740ae63f945bce864842194d97d93cf49f24b9025629d862233bddcf522e73",
   "directory_count": 682,
   "external_symlinks": [],

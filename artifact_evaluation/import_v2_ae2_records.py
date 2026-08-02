@@ -207,8 +207,17 @@ def import_selection(reference: Path, selection: Selection, *, copy_sources: boo
         shutil.copytree(source, destination_source, symlinks=True)
     if not destination_source.is_dir():
         raise FileNotFoundError(destination_source)
-    reference_source_manifest = snapshot_metadata(source)
-    destination_source_manifest = snapshot_metadata(destination_source)
+    # Python bytecode is host-generated evaluation debris, not source
+    # provenance.  Keep release capture aligned with the verifier semantics.
+    capture_excludes = ("__pycache__",)
+    reference_source_manifest = snapshot_metadata(
+        source,
+        capture_excludes=capture_excludes,
+    )
+    destination_source_manifest = snapshot_metadata(
+        destination_source,
+        capture_excludes=capture_excludes,
+    )
     if reference_source_manifest != destination_source_manifest:
         raise RuntimeError(f"source snapshot mismatch for {selection.artifact_id}")
     actual_metrics = _metrics(tcl_root / "metrics.csv")
@@ -279,7 +288,10 @@ def import_selection(reference: Path, selection: Selection, *, copy_sources: boo
             },
         )
         _write_json(expected / "source_commit.json", {"source_commit": parent["source_commit"], "source_hash": parent["source_hash"]})
-    _write_json(expected / "source_manifest.json", destination_source_manifest)
+    _write_json(
+        expected / "source_manifest.json",
+        {"capture_excludes": list(capture_excludes), **destination_source_manifest},
+    )
     return {
         "artifact_id": selection.artifact_id,
         "design": selection.design,

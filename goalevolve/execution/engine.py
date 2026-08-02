@@ -1374,12 +1374,11 @@ class GoalEvolveEngine:
             candidate.artifacts.update(edit.artifacts)
             repair_artifacts.update({f"repair_{repair_attempt:02d}_{key}": value for key, value in repair.artifacts.items()})
             candidate.artifacts.update(repair_artifacts)
-        # A build/flow can complete while leaving an electrical violation.
-        # This is not terminal evidence for a power hypothesis: return the
-        # concrete DRV result to the same author once, so it can repair the
-        # power-path implementation in the same round rather than wasting the
-        # next evolutionary choice on a known incomplete candidate.
-        if self._repairable_constraint_failure(candidate):
+        # A build/flow can complete with pre-existing electrical debt. Only
+        # return a candidate to its author when it worsens the parent's DRV;
+        # inherited violations are a planning concern, not a source-level
+        # regression introduced by this Student.
+        if self._repairable_constraint_failure(candidate=candidate, parent=parent):
             constraint_context = self._constraint_failure_context(candidate=candidate, workspace=workspace)
             self._snapshot_failed_evaluation(candidate=candidate, workspace=workspace, repair_attempt=1, repair_kind="constraint")
             print(
@@ -1633,24 +1632,32 @@ class GoalEvolveEngine:
         return any(token in error for token in ("configure", "build", "flow", "metrics", "official_4of4", "filenotfound", "runtimeerror"))
 
     @staticmethod
-    def _repairable_constraint_failure(candidate: CandidateResult) -> bool:
+    def _repairable_constraint_failure(*, candidate: CandidateResult, parent: Parent) -> bool:
         if candidate.evaluation_error:
             return False
         checks = {item.name: item.passed for item in candidate.checks}
         if not all(checks.get(name, False) for name in ("build", "flow", "metrics", "lec")):
             return False
         try:
-            return float(candidate.metrics.get("drv_count", 0.0)) != 0.0
+            candidate_drv = float(candidate.metrics.get("drv_count", 0.0))
+            parent_drv = float(parent.metrics.get("drv_count", 0.0))
+            return candidate_drv > parent_drv
         except (TypeError, ValueError):
             return True
 
     @staticmethod
     def _constraint_failure_context(*, candidate: CandidateResult, workspace: Path) -> str:
         drv = candidate.metrics.get("drv_count")
+        hypothesis = candidate.hypothesis
+        hooks = ", ".join(hypothesis.source_hooks) or "<unspecified>"
         lines = [
             "evaluation_status: build, official post-route flow, metrics, and official 4/4 LEC completed",
             f"hard_constraint_failure: drv_count={drv}; a promotable candidate requires drv_count=0",
-            "repair_goal: preserve the assigned repair_power mechanism and its power direction, but restore every introduced slew/cap/fanout violation through the power-path policy's own journal/acceptance logic",
+            f"mechanism_family: {hypothesis.mechanism_family}",
+            f"source_hooks: {hooks}",
+            f"evaluation_recipe: {hypothesis.timing_recipe_id}",
+            f"assigned_claim: {hypothesis.claim}",
+            "repair_goal: preserve the assigned mechanism and intended QoR direction, but restore every introduced slew/cap/fanout violation through that mechanism's own acceptance, rollback, or legality boundary.",
             f"workspace: {workspace}",
         ]
         for key in ("evaluation_log", "metrics_csv", "official_4of4_log"):

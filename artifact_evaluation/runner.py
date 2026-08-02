@@ -108,7 +108,10 @@ def _snapshot_matches(*, source: Path, manifest_path: Path) -> bool:
     from artifact_evaluation.verify_openroad_snapshot import snapshot_metadata
 
     manifest = _json(manifest_path)
-    observed = snapshot_metadata(source)
+    observed = snapshot_metadata(
+        source,
+        capture_excludes=manifest.get("capture_excludes") or (),
+    )
     return all(
         observed[name] == manifest.get(name)
         for name in (
@@ -153,7 +156,10 @@ def ae1(*, artifact: dict[str, Any]) -> dict[str, Any]:
         from artifact_evaluation.verify_openroad_snapshot import snapshot_metadata
 
         manifest = _json(p0_manifest)
-        observed = snapshot_metadata(p0_manifest.parent / "source")
+        observed = snapshot_metadata(
+            p0_manifest.parent / "source",
+            capture_excludes=manifest.get("capture_excludes") or (),
+        )
         checks["shared_openroad_p0"] = all(
             observed[name] == manifest.get(name)
             for name in (
