@@ -526,7 +526,7 @@ class CodexTeacher:
                 "Require the dominant normalized residual and full frozen-contract distance to both improve, "
                 "preserve all already-satisfied targets, and use the exact recipe no-diff baseline. Keep the "
                 "candidate menu diverse across dominant-residual, repair_power-durability, and power-to-timing "
-                "handoff evidence even when TNS is dominant; this does not change the four Student roles."
+                "handoff evidence even when TNS is dominant; this does not change the Controller-provided role envelopes."
             )
         slots = [_assignment_from_hypothesis(item) for item in fallback]
         allowed_recipe_ids = teacher_selectable_recipe_ids(

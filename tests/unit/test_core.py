@@ -2778,6 +2778,24 @@ Keep the checked parent.
         self.assertEqual(adaptive["dominant_metric"], "tns_abs_ns")
         self.assertEqual(adaptive["candidate_pool_coverage"]["upstream_power_candidates"], 1)
 
+    def test_adaptive_teacher_prompt_does_not_assume_four_fixed_roles(self) -> None:
+        from goalevolve.agents.teacher import CodexTeacher
+        from goalevolve.planning.diagnosis import diagnose
+
+        prompt = CodexTeacher._plan_prompt(
+            parent=self.parent,
+            diagnosis=diagnose(contract=self.contract, parent=self.parent, checkpoints={}),
+            epd={},
+            observations={},
+            previous_review={},
+            fallback=(),
+            contract=self.contract,
+            decision_context={"stage": "adaptive_tradeoff"},
+        )
+
+        self.assertIn("Controller-provided role envelopes", prompt)
+        self.assertNotIn("does not change the four Student roles", prompt)
+
     def test_adaptive_tradeoff_preserves_satisfied_power_target(self) -> None:
         contract = build_contract(
             design="adaptive",
