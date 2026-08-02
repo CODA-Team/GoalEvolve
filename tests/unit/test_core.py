@@ -5026,6 +5026,108 @@ Keep the checked parent.
             self.assertEqual(editor.repair_kinds, ["telemetry"])
             self.assertEqual(candidate.phase_signals, {"accepted": 1.0})
 
+    def test_telemetry_repair_build_failure_returns_to_same_student(self) -> None:
+        class TelemetryThenEngineeringEditor:
+            name = "telemetry_then_engineering_editor"
+            config = SimpleNamespace(max_repair_attempts=1)
+
+            def __init__(self) -> None:
+                self.repair_kinds: list[str] = []
+
+            def apply(self, **_: object) -> StudentEditReport:
+                return StudentEditReport(True, "edited", "initial", "thread-1", {})
+
+            def repair(self, *, repair_kind: str, **_: object) -> StudentEditReport:
+                self.repair_kinds.append(repair_kind)
+                return StudentEditReport(
+                    True,
+                    "repaired",
+                    repair_kind,
+                    "thread-1",
+                    {"repair_note": repair_kind},
+                )
+
+        class MissingTelemetryThenBuildFailure:
+            name = "missing_telemetry_then_build_failure"
+
+            def __init__(self, hypothesis: Hypothesis, build_log: Path) -> None:
+                self.calls = 0
+                self.hypothesis = hypothesis
+                self.build_log = build_log
+
+            def evaluate(self, *, student_id: str, **_: object) -> CandidateResult:
+                self.calls += 1
+                diff = "+++ b/src/rsz/src/RecoverPower.cc\n+policy\n"
+                if self.calls == 2:
+                    return CandidateResult(
+                        student_id,
+                        self.hypothesis,
+                        {},
+                        {},
+                        [],
+                        diff,
+                        "telemetry-broken",
+                        artifacts={"build_log": str(self.build_log)},
+                        evaluation_error="RuntimeError:candidate_build_failed:1",
+                    )
+                checks = [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")]
+                return CandidateResult(
+                    student_id,
+                    self.hypothesis,
+                    dict(self.parent_metrics),
+                    {} if self.calls == 1 else {"accepted": 1.0},
+                    checks,
+                    diff,
+                    f"commit-{self.calls}",
+                )
+
+            parent_metrics: dict[str, float] = {}
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            (workspace / "source").mkdir(parents=True)
+            prompt = root / "prompt.md"
+            prompt.write_text("packet", encoding="utf-8")
+            build_log = root / "build.log"
+            build_log.write_text("undefined reference to old ABI\n", encoding="utf-8")
+            editor = TelemetryThenEngineeringEditor()
+            evaluator = MissingTelemetryThenBuildFailure(self.hypothesis, build_log)
+            evaluator.parent_metrics = dict(self.parent.metrics)
+            engine = GoalEvolveEngine(
+                self.contract,
+                root / "state",
+                DiversePlanner(),
+                evaluator,
+                IsolatedWorkspace(),
+                StrictEvidencePromotion(),
+                student_editor=editor,
+            )
+
+            candidate = engine._edit_then_evaluate(
+                self.parent, self.hypothesis, "student_1", workspace, prompt, 1
+            )
+
+            self.assertEqual(evaluator.calls, 3)
+            self.assertEqual(editor.repair_kinds, ["telemetry", "telemetry_engineering"])
+            self.assertIsNone(candidate.evaluation_error)
+            self.assertEqual(candidate.phase_signals, {"accepted": 1.0})
+            self.assertEqual(
+                candidate.artifacts["telemetry_engineering_repair_repair_note"],
+                "telemetry_engineering",
+            )
+            self.assertTrue(
+                (
+                    workspace.parent
+                    / "artifacts"
+                    / "repair_attempts"
+                    / "telemetry_engineering"
+                    / "attempt_01"
+                    / "evaluation"
+                    / "candidate_before_repair.json"
+                ).is_file()
+            )
+
     def test_repair_snapshot_ignores_long_structured_codex_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

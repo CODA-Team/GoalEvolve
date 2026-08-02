@@ -1432,6 +1432,92 @@ class GoalEvolveEngine:
                 repaired_candidate.artifacts.update(
                     {f"telemetry_repair_{key}": value for key, value in telemetry_repair.artifacts.items()}
                 )
+                # Telemetry instrumentation is itself a source edit.  If it
+                # introduces a compile/link/flow failure, return that exact
+                # integration error to the same Student before recording a
+                # terminal result for the original mechanism.
+                if self._repairable_engineering_failure(repaired_candidate):
+                    failure_context = self._failure_context(
+                        candidate=repaired_candidate,
+                        workspace=workspace,
+                    )
+                    self._snapshot_failed_evaluation(
+                        candidate=repaired_candidate,
+                        workspace=workspace,
+                        repair_attempt=1,
+                        repair_kind="telemetry_engineering",
+                    )
+                    print(
+                        f"[GoalEvolve][round={round_index:03d}][student={student_id}] "
+                        "telemetry_engineering_failure repair=1/1",
+                        flush=True,
+                    )
+                    telemetry_engineering_repair = self.student_editor.repair(
+                        state_root=self.state_root,
+                        round_index=round_index,
+                        student_id=student_id,
+                        workspace=workspace,
+                        parent=parent,
+                        hypothesis=hypothesis,
+                        prompt_path=prompt_path,
+                        failure_context=failure_context,
+                        repair_attempt=1,
+                        repair_kind="telemetry_engineering",
+                    )
+                    cast_repairs = codex_reports["repairs"]
+                    assert isinstance(cast_repairs, list)
+                    cast_repairs.append(telemetry_engineering_repair.to_dict())
+                    original_candidate.artifacts["codex"] = json.dumps(
+                        codex_reports,
+                        sort_keys=True,
+                    )
+                    original_candidate.artifacts.update(
+                        {
+                            f"telemetry_engineering_repair_{key}": value
+                            for key, value in telemetry_engineering_repair.artifacts.items()
+                        }
+                    )
+                    if telemetry_engineering_repair.ok:
+                        repaired_candidate = self.evaluator.evaluate(
+                            contract=self.contract,
+                            parent=parent,
+                            hypothesis=hypothesis,
+                            student_id=student_id,
+                            workspace=workspace,
+                            round_index=round_index,
+                        )
+                        repaired_candidate.artifacts["codex"] = json.dumps(
+                            codex_reports,
+                            sort_keys=True,
+                        )
+                        repaired_candidate.artifacts.update(edit.artifacts)
+                        repaired_candidate.artifacts.update(
+                            {
+                                f"telemetry_repair_{key}": value
+                                for key, value in telemetry_repair.artifacts.items()
+                            }
+                        )
+                        repaired_candidate.artifacts.update(
+                            {
+                                f"telemetry_engineering_repair_{key}": value
+                                for key, value in telemetry_engineering_repair.artifacts.items()
+                            }
+                        )
+                    else:
+                        repaired_candidate.artifacts["codex"] = json.dumps(
+                            codex_reports,
+                            sort_keys=True,
+                        )
+                        repaired_candidate.artifacts.update(
+                            {
+                                f"telemetry_engineering_repair_{key}": value
+                                for key, value in telemetry_engineering_repair.artifacts.items()
+                            }
+                        )
+                        repaired_candidate.evaluation_error = (
+                            f"{repaired_candidate.evaluation_error or 'telemetry_engineering_failure'};"
+                            f"student_repair_failed:{telemetry_engineering_repair.detail}"
+                        )
                 repair_result = workspace.parent / "artifacts" / "telemetry_repair" / "candidate_after_repair.json"
                 atomic_json(repair_result, repaired_candidate.to_dict())
                 original_candidate.artifacts["telemetry_repair_candidate"] = str(repair_result)
