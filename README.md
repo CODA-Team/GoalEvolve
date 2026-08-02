@@ -66,11 +66,10 @@ GoalEvolve/
 
 - [OpenROAD](https://github.com/The-OpenROAD-Project-staging/OpenROAD/tree/f3f70f5cb24f2b2cebb0371707e03b24ae8312d6)
 
-  - p0 (`artifact_evaluation/lineage/openroad_power/p0/source/`) is the
-    evolution starting point, adding the initial power-aware files to this
-    OpenROAD revision.
-    It requires Bison 3.8.2, Flex 2.6.4, SWIG 4.3.0, Boost 1.89.0, Eigen 3.4,
-    spdlog 1.15.0, and host Tcl/Tk, zlib, and libffi.
+  - p0 (`artifact_evaluation/lineage/openroad_power/p0/source/`) adds the
+    initial power-aware files to this OpenROAD revision as the evolution
+    starting point. It requires Bison 3.8.2, Flex 2.6.4, SWIG 4.3.0, Boost
+    1.89.0, Eigen 3.4, spdlog 1.15.0, and host Tcl/Tk, zlib, and libffi.
 
 - [Codex CLI](https://www.npmjs.com/package/@openai/codex) 0.146.0
 
