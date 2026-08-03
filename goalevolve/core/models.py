@@ -71,6 +71,10 @@ class Hypothesis:
     teacher_selection_rationale: str = ""
     teacher_evolution_ideas: tuple[str, ...] = ()
     teacher_predicted_stage_effect: str = ""
+    # Advisory only: the Teacher may suggest an internal C++ phase/policy
+    # schedule.  The Student decides whether it applies; it never changes the
+    # Controller-owned external Tcl recipe or promotion policy.
+    teacher_internal_cpp_scheduling_suggestion: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

@@ -46,11 +46,28 @@ class GoalEvolveEngine:
     max_campaign_rounds: int | None = None
     prefer_execution_champion: bool = False
     epd_max_reinforcement_attempts: int = 2
+    repository_graph_enabled: bool = True
 
     def _epd(self) -> EvolutionProgramDatabase:
         return EvolutionProgramDatabase(
             self.state_root,
             max_reinforcement_attempts=self.epd_max_reinforcement_attempts,
+        )
+
+    def _parent_repository_graph(
+        self,
+        *,
+        source_root: Path,
+        source_hash: str,
+        allowed_patch_roots: Sequence[str],
+    ):
+        """Return the parent AST graph only when the configured ablation enables it."""
+        if not self.repository_graph_enabled:
+            return None
+        return RepositoryGraphIndex(state_root=self.state_root).build_parent(
+            source_root=source_root,
+            source_hash=source_hash,
+            allowed_patch_roots=allowed_patch_roots,
         )
 
     def initialize(self, *, baseline_metrics: dict[str, float], source_commit: str = "baseline", source_hash: str = "baseline") -> Parent:
@@ -74,7 +91,17 @@ class GoalEvolveEngine:
         atomic_json(self.state_root / "contract.json", self.contract.to_dict())
         self._record_runtime_provenance(existing_contract=None)
         atomic_json(self.state_root / "parent.json", parent.to_dict())
-        atomic_json(self.state_root / "plugins.json", {"planner": self.planner.name, "teacher": self.teacher.name if self.teacher else "none", "student_editor": self.student_editor.name if self.student_editor else "none", "evaluator": self.evaluator.name, "workspace": self.workspace_provider.name})
+        atomic_json(
+            self.state_root / "plugins.json",
+            {
+                "planner": self.planner.name,
+                "teacher": self.teacher.name if self.teacher else "none",
+                "student_editor": self.student_editor.name if self.student_editor else "none",
+                "evaluator": self.evaluator.name,
+                "workspace": self.workspace_provider.name,
+                "repository_graph_enabled": self.repository_graph_enabled,
+            },
+        )
         self._epd().ensure_baseline(parent)
         print(f"[GoalEvolve][campaign] initialized contract={self.contract.contract_id} baseline_distance={distance:.8f}", flush=True)
         return parent
@@ -95,6 +122,7 @@ class GoalEvolveEngine:
             "frozen_source_fingerprint": (
                 dict(existing_contract.source_fingerprint) if existing_contract else dict(self.contract.source_fingerprint)
             ),
+            "repository_graph_enabled": self.repository_graph_enabled,
         }
         if entry not in entries:
             entries.append(entry)
@@ -353,7 +381,7 @@ class GoalEvolveEngine:
             allowed_patch_roots = tuple(
                 getattr(self.evaluator, "config", object()).allowed_patch_roots
             ) if hasattr(getattr(self.evaluator, "config", object()), "allowed_patch_roots") else ()
-            repository_graph = RepositoryGraphIndex(state_root=self.state_root).build_parent(
+            repository_graph = self._parent_repository_graph(
                 source_root=parent_source,
                 source_hash=parent.source_hash,
                 allowed_patch_roots=allowed_patch_roots,
@@ -450,7 +478,12 @@ class GoalEvolveEngine:
             teacher_plan_payload["parsed_markdown"] = parsed_plan
             teacher_plan_payload["hypotheses"] = [item.to_dict() for item in hypotheses]
             teacher_plan_payload["role_schedule"] = role_schedule
-            teacher_plan_payload["source_index"] = repository_graph.compact_index()
+            teacher_plan_payload["source_index"] = (
+                repository_graph.compact_index() if repository_graph else {}
+            )
+            if not self.repository_graph_enabled:
+                teacher_plan_payload["repository_graph"] = {"enabled": False}
+            teacher_plan_payload["repository_graph_enabled"] = self.repository_graph_enabled
             teacher_plan_payload["recovery"] = {
                 "kind": "controller_assignment_revalidation",
                 "source": "controller_assignment_repair",
@@ -480,18 +513,22 @@ class GoalEvolveEngine:
                 allowed_patch_roots = tuple(
                     getattr(self.evaluator, "config", object()).allowed_patch_roots
                 ) if hasattr(getattr(self.evaluator, "config", object()), "allowed_patch_roots") else ()
-                repository_graph = RepositoryGraphIndex(state_root=self.state_root).build_parent(
+                repository_graph = self._parent_repository_graph(
                     source_root=parent_source,
                     source_hash=parent.source_hash,
                     allowed_patch_roots=allowed_patch_roots,
                 )
-                source_index = repository_graph.compact_index()
-                repository_graph_packet = repository_graph.focus(
-                    metric_hints=self._teacher_reference_symptoms(
-                        diagnosis=round_diagnosis,
-                        decision_context=decision_context,
-                    ),
-                    allowed_patch_roots=allowed_patch_roots,
+                source_index = repository_graph.compact_index() if repository_graph else {}
+                repository_graph_packet = (
+                    repository_graph.focus(
+                        metric_hints=self._teacher_reference_symptoms(
+                            diagnosis=round_diagnosis,
+                            decision_context=decision_context,
+                        ),
+                        allowed_patch_roots=allowed_patch_roots,
+                    )
+                    if repository_graph
+                    else None
                 )
                 search_policy = SearchPolicyBuilder(self.state_root).build(
                     parent=parent,
@@ -534,6 +571,7 @@ class GoalEvolveEngine:
                 if not bool(teacher_plan_payload.get("format_valid")):
                     raise RuntimeError("teacher_markdown_format_invalid_after_repair")
                 parsed_plan = dict(teacher_plan_payload.get("parsed_markdown") or {})
+
                 def materialize(plan: Mapping[str, object]):
                     return materialize_teacher_assignments(
                         assignments=tuple(
@@ -602,7 +640,8 @@ class GoalEvolveEngine:
                 teacher_plan_payload["hypotheses"] = [item.to_dict() for item in hypotheses]
                 teacher_plan_payload["role_schedule"] = role_schedule
                 teacher_plan_payload["source_index"] = source_index
-                teacher_plan_payload["repository_graph"] = repository_graph_packet
+                teacher_plan_payload["repository_graph"] = repository_graph_packet or {"enabled": False}
+                teacher_plan_payload["repository_graph_enabled"] = self.repository_graph_enabled
                 teacher_plan_payload["search_policy"] = search_policy
                 teacher_plan_payload["paper_cards"] = paper_cards
                 cited_cards = [

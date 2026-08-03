@@ -125,6 +125,7 @@ class ExperimentConfig:
     prefer_execution_champion: bool = False
     campaign_ready: bool | None = None
     epd_max_reinforcement_attempts: int = 2
+    repository_graph_enabled: bool = True
 
 
 def _load_raw_config(path: Path) -> dict[str, Any]:
@@ -210,6 +211,7 @@ def load_config(path: Path) -> ExperimentConfig:
         prefer_execution_champion=bool(raw.get("prefer_execution_champion", False)),
         campaign_ready=bool(raw["campaign_ready"]) if "campaign_ready" in raw else None,
         epd_max_reinforcement_attempts=max(0, int(raw.get("epd_max_reinforcement_attempts", 2))),
+        repository_graph_enabled=bool(raw.get("repository_graph_enabled", True)),
     )
 
 

@@ -66,6 +66,9 @@ def student_packet(
             "## Mandatory Evidence",
             "Return a source diff, source commit, phase-signal values, frozen-contract metrics, and exactly these checks: build, flow, metrics, lec. A verified QoR gain can be promoted after 4/4 checks even when telemetry is missing; mark it unattributed and make repairing that telemetry a follow-up obligation.",
             "",
+            "## Internal C++ Scheduling Decision",
+            "When the Teacher Handoff contains an Internal C++ Scheduling Suggestion, you may accept, adapt, or reject this advisory suggestion after independently inspecting the current source. In your final response, record exactly `- Decision: accepted|adapted|rejected` and `- Rationale: <concise source-grounded reason>`. You may change only internal C++ phase/policy scheduling within the assigned source boundary; do not edit Tcl, SDC, design, or benchmark inputs, and do not substitute a different Controller evaluation recipe.",
+            "",
             "## Timing/Power Trade-off Discipline",
             "When the active stage is timing_recovery or adaptive_tradeoff, the controller—not you—selects the named repair_timing recipe and always executes/checkpoints repair_power before any timing phase. Do not edit Tcl or substitute a different recipe. In adaptive_tradeoff, the controller's candidate menu deliberately covers dominant-residual, repair_power-durability, and power-to-timing-reversion mechanisms; your role and selected hypothesis, not a hidden Student-number bucket, determine the source experiment. Every role still runs the complete power-then-timing flow and compares against its exact recipe baseline. Treat the assigned recipe as a controlled schedule experiment (LEGACY_MT/TNS/WNS/WNS_CONE/REROUTE/etc.); use its actual policy and command parameters when reasoning about the C++ change. Preserve or add structured source telemetry for eligible/considered moves, committed moves, journal rollbacks, retained moves, and a reason for any rejected timing-power trade-off. If your timing action reverses a power-reclaim cell replacement, explain and count that direction in the source telemetry; the evaluator independently compares checkpointed instance cell types and sends the overlap/reversion rate to the Teacher.",
             *([rmp_controller_fact] if rmp_controller_fact else []),
@@ -147,6 +150,14 @@ def _teacher_handoff(hypothesis: Hypothesis) -> str:
         lines.extend(["### Predicted Stage Effect", hypothesis.teacher_predicted_stage_effect])
     if hypothesis.teacher_selection_rationale:
         lines.extend(["### Why This Assignment", hypothesis.teacher_selection_rationale])
+    if hypothesis.teacher_internal_cpp_scheduling_suggestion:
+        lines.extend(
+            [
+                "### Internal C++ Scheduling Suggestion",
+                hypothesis.teacher_internal_cpp_scheduling_suggestion,
+                "This is advisory. Independently accept, adapt, or reject it after inspecting the current source; do not change the external Tcl recipe or any benchmark input.",
+            ]
+        )
     if len(lines) == 1:
         lines.append("Follow the controller-created role and source boundary for this round.")
     return "\n".join(lines)

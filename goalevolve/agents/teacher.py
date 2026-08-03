@@ -510,6 +510,13 @@ class CodexTeacher:
                         ).get("predicted_stage_effect")
                         or ""
                     ),
+                    teacher_internal_cpp_scheduling_suggestion=str(
+                        row.get("internal_cpp_scheduling_suggestion")
+                        or dict((teacher_context or {}).get("idea_records") or {}).get(
+                            str(row.get("idea_reference") or ""), {}
+                        ).get("internal_cpp_scheduling_suggestion")
+                        or ""
+                    ).strip(),
                 )
             selected.append(finalized)
             selected_allocation_keys.add(_allocation_key(finalized))
@@ -550,11 +557,31 @@ class CodexTeacher:
             str(decision_context.get("evaluation_mode") or "timing_only")
         )
         requires_explorer_ideas = any(item.student_role == "explorer" for item in fallback)
+        graph_enabled = repository_graph is not None
+        source_localization_sections = (
+            [
+                "## Compact Source Structure Index",
+                json.dumps(source_index or {}, ensure_ascii=False, indent=2),
+                "",
+                "## P0-rooted Source Graph and Doc Cards",
+                json.dumps(repository_graph, ensure_ascii=False, indent=2),
+                "This is an AST-derived localization aid. It is rooted in the frozen project P0 snapshot and incrementally refreshed for the current parent. It does not replace live rg/sed inspection or authorize a patch by itself.",
+                "Use a Doc Card's full `declarator` verbatim when a function name is overloaded. Separate multiple Source Evidence anchors with semicolons, never commas, because a C++ declarator may contain commas.",
+                "",
+            ]
+            if graph_enabled
+            else [
+                "## Source Localization",
+                "Repository graph is disabled for this ablation. Use live rg/sed inspection only; the Controller validates every path::symbol anchor against the current parent source.",
+                "",
+            ]
+        )
+        source_context = "P0-rooted source graph, live source structure, " if graph_enabled else "live source structure, "
         return "\n".join(
             [
                 "# GoalEvolve Persistent Teacher: diagnose and plan",
                 "",
-                "You are the Teacher. Diagnose the frozen-goal gap using only the supplied compact EPD, parent checkpoint trajectory, P0-rooted source graph, live source structure, paper-card references, and empirical observation memory. You do not edit source code.",
+                f"You are the Teacher. Diagnose the frozen-goal gap using only the supplied compact EPD, parent checkpoint trajectory, {source_context}paper-card references, and empirical observation memory. You do not edit source code.",
                 "The frozen QoR decision contract is exactly TNS, dynamic power, and leakage power. Runtime is execution telemetry only: never use it to choose, rank, retain, suppress, or promote a mechanism. The controller owns source validation, evaluation, and promotion.",
                 "You own mechanism creation and assignment. The Controller supplies role envelopes, not candidate mechanisms. For every Explorer, inspect the live source with at least two successful rg/sed commands, locate a real hook, and create a new bounded idea. Do not copy, paraphrase, or treat a paper card as a candidate mechanism: it is only topical context. Avoid every invalid, validated, and promising Explorer family in EPD unless both the source hook and the decision boundary are materially different. For an Integrator, choose a compatible historical pair from the supplied EPD options and explain how each decision boundary will coexist in the current parent. For an Enhancer, choose one promising EPD attempt and explain the stage evidence that prevented stable post-route gain before proposing one bounded strengthening. You may devise the implementation approach, but must name real source paths and symbols. Never change Tcl or benchmark inputs.",
                 "",
@@ -591,14 +618,7 @@ class CodexTeacher:
                 f"Read-only parent source root: {source_root or '<not supplied>'}",
                 "Use rg and bounded local reads against that directory before choosing hooks. The Controller checks every `path::symbol` anchor below against this exact snapshot.",
                 "",
-                "## Compact Source Structure Index",
-                json.dumps(source_index or {}, ensure_ascii=False, indent=2),
-                "",
-                "## P0-rooted Source Graph and Doc Cards",
-                json.dumps(repository_graph or {}, ensure_ascii=False, indent=2),
-                "This is an AST-derived localization aid. It is rooted in the frozen project P0 snapshot and incrementally refreshed for the current parent. It does not replace live rg/sed inspection or authorize a patch by itself.",
-                "Use a Doc Card's full `declarator` verbatim when a function name is overloaded. Separate multiple Source Evidence anchors with semicolons, never commas, because a C++ declarator may contain commas.",
-                "",
+                *source_localization_sections,
                 "## Evidence-only Search Policy",
                 json.dumps(search_policy or {}, ensure_ascii=False, indent=2),
                 "This policy is advisory. The listed incumbent is the only current parent; only the deterministic Controller can promote a candidate or alter roles. When `avoid_exact_source_hooks` is nonempty, do not repeat that exact source hook with the same decision boundary: either use a different AST-grounded hook or explain the materially distinct boundary and falsification condition.",

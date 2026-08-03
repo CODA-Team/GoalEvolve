@@ -270,6 +270,11 @@ def materialize_teacher_assignments(
             continue
         idea_reference = str(row.get("idea_reference") or "").strip()
         linked_idea = ideas.get(idea_reference)
+        internal_cpp_scheduling_suggestion = str(
+            row.get("internal_cpp_scheduling_suggestion")
+            or (linked_idea or {}).get("internal_cpp_scheduling_suggestion")
+            or ""
+        ).strip()
         declared_recipe_value = (
             row.get("evaluation_recipe")
             or (linked_idea or {}).get("evaluation_recipe")
@@ -369,6 +374,7 @@ def materialize_teacher_assignments(
                 teacher_selection_rationale=rationale,
                 teacher_evolution_ideas=all_teacher_ideas,
                 teacher_predicted_stage_effect=predicted_effect,
+                teacher_internal_cpp_scheduling_suggestion=internal_cpp_scheduling_suggestion,
             )
         )
     return AssignmentMaterialization(tuple(result), tuple(dict.fromkeys(errors)))

@@ -31,7 +31,7 @@ class SearchPolicyBuilder:
         parent: Parent,
         diagnosis: object,
         epd_portfolio: Mapping[str, object],
-        repository_graph: RepositoryGraph,
+        repository_graph: RepositoryGraph | None,
         allowed_patch_roots: Sequence[str] = (),
     ) -> dict[str, object]:
         nonpromoted_rounds = self._recent_nonpromoted_rounds()
@@ -57,11 +57,22 @@ class SearchPolicyBuilder:
             if str(path)
         )
         metric_hints = _metric_hints(bottleneck, diagnosis_payload)
-        graph_packet = repository_graph.focus(
-            anchor_hints=source_hooks,
-            metric_hints=metric_hints,
-            allowed_patch_roots=allowed_patch_roots,
-        )
+        graph_payload: dict[str, object]
+        if repository_graph is None:
+            graph_payload = {"enabled": False}
+        else:
+            graph_packet = repository_graph.focus(
+                anchor_hints=source_hooks,
+                metric_hints=metric_hints,
+                allowed_patch_roots=allowed_patch_roots,
+            )
+            graph_payload = {
+                "enabled": True,
+                "source_hash": repository_graph.source_hash,
+                "base_source_hash": repository_graph.base_source_hash,
+                "artifact_root": str(repository_graph.artifact_root),
+                "focus": graph_packet,
+            }
         diversification_required = streak >= _DIVERSIFICATION_STREAK
         stagnation = self._stagnation_frontier(nonpromoted_rounds)
         repeated_hooks = [
@@ -98,12 +109,7 @@ class SearchPolicyBuilder:
             },
             "elite_record_ids": [str(record.get("record_id") or "") for record in validated if str(record.get("record_id") or "")],
             "elite_source_hooks": list(dict.fromkeys(source_hooks)),
-            "repository_graph": {
-                "source_hash": repository_graph.source_hash,
-                "base_source_hash": repository_graph.base_source_hash,
-                "artifact_root": str(repository_graph.artifact_root),
-                "focus": graph_packet,
-            },
+            "repository_graph": graph_payload,
         }
 
     @staticmethod

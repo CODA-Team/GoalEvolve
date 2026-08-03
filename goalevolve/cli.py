@@ -19,7 +19,11 @@ from .evaluation.leaderboard import update_unified_leaderboard
 from .dashboard import main as dashboard_main
 
 
-def _engine(config_path: Path) -> tuple[GoalEvolveEngine, object]:
+def _engine(
+    config_path: Path,
+    *,
+    repository_graph_override: str | None = None,
+) -> tuple[GoalEvolveEngine, object]:
     config = load_config(config_path)
     contract, registry = build_runtime(config)
     engine = GoalEvolveEngine(
@@ -35,6 +39,11 @@ def _engine(config_path: Path) -> tuple[GoalEvolveEngine, object]:
         max_campaign_rounds=config.max_campaign_rounds,
         prefer_execution_champion=config.prefer_execution_champion,
         epd_max_reinforcement_attempts=config.epd_max_reinforcement_attempts,
+        repository_graph_enabled=(
+            config.repository_graph_enabled
+            if repository_graph_override is None
+            else repository_graph_override == "on"
+        ),
     )
     return engine, config
 
@@ -122,7 +131,10 @@ def _attach_initial_parent(*, engine: GoalEvolveEngine, config) -> None:
 
 
 def command_run(args: argparse.Namespace) -> int:
-    engine, config = _engine(Path(args.config).resolve())
+    engine, config = _engine(
+        Path(args.config).resolve(),
+        repository_graph_override=getattr(args, "repository_graph", None),
+    )
     if config.evaluator == "contest_openroad" and config.campaign_ready is not True:
         raise RuntimeError(
             f"profile for {config.design!r} is not ready for evolution: measure the baseline, "
@@ -134,7 +146,11 @@ def command_run(args: argparse.Namespace) -> int:
     _attach_initial_parent(engine=engine, config=config)
     parent = engine.run(rounds=args.rounds)
     atomic_json(engine.state_root / "toolchain.json", toolchain_fingerprint(source_root=config.source_root))
-    print(json.dumps({"state_root": str(engine.state_root), "final_parent": parent.to_dict()}, ensure_ascii=False, indent=2))
+    print(json.dumps({
+        "state_root": str(engine.state_root),
+        "repository_graph_enabled": engine.repository_graph_enabled,
+        "final_parent": parent.to_dict(),
+    }, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -252,6 +268,12 @@ def build_parser() -> argparse.ArgumentParser:
     run = subs.add_parser("run", help="run a configurable multi-round campaign")
     run.add_argument("--config", required=True)
     run.add_argument("--rounds", type=int, default=1)
+    run.add_argument(
+        "--repository-graph",
+        choices=("on", "off"),
+        default=None,
+        help="override the profile's P0-rooted AST repository-graph setting for an ablation",
+    )
     run.set_defaults(func=command_run)
     smoke = subs.add_parser("smoke", help="run a four-student multi-round mock campaign")
     smoke.add_argument("--state-root", default="state/smoke")

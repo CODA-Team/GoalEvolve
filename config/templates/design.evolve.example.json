@@ -20,5 +20,6 @@
     "dynamic_power_pw": 1.0,
     "leakage_power_pw": 1.0
   },
-  "epd_max_reinforcement_attempts": 2
+  "epd_max_reinforcement_attempts": 2,
+  "repository_graph_enabled": true
 }

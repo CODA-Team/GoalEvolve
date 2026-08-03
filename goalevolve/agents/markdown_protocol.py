@@ -112,6 +112,9 @@ def _evolution_idea_records(section: str) -> tuple[dict[str, object], ...]:
                 "source_evidence": _source_evidence_items(_field(block, "Source Evidence")),
                 "evaluation_recipe": _field(block, "Evaluation Recipe"),
                 "falsification_condition": _field(block, "Falsification Condition"),
+                "internal_cpp_scheduling_suggestion": _field(
+                    block, "Internal C++ Scheduling Suggestion"
+                ),
                 "paper_card_ids": _items(_field(block, "Paper Card References")),
                 "priority": _field(block, "Priority"),
             }
@@ -170,6 +173,9 @@ def parse_teacher_plan(text: str) -> dict[str, object]:
                 "source_evidence": _source_evidence_items(_field(block, "Source Evidence")),
                 "evaluation_recipe": _field(block, "Evaluation Recipe"),
                 "falsification_condition": _field(block, "Falsification Condition"),
+                "internal_cpp_scheduling_suggestion": _field(
+                    block, "Internal C++ Scheduling Suggestion"
+                ),
                 "epd_record_ids": _items(_field(block, "EPD References")),
             }
         )
@@ -331,6 +337,7 @@ def render_teacher_plan(
                 f"- Source Evidence: {'; '.join(str(item) for item in raw.get('source_evidence') or ()) or 'none'}",
                 f"- Evaluation Recipe: {raw.get('evaluation_recipe') or ''}",
                 f"- Falsification Condition: {raw.get('falsification_condition') or ''}",
+                f"- Internal C++ Scheduling Suggestion: {raw.get('internal_cpp_scheduling_suggestion') or 'none'}",
                 f"- Paper Card References: {', '.join(str(item) for item in raw.get('paper_card_ids') or ()) or 'none'}",
                 f"- Priority: {raw.get('priority') if raw.get('priority') is not None else index - 1}",
                 "",
@@ -361,6 +368,7 @@ def render_teacher_plan(
                 f"- Source Evidence: {'; '.join(str(item) for item in assignment.get('source_evidence') or ()) or 'none'}",
                 f"- Evaluation Recipe: {assignment.get('evaluation_recipe') or ''}",
                 f"- Falsification Condition: {assignment.get('falsification_condition') or 'No verified contract improvement.'}",
+                f"- Internal C++ Scheduling Suggestion: {assignment.get('internal_cpp_scheduling_suggestion') or 'none'}",
                 f"- EPD References: {', '.join(str(item) for item in assignment.get('epd_record_ids') or ()) or 'none'}",
                 "",
             ]

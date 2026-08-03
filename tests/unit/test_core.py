@@ -11,6 +11,7 @@ import shutil
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from goalevolve.config import DEFAULT_BENCHMARK_ROOT, DEFAULT_CREDENTIAL_ENV, DEFAULT_OPENROAD_SEED, load_config
 from goalevolve.cli import _attach_configured_baseline
@@ -893,6 +894,19 @@ Retain parent.
         self.assertFalse(policy["promotion_authority"])
         self.assertEqual(policy["elite_record_ids"], ["EPD_VALIDATED"])
 
+    def test_search_policy_marks_repository_graph_disabled(self) -> None:
+        from goalevolve.planning.search_policy import SearchPolicyBuilder
+
+        with tempfile.TemporaryDirectory() as temporary:
+            policy = SearchPolicyBuilder(Path(temporary)).build(
+                parent=self.parent,
+                diagnosis=SimpleNamespace(dominant_bottleneck="tns_abs_ns", to_dict=lambda: {}),
+                epd_portfolio={"records": []},
+                repository_graph=None,
+            )
+
+        self.assertEqual(policy["repository_graph"], {"enabled": False})
+
     def test_search_policy_requires_diversification_after_two_completed_no_promotion_rounds(self) -> None:
         from goalevolve.planning.repository_graph import RepositoryGraphIndex
         from goalevolve.planning.search_policy import SearchPolicyBuilder
@@ -1616,6 +1630,23 @@ Keep the checked parent.
         self.assertIn("## P0-rooted Source Graph and Doc Cards", prompt)
         self.assertIn("frozen_p0", prompt)
         self.assertIn("rsz::adjustTiming", prompt)
+
+    def test_teacher_prompt_omits_repository_graph_for_graph_free_ablation(self) -> None:
+        prompt = CodexTeacher._plan_prompt(
+            parent=self.parent,
+            diagnosis=SimpleNamespace(to_dict=lambda: {}),
+            epd={},
+            observations={},
+            previous_review={},
+            fallback=(replace(self.hypothesis, student_id="student_1"),),
+            source_index={},
+            repository_graph=None,
+        )
+
+        self.assertIn("## Source Localization", prompt)
+        self.assertIn("Repository graph is disabled for this ablation", prompt)
+        self.assertNotIn("## P0-rooted Source Graph and Doc Cards", prompt)
+        self.assertNotIn("## Compact Source Structure Index", prompt)
 
     def test_repository_graph_focus_filters_cards_to_allowed_patch_roots(self) -> None:
         from goalevolve.planning.repository_graph import RepositoryGraphIndex
@@ -2586,6 +2617,77 @@ Keep the checked parent.
         self.assertIn("endpoint freshness", packet)
         self.assertIn("Timing debt dominates", packet)
         self.assertIn("Reduce timing debt after the repair stage.", packet)
+
+    def test_teacher_internal_cpp_schedule_suggestion_reaches_student_as_advisory(self) -> None:
+        from goalevolve.agents.markdown_protocol import parse_teacher_plan
+        from goalevolve.agents.prompting import student_packet
+
+        parsed = parse_teacher_plan(
+            """## Diagnosis Summary
+Timing is the active residual.
+
+## Evolution Ideas
+### idea_1
+- Idea: Use a bounded late timing-recovery phase.
+- Internal C++ Scheduling Suggestion: Consider invoking the existing bounded policy after repair_power only when its journal guard admits the phase; do not edit Tcl.
+
+## Parent Policy
+Keep the checked parent.
+
+## Student Assignments
+### student_1
+- Role: explorer
+- Claim: Use a bounded late timing-recovery phase.
+- Selection Rationale: The phase may recover the observed debt.
+- Source Hooks: src/rsz/src/Timing.cc
+- Expected Signals: timing_recovery_examined
+- Source Evidence: src/rsz/src/Timing.cc::adjustTiming
+- Falsification Condition: No final timing recovery under the frozen contract.
+- Internal C++ Scheduling Suggestion: Consider invoking the existing bounded policy after repair_power only when its journal guard admits the phase; do not edit Tcl.
+- EPD References: none
+"""
+        )
+        self.assertEqual(
+            parsed["evolution_idea_records"][0]["internal_cpp_scheduling_suggestion"],
+            "Consider invoking the existing bounded policy after repair_power only when its journal guard admits the phase; do not edit Tcl.",
+        )
+        self.assertEqual(
+            parsed["assignments"][0]["internal_cpp_scheduling_suggestion"],
+            "Consider invoking the existing bounded policy after repair_power only when its journal guard admits the phase; do not edit Tcl.",
+        )
+        hypothesis = Hypothesis(
+            "schedule", "timing", "bounded timing recovery",
+            ("src/rsz/src/Timing.cc",), ("timing_recovery_examined",), ("card",), "schedule",
+            teacher_internal_cpp_scheduling_suggestion=parsed["assignments"][0]["internal_cpp_scheduling_suggestion"],
+        )
+        packet = student_packet(parent=self.parent, hypothesis=hypothesis, prior=())
+        self.assertIn("## Internal C++ Scheduling Suggestion", packet)
+        self.assertIn("you may accept, adapt, or reject this advisory suggestion", packet)
+        self.assertIn("do not edit Tcl, SDC, design, or benchmark inputs", packet)
+
+    def test_student_scheduling_decision_is_persisted_as_advisory_artifact(self) -> None:
+        from goalevolve.agents.codex_student import CodexStudentEditor
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            message = root / "last_message.md"
+            message.write_text(
+                """Implemented the bounded phase.
+- Decision: adapted
+- Rationale: The current Optimizer dispatch already invokes the policy once, so I tightened its existing guard instead of adding a second invocation.
+""",
+                encoding="utf-8",
+            )
+            path = CodexStudentEditor._write_internal_cpp_scheduling_decision(
+                artifact_root=root,
+                last_message=message,
+                suggestion="Invoke the bounded policy after repair_power.",
+            )
+            decision = load_json(path)
+        self.assertEqual(decision["decision"], "adapted")
+        self.assertIn("already invokes the policy once", decision["rationale"])
+        self.assertEqual(decision["suggestion"], "Invoke the bounded policy after repair_power.")
+        self.assertTrue(decision["advisory_only"])
 
     def test_epd_roles_offer_teacher_selectable_verified_crossovers(self) -> None:
         cards = (
@@ -4646,6 +4748,76 @@ Keep the checked parent.
             })
             self.assertEqual(load_config(path).source_root, DEFAULT_OPENROAD_SEED)
             self.assertTrue(DEFAULT_OPENROAD_SEED.is_dir())
+
+    def test_repository_graph_profile_default_and_cli_override(self) -> None:
+        from goalevolve.cli import build_parser
+
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "contest.json"
+            atomic_json(path, {
+                "design": "aes_cipher_top",
+                "state_root": "state",
+                "baseline_metrics": {"tns_abs_ns": 1.0},
+                "target_metrics": {"tns_abs_ns": 1.0},
+                "evaluator": "contest_openroad",
+            })
+            self.assertTrue(load_config(path).repository_graph_enabled)
+            atomic_json(path, {
+                "design": "aes_cipher_top",
+                "state_root": "state",
+                "baseline_metrics": {"tns_abs_ns": 1.0},
+                "target_metrics": {"tns_abs_ns": 1.0},
+                "evaluator": "contest_openroad",
+                "repository_graph_enabled": False,
+            })
+            self.assertFalse(load_config(path).repository_graph_enabled)
+
+        parser = build_parser()
+        self.assertIsNone(parser.parse_args(["run", "--config", "campaign.json"]).repository_graph)
+        self.assertEqual(
+            parser.parse_args(
+                ["run", "--config", "campaign.json", "--repository-graph", "off"]
+            ).repository_graph,
+            "off",
+        )
+
+    def test_disabled_repository_graph_does_not_construct_an_index(self) -> None:
+        engine = GoalEvolveEngine(
+            self.contract,
+            Path("state"),
+            DiversePlanner(),
+            MockEvaluator(),
+            IsolatedWorkspace(),
+            StrictEvidencePromotion(),
+            repository_graph_enabled=False,
+        )
+        with patch("goalevolve.execution.engine.RepositoryGraphIndex") as graph_index:
+            graph = engine._parent_repository_graph(
+                source_root=Path("source"),
+                source_hash="parent_hash",
+                allowed_patch_roots=("src/rsz",),
+            )
+        self.assertIsNone(graph)
+        graph_index.assert_not_called()
+
+    def test_graph_free_engine_records_its_effective_setting(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "campaign"
+            engine = GoalEvolveEngine(
+                self.contract,
+                root,
+                DiversePlanner(),
+                MockEvaluator(),
+                IsolatedWorkspace(),
+                StrictEvidencePromotion(),
+                repository_graph_enabled=False,
+            )
+            engine.initialize(baseline_metrics=dict(self.contract.baseline_metrics))
+
+            self.assertFalse(load_json(root / "plugins.json")["repository_graph_enabled"])
+            self.assertFalse(
+                load_json(root / "runtime_provenance.json")["entries"][0]["repository_graph_enabled"]
+            )
 
     def test_portable_design_profiles_resolve_only_project_assets(self) -> None:
         project_root = Path(__file__).resolve().parents[2]

@@ -61,6 +61,12 @@ graph for the immutable campaign parent at
 `<state_root>/knowledge/repository_graph/<source_hash>/`; unchanged source
 facts reuse P0 records while changed files are reparsed.
 
+The graph is enabled by default. Set `"repository_graph_enabled": false` in an
+evolution profile, or override one invocation with `--repository-graph off`,
+for a graph-free ablation. The effective setting is recorded in
+`plugins.json`, `runtime_provenance.json`, `teacher_plan.json`, and
+`search_policy.json` under the campaign state root.
+
 The Teacher receives a bounded induced AST subgraph and Doc Cards within that
 design's patch roots, with only relations whose endpoints are present in the
 packet, and must still inspect the parent with `rg`/`sed`. The controller validates

@@ -18,6 +18,7 @@
     "teacher": {"enum": ["codex_teacher", "heuristic_teacher"]},
     "promotion": {"enum": ["strict_evidence", "power_first_promotion"]},
     "max_campaign_rounds": {"type": ["integer", "null"]},
-    "epd_max_reinforcement_attempts": {"type": "integer", "minimum": 0, "default": 2, "description": "Maximum Enhancer attempts for one promising EPD idea."}
+    "epd_max_reinforcement_attempts": {"type": "integer", "minimum": 0, "default": 2, "description": "Maximum Enhancer attempts for one promising EPD idea."},
+    "repository_graph_enabled": {"type": "boolean", "default": true, "description": "Enable P0-rooted tree-sitter source graphs for Teacher localization and AST anchor validation."}
   }
 }
