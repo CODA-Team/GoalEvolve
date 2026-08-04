@@ -1427,6 +1427,69 @@ Keep parent.
         self.assertEqual(pointer.symbols[0].declarator, "setCell(LibertyCell* cell)")
         self.assertEqual(short.status, "ambiguous")
 
+    def test_repository_graph_normalizes_punctuation_spacing_in_multiline_cpp_anchors(self) -> None:
+        from goalevolve.planning.repository_graph import RepositoryGraphIndex
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            implementation = source / "src/rsz/src/policy/RepairPowerPolicy.cc"
+            implementation.parent.mkdir(parents=True)
+            implementation.write_text(
+                "namespace sta { class LibertyCell {}; }\n"
+                "namespace rsz {\n"
+                "class Candidate {};\n"
+                "class Metrics {};\n"
+                "class RepairPowerPolicy {\n"
+                " public:\n"
+                "  bool isStrictPowerDirectionVtSwap(\n"
+                "      sta::LibertyCell *current,\n"
+                "      sta::LibertyCell *candidate) const;\n"
+                "  bool tryCommitCandidateWindow(\n"
+                "      const std::vector<Candidate> &window,\n"
+                "      Metrics &current);\n"
+                "};\n"
+                "bool RepairPowerPolicy::isStrictPowerDirectionVtSwap(\n"
+                "    sta::LibertyCell *current,\n"
+                "    sta::LibertyCell *candidate) const\n"
+                "{\n"
+                "  return current != candidate;\n"
+                "}\n"
+                "bool RepairPowerPolicy::tryCommitCandidateWindow(\n"
+                "    const std::vector<Candidate> &window,\n"
+                "    Metrics &current)\n"
+                "{\n"
+                "  return &window != nullptr && &current != nullptr;\n"
+                "}\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            graph = RepositoryGraphIndex(
+                state_root=root / "state",
+                p0_source_root=source,
+                p0_artifact_root=root / "p0_graph",
+            ).build_p0(source_hash="p0")
+
+        strict_direction = graph.resolve_anchor(
+            "src/rsz/src/policy/RepairPowerPolicy.cc::"
+            "rsz::RepairPowerPolicy::isStrictPowerDirectionVtSwap("
+            "sta::LibertyCell *current, sta::LibertyCell *candidate) const"
+        )
+        candidate_window = graph.resolve_anchor(
+            "src/rsz/src/policy/RepairPowerPolicy.cc::"
+            "rsz::RepairPowerPolicy::tryCommitCandidateWindow("
+            "const std::vector<Candidate> &window, Metrics &current)"
+        )
+        mismatched = graph.resolve_anchor(
+            "src/rsz/src/policy/RepairPowerPolicy.cc::"
+            "rsz::RepairPowerPolicy::tryCommitCandidateWindow("
+            "const std::vector<Candidate> &window, Metrics *current)"
+        )
+
+        self.assertEqual(strict_direction.status, "resolved")
+        self.assertEqual(candidate_window.status, "resolved")
+        self.assertEqual(mismatched.status, "missing")
+
     def test_controller_rejects_source_evidence_from_a_stale_graph_file(self) -> None:
         from goalevolve.execution.teacher_assignment import (
             build_role_templates,

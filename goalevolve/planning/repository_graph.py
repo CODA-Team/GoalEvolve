@@ -137,14 +137,14 @@ class RepositoryGraph:
         if not separator or not path or not requested:
             return AnchorResolution(anchor=anchor, status="missing")
         if "(" in requested:
-            normalized_requested = _normalized_pointer_spacing(requested)
+            normalized_requested = _normalized_declarator_spacing(requested)
             matches = [
                 symbol
                 for symbol in self.symbols.values()
                 if symbol.path == path
                 and (
-                    _normalized_pointer_spacing(symbol.declarator) == normalized_requested
-                    or _normalized_pointer_spacing(_qualified_declarator(symbol))
+                    _normalized_declarator_spacing(symbol.declarator) == normalized_requested
+                    or _normalized_declarator_spacing(_qualified_declarator(symbol))
                     == normalized_requested
                 )
             ]
@@ -941,14 +941,15 @@ def _qualified_declarator(symbol: GraphSymbol) -> str:
     if not symbol.declarator:
         return ""
     prefix, _, _ = symbol.qualified_name.rpartition("::")
-    local = symbol.declarator.rsplit("::", 1)[-1]
+    name_prefix, separator, parameters = symbol.declarator.partition("(")
+    local = f"{name_prefix.rsplit('::', 1)[-1]}{separator}{parameters}"
     return f"{prefix}::{local}" if prefix else local
 
 
-def _normalized_pointer_spacing(declarator: str) -> str:
-    """Ignore only whitespace adjacent to pointer stars in exact anchors."""
+def _normalized_declarator_spacing(declarator: str) -> str:
+    """Ignore whitespace next to C++ declarator punctuation only."""
 
-    return re.sub(r"\s*\*\s*", "*", declarator)
+    return re.sub(r"\s*(::|[(),*&\[\]])\s*", r"\1", declarator)
 
 
 def _call_names(*, node: Any, raw: bytes) -> tuple[str, ...]:
