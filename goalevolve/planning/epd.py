@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+import os
 import re
+import tempfile
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
-from ..core.io import atomic_json, load_json, sha256_json
+from ..core.io import atomic_json, canonical_json, load_json, sha256_json
 from ..core.models import CandidateResult, EvidenceVerdict, Parent
 
 
 EPD_STATUSES = ("validated", "promising", "pending", "unactivated", "invalid")
 EPD_SCHEMA_VERSION = "goalevolve.v2.epd.v2"
+EPD_PROJECTION_SCHEMA_VERSION = "goalevolve.v2.epd.projection.v1"
 DEFAULT_MAX_REINFORCEMENT_ATTEMPTS = 2
 
 
@@ -80,6 +83,7 @@ class EvolutionProgramDatabase:
         max_reinforcement_attempts: int = DEFAULT_MAX_REINFORCEMENT_ATTEMPTS,
     ) -> None:
         self.path = state_root / "knowledge" / "epd.json"
+        self.projection_root = self.path.parent / "epd"
         self.max_reinforcement_attempts = max(0, int(max_reinforcement_attempts))
 
     def _payload(self) -> dict[str, object]:
@@ -157,6 +161,12 @@ class EvolutionProgramDatabase:
         teacher_priority: int = 0,
         diagnosis_summary: str = "",
         parent_policy: str = "",
+        stage: str = "",
+        mechanism_family: str = "",
+        observed_state: str = "",
+        decision_boundary: str = "",
+        proposed_action: str = "",
+        acceptance_or_rollback_rule: str = "",
         status: str = "pending",
     ) -> dict[str, object]:
         return {
@@ -173,6 +183,12 @@ class EvolutionProgramDatabase:
             "parent_id": parent_id,
             "diagnosis_summary": diagnosis_summary,
             "parent_policy": parent_policy,
+            "stage": stage,
+            "mechanism_family": mechanism_family,
+            "observed_state": observed_state,
+            "decision_boundary": decision_boundary,
+            "proposed_action": proposed_action,
+            "acceptance_or_rollback_rule": acceptance_or_rollback_rule,
             "status": status,
             "executed": False,
             "execution_count": 0,
@@ -198,6 +214,243 @@ class EvolutionProgramDatabase:
             key=lambda item: (int(item.get("round_index") or 0), str(item.get("record_id") or "")),
         )
         atomic_json(self.path, normalized)
+        self._project(normalized)
+
+    def rebuild_projection(self) -> Path:
+        """Materialize path-addressable EPD objects from compatible ``epd.json``."""
+        self._project(self._payload())
+        return self.projection_root / "manifest.json"
+
+    @staticmethod
+    def _atomic_text(path: Path, content: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+                stream.write(content)
+            os.replace(temporary, path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+
+    @staticmethod
+    def _text_from_artifact(path: object, *, fallback: str = "") -> str:
+        candidate = Path(str(path or ""))
+        try:
+            return candidate.read_text(encoding="utf-8") if candidate.is_file() else fallback
+        except OSError:
+            return fallback
+
+    @staticmethod
+    def _mechanism_id(idea: Mapping[str, object], attempt: Mapping[str, object]) -> str:
+        return "MECH_" + sha256_json(
+            {
+                "family": attempt.get("mechanism_family"),
+                "hooks": list(attempt.get("source_hooks") or ()),
+                "boundary": idea.get("decision_boundary"),
+            }
+        )[:16]
+
+    @staticmethod
+    def _jsonl(rows: Sequence[Mapping[str, object]]) -> str:
+        return "".join(canonical_json(dict(row)) + "\n" for row in rows)
+
+    def _project(self, payload: Mapping[str, object]) -> None:
+        """Write a rebuildable object/index view without changing EPD authority."""
+        root = self.projection_root
+        ideas = [dict(row) for row in list(payload.get("ideas") or ()) if isinstance(row, Mapping)]
+        attempts = [dict(row) for row in list(payload.get("attempts") or ()) if isinstance(row, Mapping)]
+        ideas_by_id = {str(row.get("idea_id") or ""): row for row in ideas}
+        attempts_by_idea: dict[str, list[dict[str, object]]] = {}
+        for attempt in attempts:
+            attempts_by_idea.setdefault(str(attempt.get("idea_id") or ""), []).append(attempt)
+
+        catalog: list[dict[str, object]] = []
+        corpus: list[dict[str, object]] = []
+        for idea in sorted(ideas, key=lambda row: str(row.get("idea_id") or "")):
+            idea_id = str(idea.get("idea_id") or "")
+            if not idea_id:
+                continue
+            idea_path = root / "ideas" / idea_id / "idea.json"
+            attempt_ids = [
+                str(attempt.get("record_id") or "")
+                for attempt in attempts_by_idea.get(idea_id, [])
+                if str(attempt.get("record_id") or "")
+            ]
+            rendered = {
+                **idea,
+                "attempt_ids": attempt_ids or list(idea.get("attempt_ids") or ()),
+                "idea_path": str(idea_path),
+            }
+            atomic_json(idea_path, rendered)
+            catalog.append(
+                {
+                    "idea_id": idea_id,
+                    "status": str(idea.get("status") or "pending"),
+                    "stage": str(idea.get("stage") or ""),
+                    "mechanism_family": str(idea.get("mechanism_family") or ""),
+                    "source_hooks": list(idea.get("source_hooks") or ()),
+                    "decision_boundary": str(idea.get("decision_boundary") or ""),
+                    "idea_path": str(idea_path),
+                    "attempt_ids": attempt_ids,
+                }
+            )
+            corpus.append(
+                {
+                    "idea_id": idea_id,
+                    "stage": str(idea.get("stage") or ""),
+                    "source_hooks": list(idea.get("source_hooks") or ()),
+                    "decision_boundary": str(idea.get("decision_boundary") or ""),
+                    "text": "\n".join(
+                        str(idea.get(name) or "")
+                        for name in (
+                            "idea",
+                            "diagnosis_summary",
+                            "observed_state",
+                            "decision_boundary",
+                            "proposed_action",
+                            "acceptance_or_rollback_rule",
+                            "falsification_condition",
+                        )
+                    ).strip(),
+                    "idea_path": str(idea_path),
+                }
+            )
+
+        mechanism_rows: dict[str, dict[str, object]] = {}
+        for attempt in sorted(attempts, key=lambda row: str(row.get("record_id") or "")):
+            record_id = str(attempt.get("record_id") or "")
+            if not record_id:
+                continue
+            idea = ideas_by_id.get(str(attempt.get("idea_id") or ""), {})
+            attempt_root = root / "attempts" / record_id
+            artifacts = dict(attempt.get("artifacts") or {})
+            reflection_path = attempt_root / "student_reflection.md"
+            diff_path = attempt_root / "implementation.diff"
+            stage_path = attempt_root / "stage_metrics.json"
+            signals_path = attempt_root / "phase_signals.json"
+            evidence_path = attempt_root / "evidence_manifest.json"
+            local_artifacts = {
+                "attempt": str(attempt_root / "attempt.json"),
+                "stage_metrics": str(stage_path),
+                "phase_signals": str(signals_path),
+                "student_reflection": str(reflection_path),
+                "implementation_diff": str(diff_path),
+                "evidence_manifest": str(evidence_path),
+            }
+            self._atomic_text(
+                reflection_path,
+                self._text_from_artifact(
+                    artifacts.get("student_reflection"),
+                    fallback="Student reflection was not recorded for this historical attempt.\n",
+                ),
+            )
+            self._atomic_text(
+                diff_path,
+                self._text_from_artifact(
+                    artifacts.get("implementation_diff"),
+                    fallback=str(attempt.get("implementation_diff") or ""),
+                ),
+            )
+            atomic_json(
+                stage_path,
+                {
+                    "metrics_after": dict(attempt.get("metrics") or {}),
+                    "checkpoint_effects": dict(attempt.get("checkpoint_metrics") or {}),
+                },
+            )
+            atomic_json(signals_path, dict(attempt.get("phase_signals") or {}))
+            atomic_json(evidence_path, {"record_id": record_id, "source_artifacts": artifacts, "local_artifacts": local_artifacts})
+            atomic_json(
+                attempt_root / "attempt.json",
+                {**attempt, "artifacts": {**artifacts, **local_artifacts}},
+            )
+
+            mechanism_id = self._mechanism_id(idea, attempt)
+            card = mechanism_rows.setdefault(
+                mechanism_id,
+                {
+                    "mechanism_id": mechanism_id,
+                    "origin_idea_ids": [],
+                    "attempt_ids": [],
+                    "status": "invalid",
+                    "stage": str(idea.get("stage") or ""),
+                    "mechanism_summary": str(idea.get("idea") or attempt.get("mechanism_family") or ""),
+                    "decision_boundary": str(idea.get("decision_boundary") or ""),
+                    "source_hooks": [],
+                    "state_read_set": [str(idea.get("observed_state") or "")],
+                    "source_write_set": [],
+                    "action_type": str(idea.get("proposed_action") or "source_policy_change"),
+                    "commit_scope": "candidate",
+                    "dependencies": [],
+                    "known_conflicts": [],
+                    "parent_compatibility": [],
+                    "observed_qor_effects": [],
+                    "downstream_retention": [],
+                    "student_reflection_paths": [],
+                    "implementation_artifact_paths": [],
+                },
+            )
+            card["origin_idea_ids"] = sorted(set([*card["origin_idea_ids"], str(attempt.get("idea_id") or "")]))
+            card["attempt_ids"] = sorted(set([*card["attempt_ids"], record_id]))
+            card["source_hooks"] = sorted(set([*card["source_hooks"], *[str(item) for item in list(attempt.get("source_hooks") or ()) if item]]))
+            bundle = dict(attempt.get("source_change_bundle") or {})
+            card["source_write_set"] = sorted(set([*card["source_write_set"], *[str(item) for item in list(bundle.get("modified_files") or ()) if item]]))
+            card["parent_compatibility"].append(str(attempt.get("parent_id") or ""))
+            card["observed_qor_effects"].append({"record_id": record_id, "metrics": dict(attempt.get("metrics") or {}), "distance_gain": attempt.get("distance_gain")})
+            card["downstream_retention"].append({"record_id": record_id, "checkpoint_effects": dict(attempt.get("checkpoint_metrics") or {})})
+            card["student_reflection_paths"].append(str(reflection_path))
+            card["implementation_artifact_paths"].append(str(diff_path))
+            status = str(attempt.get("epd_status") or "invalid")
+            if EPD_STATUSES.index(status) < EPD_STATUSES.index(str(card["status"])):
+                card["status"] = status
+
+        mechanism_manifest: list[dict[str, object]] = []
+        for mechanism_id, card in sorted(mechanism_rows.items()):
+            card["state_read_set"] = [item for item in card["state_read_set"] if item]
+            card["parent_compatibility"] = sorted(set(item for item in card["parent_compatibility"] if item))
+            card["student_reflection_paths"] = sorted(set(card["student_reflection_paths"]))
+            card["implementation_artifact_paths"] = sorted(set(card["implementation_artifact_paths"]))
+            card_path = root / "mechanisms" / mechanism_id / "mechanism_card.json"
+            atomic_json(card_path, card)
+            mechanism_manifest.append({"mechanism_id": mechanism_id, "path": str(card_path), "status": card["status"]})
+
+        indexes = root / "indexes"
+        self._atomic_text(indexes / "idea_catalog.jsonl", self._jsonl(catalog))
+        self._atomic_text(indexes / "retrieval_corpus.jsonl", self._jsonl(corpus))
+        for status in EPD_STATUSES:
+            atomic_json(indexes / "by_status" / f"{status}.json", [row for row in catalog if row["status"] == status])
+        for key, field in (("by_stage", "stage"), ("by_source_hook", "source_hooks")):
+            groups: dict[str, list[str]] = {}
+            for row in catalog:
+                values = row[field] if field == "source_hooks" else [row[field]]
+                for value in values:
+                    if value:
+                        groups.setdefault(str(value), []).append(str(row["idea_id"]))
+            for value, idea_ids in groups.items():
+                atomic_json(indexes / key / f"{sha256_json(value)[:16]}.json", {"key": value, "idea_ids": sorted(idea_ids)})
+
+        rounds = sorted({int(row.get("proposed_round") or 0) for row in ideas if int(row.get("proposed_round") or 0) > 0})
+        for round_index in rounds:
+            round_root = root / "round_views" / f"round_{round_index:03d}"
+            round_ideas = [row for row in catalog if int(ideas_by_id[str(row["idea_id"])].get("proposed_round") or 0) == round_index]
+            atomic_json(round_root / "explorer_view.json", {"round_index": round_index, "epd_root": str(root), "idea_catalog": str(indexes / "idea_catalog.jsonl"), "retrieval_corpus": str(indexes / "retrieval_corpus.jsonl"), "full_manifest": str(root / "manifest.json"), "search_tool": "python -m goalevolve.epd_search", "ideas": round_ideas})
+            atomic_json(round_root / "enhancer_view.json", {"round_index": round_index, "candidates": [row for row in mechanism_manifest if row["status"] == "promising"]})
+            atomic_json(round_root / "integrator_view.json", {"round_index": round_index, "candidates": [row for row in mechanism_manifest if row["status"] in {"validated", "promising"}]})
+
+        atomic_json(
+            root / "manifest.json",
+            {
+                "schema_version": EPD_PROJECTION_SCHEMA_VERSION,
+                "compatibility_epd": str(self.path),
+                "epd_root": str(root),
+                "idea_catalog": str(indexes / "idea_catalog.jsonl"),
+                "retrieval_corpus": str(indexes / "retrieval_corpus.jsonl"),
+                "idea_count": len(catalog),
+                "attempt_count": len(attempts),
+                "mechanisms": mechanism_manifest,
+            },
+        )
 
     def records(self) -> list[dict[str, object]]:
         """Compatibility name for immutable executed attempt records."""
@@ -256,6 +509,12 @@ class EvolutionProgramDatabase:
                     teacher_priority=self._priority(source.get("priority"), fallback=priority),
                     diagnosis_summary=diagnosis_summary,
                     parent_policy=parent_policy,
+                    stage=str(source.get("stage") or ""),
+                    mechanism_family=str(source.get("mechanism_family") or ""),
+                    observed_state=str(source.get("observed_state") or ""),
+                    decision_boundary=str(source.get("decision_boundary") or ""),
+                    proposed_action=str(source.get("proposed_action") or ""),
+                    acceptance_or_rollback_rule=str(source.get("acceptance_or_rollback_rule") or ""),
                 )
             )
             created.append(idea_id)
