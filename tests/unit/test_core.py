@@ -229,6 +229,49 @@ class GoalEvolveV2Tests(unittest.TestCase):
         self.assertNotIn("Return exactly one JSON object", plan)
         self.assertNotIn("Return exactly one JSON object", review)
 
+    def test_teacher_review_prompt_explains_unfenced_scope_and_fired_qor_refutation(self) -> None:
+        diagnosis = SimpleNamespace(to_dict=lambda: {})
+        candidate = CandidateResult(
+            "student_2",
+            self.hypothesis,
+            dict(self.parent.metrics),
+            {"accepted": 1.0},
+            [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+            "+++ b/src/rsz/src/RecoverPower.cc\n+change\n",
+            "candidate-commit",
+            artifacts={"preflight": '{"ok": true}'},
+        )
+        verdict = EvidenceVerdict(
+            "refuted",
+            self.parent.goal_distance,
+            0.0,
+            True,
+            True,
+            ("goal_distance_not_improved:0",),
+        )
+
+        review = CodexTeacher._review_prompt(
+            parent=self.parent,
+            diagnosis=diagnosis,
+            epd={},
+            observations={},
+            rows=((candidate, verdict),),
+        )
+
+        self.assertIn(
+            "Empty `hypothesis.allowed_patch_paths` means no exact-file fence; it is not an allocation failure.",
+            review,
+        )
+        self.assertIn(
+            "Use Controller `verdict.integrity_ok`, `evaluation_error`, and `preflight` evidence for allocation or preflight failures.",
+            review,
+        )
+        self.assertIn(
+            "When `integrity_ok` and `mechanism_fired` are true and `distance_gain` is zero or negative, classify it as `fully_evaluated_qor_refutation`.",
+            review,
+        )
+        self.assertIn('"preflight": "{\\"ok\\": true}"', review)
+
     def test_teacher_markdown_protocol_parses_fixed_assignment_and_review_blocks(self) -> None:
         from goalevolve.agents.markdown_protocol import parse_teacher_plan, parse_teacher_review
 
