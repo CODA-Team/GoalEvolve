@@ -94,5 +94,94 @@ class EPDProjectionTests(unittest.TestCase):
             self.assertEqual(catalog_before, catalog_after)
 
 
+class EPDSearchTests(unittest.TestCase):
+    def test_search_show_compare_pairs_and_trace_are_deterministic(self) -> None:
+        from goalevolve.epd_search import EPDSearch
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            parent = Parent("baseline", {"tns_abs_ns": 12.0}, "base", "hash", 0.5)
+            epd = EvolutionProgramDatabase(root)
+            idea_ids = epd.register_teacher_ideas(
+                round_index=4,
+                parent=parent,
+                evolution_ideas=(
+                    {
+                        "idea": "Reject unsafe late VT candidates using measured cone debt.",
+                        "stage": "power_reclaim",
+                        "decision_boundary": "candidate admission",
+                        "source_hooks": ("src/rsz/src/policy/RepairPowerPolicy.cc",),
+                        "proposed_action": "filter aggressive VT transitions",
+                    },
+                    {
+                        "idea": "Rollback an accepted late window when cone debt crosses the timing guard.",
+                        "stage": "power_reclaim",
+                        "decision_boundary": "window commit",
+                        "source_hooks": ("src/rsz/src/policy/RepairPowerPolicy.cc",),
+                        "proposed_action": "rollback the committed window",
+                    },
+                    {
+                        "idea": "Select a timing-safe buffer candidate after local slack analysis.",
+                        "stage": "timing_recovery",
+                        "decision_boundary": "candidate admission",
+                        "source_hooks": ("src/rsz/src/Resizer.cc",),
+                        "proposed_action": "rank buffer candidates",
+                    },
+                ),
+            )
+            for index, idea_id in enumerate(idea_ids, start=1):
+                hook = (
+                    "src/rsz/src/policy/RepairPowerPolicy.cc"
+                    if index < 3
+                    else "src/rsz/src/Resizer.cc"
+                )
+                hypothesis = Hypothesis(
+                    f"h{index}",
+                    f"family_{index}",
+                    epd.idea(idea_id)["idea"],
+                    (hook,),
+                    (f"signal_{index}",),
+                    (f"card_{index}",),
+                    f"family_{index}",
+                    epd_idea_id=idea_id,
+                )
+                epd.record(
+                    round_index=4,
+                    parent=parent,
+                    candidate=CandidateResult(
+                        f"student_{index}",
+                        hypothesis,
+                        {"tns_abs_ns": 11.0},
+                        {f"signal_{index}": 1.0},
+                        [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+                        f"+++ b/{hook}\n+change_{index}\n",
+                        f"commit-{index}",
+                    ),
+                    verdict=EvidenceVerdict("validated", 0.4, 0.1, True, True, ()),
+                )
+
+            trace = root / "rounds" / "round_004" / "teacher_epd_retrieval_trace.jsonl"
+            search = EPDSearch(root)
+            query = {
+                "stage": "power_reclaim",
+                "source_hook": "src/rsz/src/policy/RepairPowerPolicy.cc",
+                "decision_boundary": "candidate admission",
+                "action": "filter aggressive VT transitions",
+            }
+            results = search.search(query=query, stage="power_reclaim", top_k=8, trace_path=trace)
+            shown = search.show(idea_id=idea_ids[0], include=("idea", "attempts", "reflections"), trace_path=trace)
+            comparison = search.compare(query=query, idea_id=idea_ids[0], trace_path=trace)
+            pairs = search.compatible_pairs(parent="baseline", stage="power_reclaim", top_k=10, trace_path=trace)
+            trace_rows = [line for line in trace.read_text(encoding="utf-8").splitlines() if line]
+
+            self.assertEqual(results[0]["idea_id"], idea_ids[0])
+            self.assertEqual(shown["idea"]["idea_id"], idea_ids[0])
+            self.assertEqual(len(shown["attempts"]), 1)
+            self.assertIn("decision_boundary", comparison["semantic_overlap"])
+            self.assertEqual(comparison["material_difference"], "none")
+            self.assertEqual(pairs, [])
+            self.assertGreaterEqual(len(trace_rows), 4)
+
+
 if __name__ == "__main__":
     unittest.main()
