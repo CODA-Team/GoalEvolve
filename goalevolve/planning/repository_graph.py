@@ -950,11 +950,12 @@ def _normalized_declarator_spacing(declarator: str) -> str:
     """Ignore safe C++ declarator-punctuation whitespace only."""
 
     punctuation = frozenset("(),*&[]:")
+    compound_tokens = frozenset(("&&", "::"))
 
     def normalize_whitespace(match: re.Match[str]) -> str:
         left = declarator[match.start() - 1 : match.start()]
         right = declarator[match.end() : match.end() + 1]
-        if left == right == "&":
+        if f"{left}{right}" in compound_tokens:
             return match.group(0)
         if left in punctuation or right in punctuation:
             return ""

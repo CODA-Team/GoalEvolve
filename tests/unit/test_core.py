@@ -1485,10 +1485,16 @@ Keep parent.
             "rsz::RepairPowerPolicy::tryCommitCandidateWindow("
             "const std::vector<Candidate> &window, Metrics *current)"
         )
+        malformed_scope = graph.resolve_anchor(
+            "src/rsz/src/policy/RepairPowerPolicy.cc::"
+            "rsz::RepairPowerPolicy::tryCommitCandidateWindow("
+            "const std : : vector<Candidate> &window, Metrics &current)"
+        )
 
         self.assertEqual(strict_direction.status, "resolved")
         self.assertEqual(candidate_window.status, "resolved")
         self.assertEqual(mismatched.status, "missing")
+        self.assertEqual(malformed_scope.status, "missing")
 
     def test_repository_graph_does_not_merge_separated_reference_markers(self) -> None:
         from goalevolve.planning.repository_graph import RepositoryGraphIndex

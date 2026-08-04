@@ -18,8 +18,8 @@ splitting the function-name prefix before the parameter list, rather than at a
 scope separator that may appear inside a parameter type.  Preserve identifiers,
 type tokens, template contents, qualifiers, and parameter order.  The resolver
 must still return `ambiguous` for a bare overloaded name and must not match a
-different parameter list.  Treat contiguous `&&` as one rvalue-reference token
-and never merge whitespace-separated `&` markers.
+different parameter list.  Treat contiguous `&&` and `::` as lexical tokens
+and never merge their whitespace-separated component characters.
 
 ## Scope and verification
 
