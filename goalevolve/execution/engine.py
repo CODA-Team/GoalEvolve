@@ -26,6 +26,10 @@ from ..token_ledger import record_round_token_usage
 from ..planning.timing_recovery import record_schedule_memory, timing_recipe
 from .workspace import clone_source_tree
 from .teacher_assignment import (
+    POWER_ONLY_EXECUTION_DIRECT_FILES,
+    POWER_ONLY_EXECUTION_ENTRY_SYMBOLS,
+    RMP_AREA_EXECUTION_DIRECT_FILES,
+    RMP_AREA_EXECUTION_ENTRY_SYMBOLS,
     build_role_templates,
     materialize_teacher_assignments,
 )
@@ -37,13 +41,16 @@ def _partition_controller_assignment_errors(
     errors: Sequence[str],
     templates: Sequence[Hypothesis],
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """Keep executable EPD roles when only fresh Explorer work is rejected.
+    """Keep executable EPD roles when only an optional Explorer is rejected.
 
     A malformed or unsupported fresh mechanism must not silently convert an
     Enhancer/Integrator portfolio into an empty round.  The Controller keeps
-    only already-materialized EPD hypotheses; if every slot was Explorer, the
-    ordinary no-hypothesis guard still stops the round safely.
+    only already-materialized EPD hypotheses.  A pure Explorer roster has no
+    such EPD role to preserve, so every supplied envelope remains required and
+    any admission failure must go through Teacher repair.
     """
+    if templates and all(template.student_role == "explorer" for template in templates):
+        return tuple(dict.fromkeys(str(error) for error in errors)), ()
     explorer_ids = {
         str(template.student_id)
         for template in templates
@@ -62,6 +69,26 @@ def _partition_controller_assignment_errors(
         else:
             blocking.append(error)
     return tuple(dict.fromkeys(blocking)), tuple(dict.fromkeys(rejected))
+
+
+def _validated_hypothesis_student_ids(
+    hypotheses: Sequence[Hypothesis],
+    configured_student_ids: Sequence[str],
+) -> tuple[str, ...]:
+    """Return materialized identities only after provenance validation."""
+
+    configured = {str(student_id) for student_id in configured_student_ids}
+    assigned: list[str] = []
+    for hypothesis in hypotheses:
+        student_id = str(hypothesis.student_id)
+        if not student_id:
+            raise RuntimeError(f"hypothesis_missing_student_id:{hypothesis.hypothesis_id}")
+        if student_id not in configured:
+            raise RuntimeError(f"unconfigured_hypothesis_student_id:{student_id}")
+        if student_id in assigned:
+            raise RuntimeError(f"duplicate_hypothesis_student_id:{student_id}")
+        assigned.append(student_id)
+    return tuple(assigned)
 
 
 @dataclass
@@ -850,7 +877,10 @@ class GoalEvolveEngine:
             raise RuntimeError("planner returned more hypotheses than available students")
         if len({item.novelty_key for item in hypotheses}) != len(hypotheses):
             raise RuntimeError("planner produced duplicate mechanism scopes in one round")
-        assigned_student_ids = self.student_ids[: len(hypotheses)]
+        assigned_student_ids = _validated_hypothesis_student_ids(
+            hypotheses,
+            self.student_ids,
+        )
         print(f"[GoalEvolve][round={round_index:03d}][teacher] assigned students={len(hypotheses)} planner={self.planner.name}", flush=True)
         (round_root / "prompts").mkdir(exist_ok=True)
         teacher_prompt = round_root / "prompts" / "teacher.md"
@@ -1281,10 +1311,21 @@ class GoalEvolveEngine:
                         "optional restructure -target area only for rmp_area_power",
                     ],
                     "executed_source_hooks": [
-                        "src/rsz/src/Resizer.cc::Resizer::repairPower",
-                        "src/rsz/src/Optimizer.cc::Optimizer::makePolicyForPhase(REPAIR_POWER)",
-                        "src/rsz/src/policy/RepairPowerPolicy.cc",
-                        "src/rmp/src/Restructure.cpp only when Evaluation Recipe is rmp_area_power",
+                        *(
+                            f"{path}::{symbol}"
+                            for path, symbols in POWER_ONLY_EXECUTION_ENTRY_SYMBOLS.items()
+                            for symbol in sorted(symbols)
+                        ),
+                        *sorted(POWER_ONLY_EXECUTION_DIRECT_FILES),
+                        *(
+                            f"{path} only when Evaluation Recipe is rmp_area_power"
+                            for path in sorted(RMP_AREA_EXECUTION_DIRECT_FILES)
+                        ),
+                        *(
+                            f"{path}::{symbol} only when Evaluation Recipe is rmp_area_power"
+                            for path, symbols in RMP_AREA_EXECUTION_ENTRY_SYMBOLS.items()
+                            for symbol in sorted(symbols)
+                        ),
                     ],
                     "source_hook_rule": (
                         "Do not name Setup*Policy, Measured*Policy, or "

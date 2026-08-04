@@ -28,6 +28,23 @@ from ..planning.timing_recovery import (
 _CPP_SUFFIXES = frozenset({".cc", ".cpp", ".cxx", ".hh", ".hpp", ".h"})
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _WORDS = re.compile(r"[a-z0-9_]+")
+POWER_ONLY_EXECUTION_DIRECT_FILES = frozenset({
+    "src/rsz/src/policy/RepairPowerPolicy.cc",
+})
+POWER_ONLY_EXECUTION_ENTRY_SYMBOLS = {
+    "src/rsz/src/Resizer.cc": frozenset({"rsz::Resizer::repairPower"}),
+    "src/rsz/src/Optimizer.cc": frozenset({"rsz::Optimizer::makePolicyForPhase"}),
+    "src/rsz/src/policy/RepairPowerPolicy.cc": frozenset({
+        "rsz::RepairPowerPolicy::iterate",
+    }),
+}
+RMP_AREA_EXECUTION_DIRECT_FILES = frozenset({"src/rmp/src/Restructure.cpp"})
+RMP_AREA_EXECUTION_ENTRY_SYMBOLS = {
+    "src/rmp/src/Restructure.cpp": frozenset({
+        "Restructure::runABC",
+        "rmp::Restructure::runABC",
+    }),
+}
 
 
 @dataclass(frozen=True)
@@ -302,6 +319,16 @@ def materialize_teacher_assignments(
             # controller, but direct policy hooks retain their historic
             # deterministic recipe inference for unit/ablation tools.
             executing_recipe_id = recipe_for_source_hooks(hooks, template.timing_recipe_id)
+        execution_errors = _power_only_execution_admission_errors(
+            hooks=hooks,
+            source_evidence=evidence,
+            evaluation_mode=template.evaluation_mode,
+            recipe_id=executing_recipe_id,
+            repository_graph=repository_graph,
+        )
+        if execution_errors:
+            errors.extend(f"{student_id}:{error}" for error in execution_errors)
+            continue
         if linked_idea is not None and declared_recipe_id:
             idea_recipe_id = str(linked_idea.get("evaluation_recipe") or "").strip()
             if idea_recipe_id and idea_recipe_id != declared_recipe_id:
@@ -495,6 +522,79 @@ def _valid_epd_selection(template: Hypothesis, selected: tuple[str, ...]) -> boo
     if template.student_role == "enhancer":
         return len(selected) == 1 and selected in options
     return not selected
+
+
+def _power_only_execution_admission_errors(
+    *,
+    hooks: Sequence[str],
+    source_evidence: Sequence[str],
+    evaluation_mode: str,
+    recipe_id: str,
+    repository_graph: RepositoryGraph | None,
+) -> tuple[str, ...]:
+    """Require generic power hooks to be called by the dispatched source graph."""
+
+    if evaluation_mode != "power_only":
+        return ()
+    direct_files = set(POWER_ONLY_EXECUTION_DIRECT_FILES)
+    entry_symbols = dict(POWER_ONLY_EXECUTION_ENTRY_SYMBOLS)
+    if recipe_id == "rmp_area_power":
+        direct_files.update(RMP_AREA_EXECUTION_DIRECT_FILES)
+        entry_symbols.update(RMP_AREA_EXECUTION_ENTRY_SYMBOLS)
+    generic_hooks = tuple(hook for hook in hooks if hook not in direct_files)
+    if not generic_hooks:
+        return ()
+    if repository_graph is None:
+        return tuple(f"unreachable_power_source_hook:{hook}" for hook in generic_hooks)
+
+    root_ids = {
+        symbol.symbol_id
+        for symbol in repository_graph.symbols.values()
+        if symbol.qualified_name in entry_symbols.get(symbol.path, ())
+    }
+    reachable = _reachable_call_symbols(repository_graph, root_ids)
+    evidence_by_path: dict[str, list[str]] = {}
+    for anchor in source_evidence:
+        path, separator, _ = anchor.partition("::")
+        if separator:
+            evidence_by_path.setdefault(path.strip(), []).append(anchor)
+
+    errors: list[str] = []
+    for hook in generic_hooks:
+        resolutions = tuple(
+            repository_graph.resolve_anchor(anchor)
+            for anchor in evidence_by_path.get(hook, ())
+        )
+        if not resolutions or any(
+            not resolution.resolved
+            or not any(symbol.symbol_id in reachable for symbol in resolution.symbols)
+            for resolution in resolutions
+        ):
+            errors.append(f"unreachable_power_source_hook:{hook}")
+    return tuple(errors)
+
+
+def _reachable_call_symbols(
+    repository_graph: RepositoryGraph,
+    root_ids: set[str],
+) -> set[str]:
+    targets: dict[str, list[str]] = {}
+    for edge in repository_graph.edges:
+        if edge.kind == "calls":
+            targets.setdefault(edge.source, []).append(edge.target)
+    reachable: set[str] = set()
+    pending = sorted(root_ids, reverse=True)
+    while pending:
+        symbol_id = pending.pop()
+        if symbol_id in reachable:
+            continue
+        reachable.add(symbol_id)
+        pending.extend(
+            target
+            for target in sorted(targets.get(symbol_id, ()), reverse=True)
+            if target not in reachable
+        )
+    return reachable
 
 
 def _same_or_compatible_idea(

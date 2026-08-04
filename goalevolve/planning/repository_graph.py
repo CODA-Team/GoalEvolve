@@ -137,13 +137,15 @@ class RepositoryGraph:
         if not separator or not path or not requested:
             return AnchorResolution(anchor=anchor, status="missing")
         if "(" in requested:
+            normalized_requested = _normalized_pointer_spacing(requested)
             matches = [
                 symbol
                 for symbol in self.symbols.values()
                 if symbol.path == path
                 and (
-                    symbol.declarator == requested
-                    or _qualified_declarator(symbol) == requested
+                    _normalized_pointer_spacing(symbol.declarator) == normalized_requested
+                    or _normalized_pointer_spacing(_qualified_declarator(symbol))
+                    == normalized_requested
                 )
             ]
         else:
@@ -941,6 +943,12 @@ def _qualified_declarator(symbol: GraphSymbol) -> str:
     prefix, _, _ = symbol.qualified_name.rpartition("::")
     local = symbol.declarator.rsplit("::", 1)[-1]
     return f"{prefix}::{local}" if prefix else local
+
+
+def _normalized_pointer_spacing(declarator: str) -> str:
+    """Ignore only whitespace adjacent to pointer stars in exact anchors."""
+
+    return re.sub(r"\s*\*\s*", "*", declarator)
 
 
 def _call_names(*, node: Any, raw: bytes) -> tuple[str, ...]:

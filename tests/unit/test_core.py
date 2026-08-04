@@ -733,6 +733,114 @@ Keep parent.
         self.assertEqual(blocking, ())
         self.assertEqual(rejected, ("explorer_retrieval_audit_rejected:student_1",))
 
+    def test_controller_blocks_rejected_explorer_in_a_pure_explorer_roster(self) -> None:
+        from goalevolve.execution.engine import _partition_controller_assignment_errors
+
+        templates = tuple(
+            replace(
+                self.hypothesis,
+                student_id=f"student_{index}",
+                student_role="explorer",
+            )
+            for index in range(1, 5)
+        )
+        error = "incompatible_evaluation_recipe:student_1:rmp_area_power"
+
+        blocking, rejected = _partition_controller_assignment_errors(
+            errors=(error,),
+            templates=templates,
+        )
+
+        self.assertEqual(blocking, (error,))
+        self.assertEqual(rejected, ())
+
+    def test_engine_schedules_a_surviving_hypothesis_with_its_own_student_id(self) -> None:
+        class FourthStudentPlanner:
+            name = "fourth_student"
+
+            def plan(inner_self, **_):
+                return [
+                    replace(
+                        self.hypothesis,
+                        hypothesis_id="r001_student_4_explorer",
+                        student_id="student_4",
+                    )
+                ]
+
+        class RecordingEvaluator(MockEvaluator):
+            def __init__(inner_self) -> None:
+                inner_self.calls = []
+
+            def evaluate(inner_self, *, hypothesis, student_id, workspace, **kwargs):
+                inner_self.calls.append((student_id, hypothesis.student_id, workspace))
+                return super().evaluate(
+                    hypothesis=hypothesis,
+                    student_id=student_id,
+                    workspace=workspace,
+                    **kwargs,
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            state_root = Path(temporary) / "state"
+            evaluator = RecordingEvaluator()
+            engine = GoalEvolveEngine(
+                self.contract,
+                state_root,
+                FourthStudentPlanner(),
+                evaluator,
+                IsolatedWorkspace(),
+                StrictEvidencePromotion(),
+            )
+            engine.initialize(baseline_metrics=dict(self.parent.metrics))
+            engine.run(rounds=1)
+
+            fourth_artifact = (
+                state_root
+                / "rounds/round_001/students/student_4/artifacts/candidate.json"
+            )
+            first_student_root = state_root / "rounds/round_001/students/student_1"
+            fourth_artifact_exists = fourth_artifact.is_file()
+            first_student_root_exists = first_student_root.exists()
+
+        self.assertEqual(
+            [(student_id, hypothesis_student_id) for student_id, hypothesis_student_id, _ in evaluator.calls],
+            [("student_4", "student_4")],
+        )
+        self.assertTrue(fourth_artifact_exists)
+        self.assertFalse(first_student_root_exists)
+
+    def test_materialized_student_ids_must_be_present_unique_and_configured(self) -> None:
+        from goalevolve.execution.engine import _validated_hypothesis_student_ids
+
+        configured = ("student_1", "student_2", "student_3", "student_4")
+        valid = (replace(self.hypothesis, student_id="student_4"),)
+        self.assertEqual(
+            _validated_hypothesis_student_ids(valid, configured),
+            ("student_4",),
+        )
+
+        invalid_cases = (
+            (
+                (replace(self.hypothesis, student_id=""),),
+                "hypothesis_missing_student_id",
+            ),
+            (
+                (
+                    replace(self.hypothesis, hypothesis_id="first", student_id="student_2"),
+                    replace(self.hypothesis, hypothesis_id="second", student_id="student_2"),
+                ),
+                "duplicate_hypothesis_student_id:student_2",
+            ),
+            (
+                (replace(self.hypothesis, student_id="student_9"),),
+                "unconfigured_hypothesis_student_id:student_9",
+            ),
+        )
+        for hypotheses, expected_error in invalid_cases:
+            with self.subTest(expected_error=expected_error):
+                with self.assertRaisesRegex(RuntimeError, expected_error):
+                    _validated_hypothesis_student_ids(hypotheses, configured)
+
     def test_repository_graph_extracts_qualified_symbols_and_includes(self) -> None:
         from goalevolve.planning.repository_graph import RepositoryGraphIndex
 
@@ -1087,6 +1195,35 @@ Keep parent.
         self.assertEqual(short.status, "ambiguous")
         self.assertEqual(overload.status, "resolved")
         self.assertEqual(overload.symbols[0].declarator, "Foo::run(int count)")
+
+    def test_repository_graph_matches_pointer_spacing_without_weakening_overloads(self) -> None:
+        from goalevolve.planning.repository_graph import RepositoryGraphIndex
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            implementation = source / "src/rsz/Foo.cc"
+            implementation.parent.mkdir(parents=True)
+            implementation.write_text(
+                "namespace rsz { class LibertyCell {}; "
+                "void setCell(LibertyCell* cell) {} "
+                "void setCell(LibertyCell& cell) {} }\n",
+                encoding="utf-8",
+            )
+            graph = RepositoryGraphIndex(
+                state_root=root / "state",
+                p0_source_root=source,
+                p0_artifact_root=root / "p0_graph",
+            ).build_p0(source_hash="p0")
+
+        pointer = graph.resolve_anchor(
+            "src/rsz/Foo.cc::rsz::setCell(LibertyCell * cell)"
+        )
+        short = graph.resolve_anchor("src/rsz/Foo.cc::rsz::setCell")
+
+        self.assertEqual(pointer.status, "resolved")
+        self.assertEqual(pointer.symbols[0].declarator, "setCell(LibertyCell* cell)")
+        self.assertEqual(short.status, "ambiguous")
 
     def test_controller_rejects_source_evidence_from_a_stale_graph_file(self) -> None:
         from goalevolve.execution.teacher_assignment import (
@@ -1865,6 +2002,120 @@ Keep the checked parent.
                 evaluation_mode="power_only",
             )
         )
+
+    def _materialize_power_helpers(
+        self,
+        *,
+        policy_source: str,
+        helper_sources: dict[str, tuple[str, str]],
+    ):
+        from goalevolve.execution.teacher_assignment import (
+            build_role_templates,
+            materialize_teacher_assignments,
+        )
+        from goalevolve.planning.repository_graph import RepositoryGraphIndex
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            policy = source / "src/rsz/src/policy/RepairPowerPolicy.cc"
+            policy.parent.mkdir(parents=True)
+            policy.write_text(policy_source, encoding="utf-8")
+            for hook, (_, contents) in helper_sources.items():
+                path = source / hook
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(contents, encoding="utf-8")
+            graph = RepositoryGraphIndex(
+                state_root=root / "state",
+                p0_source_root=source,
+                p0_artifact_root=root / "p0_graph",
+            ).build_p0(source_hash="p0", allowed_patch_roots=("src/rsz",))
+            templates = build_role_templates(
+                student_ids=("student_1",),
+                round_index=1,
+                decision_context={"evaluation_mode": "power_only"},
+                portfolio={},
+                suspend_explorers=False,
+            )
+            hooks = tuple(helper_sources)
+            evidence = tuple(
+                f"{hook}::{symbol}"
+                for hook, (symbol, _) in helper_sources.items()
+            )
+            assignment = {
+                "student_id": "student_1",
+                "role": "explorer",
+                "idea_reference": "idea_1",
+                "evaluation_recipe": "rmp_area_power",
+                "claim": "Select a bounded power swap from measured alternatives.",
+                "selection_rationale": "Power reclaim is the active stage.",
+                "source_hooks": hooks,
+                "source_evidence": evidence,
+                "expected_signals": ("power_swap_examined",),
+                "falsification_condition": "No official power gain.",
+            }
+            idea = {
+                "reference": "idea_1",
+                "idea": assignment["claim"],
+                "evaluation_recipe": "rmp_area_power",
+                "source_hooks": hooks,
+                "source_evidence": evidence,
+                "expected_signals": assignment["expected_signals"],
+            }
+            result = materialize_teacher_assignments(
+                assignments=(assignment,),
+                evolution_ideas=(idea,),
+                templates=templates,
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                historical_ideas=(),
+                repository_graph=graph,
+            )
+        return result
+
+    def test_power_only_rejects_generic_helpers_without_dispatched_graph_reachability(self) -> None:
+        result = self._materialize_power_helpers(
+            policy_source=(
+                "namespace rsz { class RepairPowerPolicy { public: "
+                "void iterate(); void dormant(); }; "
+                "void RepairPowerPolicy::iterate() {} "
+                "void RepairPowerPolicy::dormant() { generateSwap(); measureSwap(); } }\n"
+            ),
+            helper_sources={
+                "src/rsz/src/VtSwapGenerator.cc": (
+                    "rsz::generateSwap",
+                    "namespace rsz { void generateSwap() {} }\n",
+                ),
+                "src/rsz/src/MeasuredVtSwapGenerator.cc": (
+                    "rsz::measureSwap",
+                    "namespace rsz { void measureSwap() {} }\n",
+                ),
+            },
+        )
+
+        self.assertEqual(
+            set(result.errors),
+            {
+                "student_1:unreachable_power_source_hook:src/rsz/src/VtSwapGenerator.cc",
+                "student_1:unreachable_power_source_hook:src/rsz/src/MeasuredVtSwapGenerator.cc",
+            },
+        )
+
+    def test_power_only_accepts_a_generic_helper_reached_from_repair_power(self) -> None:
+        result = self._materialize_power_helpers(
+            policy_source=(
+                "namespace rsz { class RepairPowerPolicy { public: void iterate(); }; "
+                "void RepairPowerPolicy::iterate() { generateSwap(); } }\n"
+            ),
+            helper_sources={
+                "src/rsz/src/VtSwapGenerator.cc": (
+                    "rsz::generateSwap",
+                    "namespace rsz { void generateSwap() {} }\n",
+                ),
+            },
+        )
+
+        self.assertEqual(result.errors, ())
 
     def test_teacher_source_inspection_audit_requires_successful_source_reads(self) -> None:
         from goalevolve.agents.teacher import source_inspection_audit
