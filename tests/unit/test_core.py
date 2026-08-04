@@ -754,6 +754,208 @@ Keep parent.
         self.assertEqual(blocking, (error,))
         self.assertEqual(rejected, ())
 
+    def test_pure_explorer_materialization_failure_repairs_before_scheduling(self) -> None:
+        from goalevolve.agents.teacher import TeacherPlan
+
+        def plan_payload(*, repaired: bool) -> dict[str, object]:
+            assignments = []
+            ideas = []
+            for index in range(1, 5):
+                student_id = f"student_{index}"
+                if repaired:
+                    label = f"repaired_student_{index}"
+                    hook = f"src/rsz/src/Repaired{index}.cc"
+                    symbol = f"rsz::repairedStudent{index}"
+                elif index == 4:
+                    label = "original_surviving_student_4"
+                    hook = "src/rsz/src/Original4.cc"
+                    symbol = "rsz::originalStudent4"
+                else:
+                    label = f"original_rejected_student_{index}"
+                    hook = f"src/rsz/src/Missing{index}.cc"
+                    symbol = f"rsz::missingStudent{index}"
+                reference = f"idea_{label}"
+                claim = f"{label} bounded timing decision"
+                evidence = f"{hook}::{symbol}"
+                signal = f"{label}_examined"
+                assignments.append(
+                    {
+                        "student_id": student_id,
+                        "role": "explorer",
+                        "idea_reference": reference,
+                        "evaluation_recipe": "legacy_setup",
+                        "claim": claim,
+                        "selection_rationale": f"Exercise {label}.",
+                        "source_hooks": (hook,),
+                        "source_evidence": (evidence,),
+                        "expected_signals": (signal,),
+                        "falsification_condition": "No official timing gain.",
+                    }
+                )
+                ideas.append(
+                    {
+                        "reference": reference,
+                        "idea": claim,
+                        "evaluation_recipe": "legacy_setup",
+                        "predicted_stage_effect": "Reduce timing debt.",
+                        "source_hooks": (hook,),
+                        "source_evidence": (evidence,),
+                        "expected_signals": (signal,),
+                        "falsification_condition": "No official timing gain.",
+                    }
+                )
+            return {
+                "diagnosis_summary": "Timing debt remains active.",
+                "parent_policy": "Keep the checked parent.",
+                "assignments": assignments,
+                "evolution_idea_records": ideas,
+            }
+
+        class RecordingEvaluator(MockEvaluator):
+            name = "recording"
+            config = SimpleNamespace(allowed_patch_roots=("src/rsz",))
+
+            def __init__(inner_self) -> None:
+                inner_self.calls = []
+
+            def evaluate(inner_self, *, hypothesis, student_id, **kwargs):
+                inner_self.calls.append(
+                    (
+                        student_id,
+                        hypothesis.student_id,
+                        hypothesis.hypothesis_id,
+                        hypothesis.claim,
+                    )
+                )
+                return super().evaluate(
+                    hypothesis=hypothesis,
+                    student_id=student_id,
+                    **kwargs,
+                )
+
+        evaluator = RecordingEvaluator()
+        initial_plan = plan_payload(repaired=False)
+        repaired_plan = plan_payload(repaired=True)
+
+        class RepairingTeacher:
+            name = "codex_teacher"
+            config = SimpleNamespace(max_plan_format_repairs=1)
+
+            def __init__(inner_self) -> None:
+                inner_self.repair_calls = []
+
+            def plan(inner_self, *, diagnosis, **_):
+                return TeacherPlan(
+                    (),
+                    diagnosis,
+                    {
+                        "format_valid": True,
+                        "teacher_markdown": "initial pure Explorer plan",
+                        "parsed_markdown": initial_plan,
+                    },
+                    {},
+                )
+
+            def repair_plan_after_controller_validation(
+                inner_self,
+                *,
+                errors,
+                role_templates,
+                **_,
+            ):
+                inner_self.repair_calls.append(
+                    {
+                        "errors": tuple(errors),
+                        "role_ids": tuple(template.student_id for template in role_templates),
+                        "evaluator_calls": tuple(evaluator.calls),
+                    }
+                )
+                return {
+                    "teacher_ok": True,
+                    "format_errors": [],
+                    "teacher_markdown": "repaired pure Explorer plan",
+                    "parsed_markdown": repaired_plan,
+                }
+
+            def review(inner_self, **_):
+                return {}
+
+        class UnusedPlanner:
+            name = "unused_for_codex_teacher"
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "seed"
+            hooks_root = source / "src/rsz/src"
+            hooks_root.mkdir(parents=True)
+            (hooks_root / "Original4.cc").write_text(
+                "namespace rsz { void originalStudent4() {} }\n",
+                encoding="utf-8",
+            )
+            for index in range(1, 5):
+                (hooks_root / f"Repaired{index}.cc").write_text(
+                    f"namespace rsz {{ void repairedStudent{index}() {{}} }}\n",
+                    encoding="utf-8",
+                )
+            teacher = RepairingTeacher()
+            state_root = root / "state"
+            engine = GoalEvolveEngine(
+                self.contract,
+                state_root,
+                UnusedPlanner(),
+                evaluator,
+                IsolatedWorkspace(source),
+                StrictEvidencePromotion(),
+                teacher=teacher,
+            )
+            engine.initialize(baseline_metrics=dict(self.parent.metrics))
+            engine.run(rounds=1)
+            persisted_plan = load_json(
+                state_root / "rounds/round_001/teacher_plan.json"
+            )
+
+        self.assertEqual(len(teacher.repair_calls), 1)
+        repair_call = teacher.repair_calls[0]
+        self.assertEqual(
+            repair_call["role_ids"],
+            ("student_1", "student_2", "student_3", "student_4"),
+        )
+        self.assertEqual(repair_call["evaluator_calls"], ())
+        self.assertEqual(
+            {error.split(":", 1)[0] for error in repair_call["errors"]},
+            {"student_1", "student_2", "student_3"},
+        )
+        self.assertEqual(len(evaluator.calls), 4)
+        self.assertTrue(
+            all(
+                scheduled_id == hypothesis_student_id
+                for scheduled_id, hypothesis_student_id, _, _ in evaluator.calls
+            )
+        )
+        self.assertEqual(
+            {
+                (scheduled_id, hypothesis_id, hypothesis_claim)
+                for scheduled_id, _, hypothesis_id, hypothesis_claim in evaluator.calls
+            },
+            {
+                (
+                    f"student_{index}",
+                    f"r001_student_{index}_explorer",
+                    f"repaired_student_{index} bounded timing decision",
+                )
+                for index in range(1, 5)
+            },
+        )
+        self.assertNotIn(
+            "original_surviving_student_4 bounded timing decision",
+            {call[3] for call in evaluator.calls},
+        )
+        self.assertEqual(
+            {row["student_id"] for row in persisted_plan["hypotheses"]},
+            {"student_1", "student_2", "student_3", "student_4"},
+        )
+        self.assertIn("controller_assignment_repair", persisted_plan)
+
     def test_engine_schedules_a_surviving_hypothesis_with_its_own_student_id(self) -> None:
         class FourthStudentPlanner:
             name = "fourth_student"
