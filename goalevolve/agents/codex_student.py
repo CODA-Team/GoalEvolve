@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 import re
 from dataclasses import asdict, dataclass
@@ -7,7 +8,7 @@ from pathlib import Path
 
 from .codex_runtime import CodexRuntimeConfig, PersistentCodexRunner
 from ..core.io import atomic_json
-from ..core.models import Hypothesis, Parent
+from ..core.models import CandidateResult, Hypothesis, Parent
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,22 @@ class StudentEditReport:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class StudentReflectionReport:
+    """Observer-only, evidence-grounded reflection from the editing Student."""
+
+    ok: bool
+    detail: str
+    operation_id: str
+    thread_id: str | None
+    artifacts: dict[str, str]
+    reflection: str
+    recommended_lifecycle: str | None
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
 class NoopStudentEditor:
     """Explicit editor for deterministic controller tests; it never edits source."""
 
@@ -47,6 +64,17 @@ class NoopStudentEditor:
 
     def repair(self, **_: object) -> StudentEditReport:
         return StudentEditReport(False, "noop_editor_cannot_repair", "noop_repair", None, {})
+
+    def reflect(self, **_: object) -> StudentReflectionReport:
+        return StudentReflectionReport(
+            True,
+            "noop_reflection",
+            "noop_reflection",
+            None,
+            {},
+            "No active Student reflection was available because this deterministic editor does not execute source changes.",
+            None,
+        )
 
 
 class CodexStudentEditor:
@@ -109,6 +137,47 @@ class CodexStudentEditor:
             prompt=prompt,
         )
         return self._report_after_turn(turn, workspace)
+
+    def reflect(
+        self,
+        *,
+        state_root: Path,
+        round_index: int,
+        student_id: str,
+        workspace: Path,
+        parent: Parent,
+        hypothesis: Hypothesis,
+        prompt_path: Path,
+        candidate: CandidateResult,
+    ) -> StudentReflectionReport:
+        """Ask the same Student to observe final evidence without editing source."""
+        source = workspace / "source"
+        turn = self.runner.run(
+            state_root=state_root,
+            identity=self._round_identity(student_id, round_index),
+            operation_id=f"r{round_index:03d}_{student_id}_reflection",
+            cwd=source,
+            artifact_root=workspace.parent / "artifacts" / "codex" / "reflection",
+            prompt=self._reflection_prompt(
+                prompt_path=prompt_path,
+                source=source,
+                parent=parent,
+                hypothesis=hypothesis,
+                candidate=candidate,
+            ),
+        )
+        reflection, recommendation = self._parse_reflection(
+            Path(str(turn.artifacts.get("codex_last_message") or ""))
+        )
+        return StudentReflectionReport(
+            turn.ok,
+            turn.detail,
+            turn.operation_id,
+            turn.thread_id,
+            dict(turn.artifacts),
+            reflection,
+            recommendation,
+        )
 
     @staticmethod
     def _round_identity(student_id: str, round_index: int) -> str:
@@ -200,5 +269,62 @@ class CodexStudentEditor:
                 "Inspect the cited log files and current diff, make the smallest coherent fix, then inspect the resulting diff. Keep tool output information-dense: search with rg first and read local ranges of at most 200 lines; never dump whole files, trees, unrelated instructions, or unrelated skills. Do not run clang-format or any formatter, reformat unrelated source lines, or create whitespace-only churn. Treat a build error as a whole-source integration failure: before responding, search every allowed source file and its message/declaration companions for the conflicting symbol, ID, signature, or registration (for example with rg). Do not change only the first occurrence named by the compiler if another occurrence can still conflict. Do not run the full contest flow; the controller will immediately rebuild and reevaluate after this turn.",
                 "## Controller failure context (authoritative)",
                 failure_context,
+            ]
+        )
+
+    @staticmethod
+    def _parse_reflection(path: Path) -> tuple[str, str | None]:
+        """Accept only the documented lifecycle line; prose has no authority."""
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except OSError:
+            return "Student reflection transcript was unavailable.", None
+        matches = re.findall(
+            r"(?im)^\s*Recommended EPD Lifecycle:\s*(validated|promising|invalid|unactivated)\s*$",
+            raw,
+        )
+        reflection = re.sub(
+            r"(?im)^\s*Recommended EPD Lifecycle:\s*.*$",
+            "",
+            raw,
+        ).strip()
+        # Persist a single compact paragraph instead of model formatting
+        # noise. A malformed/missing lifecycle line remains non-authoritative.
+        reflection = " ".join(reflection.split()) or "Student reflection transcript was empty."
+        return reflection, matches[0] if len(matches) == 1 else None
+
+    def _reflection_prompt(
+        self,
+        *,
+        prompt_path: Path,
+        source: Path,
+        parent: Parent,
+        hypothesis: Hypothesis,
+        candidate: CandidateResult,
+    ) -> str:
+        checks = {item.name: item.passed for item in candidate.checks}
+        evidence = {
+            "parent_id": parent.parent_id,
+            "hypothesis_id": hypothesis.hypothesis_id,
+            "metrics": candidate.metrics,
+            "phase_signals": candidate.phase_signals,
+            "official_checks": checks,
+            "evaluation_error": candidate.evaluation_error,
+            "evidence_artifacts": {
+                key: value
+                for key, value in candidate.artifacts.items()
+                if key in {"evaluation_log", "checkpoint_metrics", "official_4of4_log", "implementation_diff"}
+            },
+        }
+        return "\n".join(
+            [
+                prompt_path.read_text(encoding="utf-8"),
+                "",
+                "## Post-evaluation Student Reflection — observe only",
+                f"You are the same persistent Student for parent `{parent.parent_id}` in `{source}`.",
+                "Do not edit files, run builds or flows, change Tcl/recipes, create Git metadata, propose a patch, or decide promotion. The Controller alone owns official 4/4 evidence, lifecycle status, and promotion.",
+                "Using only the final evidence below, output exactly one evidence-grounded paragraph covering intended mechanism, actual implementation, activation, stage/final QoR effect, failure attribution, reusable lesson, avoid-next-time mechanism, limitation, and bounded next refinement. Then output exactly one separate line: `Recommended EPD Lifecycle: <validated|promising|invalid|unactivated>`. This is a nonbinding recommendation; do not add other fields or headings.",
+                "## Controller evidence (authoritative)",
+                json.dumps(evidence, ensure_ascii=False, sort_keys=True),
             ]
         )

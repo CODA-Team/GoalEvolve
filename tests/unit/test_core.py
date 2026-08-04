@@ -15,8 +15,8 @@ from unittest.mock import patch
 
 from goalevolve.config import DEFAULT_BENCHMARK_ROOT, DEFAULT_CREDENTIAL_ENV, DEFAULT_OPENROAD_SEED, load_config
 from goalevolve.cli import _attach_configured_baseline
-from goalevolve.agents.codex_student import CodexStudentConfig, CodexStudentEditor, NoopStudentEditor, StudentEditReport
-from goalevolve.agents.codex_runtime import CodexRuntimeConfig, PersistentCodexRunner
+from goalevolve.agents.codex_student import CodexStudentConfig, CodexStudentEditor, NoopStudentEditor, StudentEditReport, StudentReflectionReport
+from goalevolve.agents.codex_runtime import CodexRuntimeConfig, CodexTurn, PersistentCodexRunner
 from goalevolve.evaluation.contest2026 import Contest2026Config, Contest2026OpenROADEvaluator, _liberty_cell_blocks, _observed_phase_signals, _placement_legal, _power_timing_cell_tradeoff, _read_metrics, _source_diff, _write_rmp_combined_liberty, official_four_check
 from goalevolve.evaluation.contest2026 import _checkpoint_metrics
 from goalevolve.core.contracts import build_contract
@@ -6006,6 +6006,130 @@ Keep the checked parent.
             self.assertEqual(evaluator.calls, 2)
             self.assertEqual(editor.repair_kinds, ["telemetry"])
             self.assertEqual(candidate.phase_signals, {"accepted": 1.0})
+
+    def test_student_reflection_precedes_unactivated_fallback_and_is_projected(self) -> None:
+        class ReflectingEditor:
+            name = "reflecting_editor"
+            config = SimpleNamespace(max_repair_attempts=0)
+
+            def __init__(self) -> None:
+                self.events: list[str] = []
+
+            def apply(self, **_: object) -> StudentEditReport:
+                self.events.append("apply")
+                return StudentEditReport(True, "edited", "initial", "thread-1", {})
+
+            def repair(self, **_: object) -> StudentEditReport:
+                self.events.append("telemetry_repair")
+                return StudentEditReport(True, "telemetry absent", "telemetry", "thread-1", {})
+
+            def reflect(self, *, candidate: CandidateResult, **_: object) -> StudentReflectionReport:
+                self.events.append("reflect")
+                if candidate.phase_signals:
+                    raise AssertionError("reflection must receive the final telemetry-incomplete candidate")
+                return StudentReflectionReport(
+                    True,
+                    "reflection_completed",
+                    "reflection",
+                    "thread-1",
+                    {},
+                    "The guarded branch was not reached in the official flow, so preserve this as a retryable activation question rather than treating the missing metric as a refutation.",
+                    "promising",
+                )
+
+        class NeverActivatedEvaluator:
+            name = "never_activated"
+
+            def __init__(self, hypothesis: Hypothesis, parent_metrics: dict[str, float]) -> None:
+                self.hypothesis = hypothesis
+                self.parent_metrics = parent_metrics
+
+            def evaluate(self, *, student_id: str, **_: object) -> CandidateResult:
+                return CandidateResult(
+                    student_id,
+                    self.hypothesis,
+                    {"tns_abs_ns": 110.0, "leakage_power_pw": 220.0},
+                    {},
+                    [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+                    "+++ b/src/rsz/src/RecoverPower.cc\n+policy\n",
+                    "unactivated-source",
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            (workspace / "source").mkdir(parents=True)
+            prompt = root / "prompt.md"
+            prompt.write_text("packet", encoding="utf-8")
+            editor = ReflectingEditor()
+            candidate = GoalEvolveEngine(
+                self.contract,
+                root / "state",
+                DiversePlanner(),
+                NeverActivatedEvaluator(self.hypothesis, self.parent.metrics),
+                IsolatedWorkspace(),
+                StrictEvidencePromotion(),
+                student_editor=editor,
+            )._edit_then_evaluate(self.parent, self.hypothesis, "student_1", workspace, prompt, 1)
+            verdict = classify_candidate(contract=self.contract, parent=self.parent, candidate=candidate)
+            record = EvolutionProgramDatabase(root / "state").record(
+                round_index=1,
+                parent=self.parent,
+                candidate=candidate,
+                verdict=verdict,
+            )
+            projection = root / "state" / "knowledge" / "epd" / "attempts" / record.record_id
+
+            self.assertEqual(editor.events, ["apply", "telemetry_repair", "reflect"])
+            self.assertEqual(verdict.state, "refuted")
+            self.assertEqual(record.epd_status, "unactivated")
+            self.assertEqual(record.student_recommended_lifecycle, "promising")
+            self.assertTrue(Path(candidate.artifacts["student_reflection"]).is_file())
+            self.assertEqual(candidate.artifacts["student_reflection_recommendation"], "promising")
+            self.assertIn("retryable activation question", (projection / "student_reflection.md").read_text(encoding="utf-8"))
+            self.assertEqual(load_json(projection / "attempt.json")["student_recommended_lifecycle"], "promising")
+
+    def test_codex_student_reflection_reuses_round_thread_and_parses_only_documented_field(self) -> None:
+        class RecordingRunner:
+            def __init__(self) -> None:
+                self.calls: list[dict[str, object]] = []
+
+            def run(self, **kwargs: object) -> CodexTurn:
+                self.calls.append(kwargs)
+                artifact_root = Path(str(kwargs["artifact_root"]))
+                artifact_root.mkdir(parents=True, exist_ok=True)
+                last_message = artifact_root / "last_message.md"
+                last_message.write_text(
+                    "The candidate completed official checks but the observed signal did not fire, so further source evidence is needed before retrying this bounded mechanism.\nRecommended EPD Lifecycle: unactivated\n",
+                    encoding="utf-8",
+                )
+                return CodexTurn(True, str(kwargs["operation_id"]), "thread-1", "completed", {"codex_last_message": str(last_message)})
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            (workspace / "source").mkdir(parents=True)
+            prompt = root / "prompt.md"
+            prompt.write_text("packet", encoding="utf-8")
+            editor = CodexStudentEditor(CodexStudentConfig())
+            runner = RecordingRunner()
+            editor.runner = runner
+            report = editor.reflect(
+                state_root=root / "state",
+                round_index=7,
+                student_id="student_2",
+                workspace=workspace,
+                parent=self.parent,
+                hypothesis=self.hypothesis,
+                prompt_path=prompt,
+                candidate=CandidateResult("student_2", self.hypothesis, dict(self.parent.metrics), {}, [], "", "source"),
+            )
+
+        self.assertEqual(runner.calls[0]["identity"], "student_2_r007")
+        self.assertEqual(runner.calls[0]["operation_id"], "r007_student_2_reflection")
+        self.assertEqual(report.thread_id, "thread-1")
+        self.assertEqual(report.recommended_lifecycle, "unactivated")
+        self.assertIn("official checks", report.reflection)
 
     def test_telemetry_repair_stays_within_initial_changed_files(self) -> None:
         class RepairEditor:

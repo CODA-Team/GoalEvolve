@@ -1749,7 +1749,79 @@ class GoalEvolveEngine:
                     candidate = original_candidate
             else:
                 candidate = original_candidate
+        self._record_student_reflection(
+            candidate=candidate,
+            parent=parent,
+            student_id=student_id,
+            workspace=workspace,
+            prompt_path=prompt_path,
+            round_index=round_index,
+        )
         return candidate
+
+    def _record_student_reflection(
+        self,
+        *,
+        candidate: CandidateResult,
+        parent: Parent,
+        student_id: str,
+        workspace: Path,
+        prompt_path: Path,
+        round_index: int,
+    ) -> None:
+        """Persist advisory Student reflection after the final source evaluation.
+
+        It runs after every repair/evaluation decision but before the outer
+        controller records EPD. No reflection field is consulted by promotion
+        or the controller-owned ``epd_status`` mapping.
+        """
+        reporter = getattr(self.student_editor, "reflect", None)
+        if not callable(reporter):
+            detail = "reflection_unavailable:student_editor_has_no_reflect"
+            reflection = "Student reflection was unavailable because this legacy test editor has no observer-only reflection operation."
+            recommendation = "unavailable"
+            artifacts: Mapping[str, str] = {}
+            report_payload: Mapping[str, object] = {"ok": False, "detail": detail}
+        else:
+            try:
+                report = reporter(
+                    state_root=self.state_root,
+                    round_index=round_index,
+                    student_id=student_id,
+                    workspace=workspace,
+                    parent=parent,
+                    hypothesis=candidate.hypothesis,
+                    prompt_path=prompt_path,
+                    candidate=candidate,
+                )
+                reflection = str(getattr(report, "reflection", "") or "Student reflection was unavailable.")
+                raw_recommendation = str(getattr(report, "recommended_lifecycle", "") or "")
+                recommendation = raw_recommendation if raw_recommendation in {
+                    "validated", "promising", "invalid", "unactivated"
+                } else "unavailable"
+                artifacts = {
+                    str(key): str(value)
+                    for key, value in dict(getattr(report, "artifacts", {}) or {}).items()
+                }
+                to_dict = getattr(report, "to_dict", None)
+                report_payload = to_dict() if callable(to_dict) else {
+                    "ok": bool(getattr(report, "ok", False)),
+                    "detail": str(getattr(report, "detail", "reflection_unavailable")),
+                }
+            except Exception as exc:
+                reflection = f"Student reflection was unavailable: {type(exc).__name__}."
+                recommendation = "unavailable"
+                artifacts = {}
+                report_payload = {"ok": False, "detail": f"reflection_exception:{type(exc).__name__}"}
+        destination = workspace.parent / "artifacts" / "student_reflection.md"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(reflection.strip() + "\n", encoding="utf-8")
+        candidate.artifacts["student_reflection"] = str(destination)
+        candidate.artifacts["student_reflection_recommendation"] = recommendation
+        candidate.artifacts["student_reflection_report"] = json.dumps(report_payload, sort_keys=True)
+        candidate.artifacts.update(
+            {f"student_reflection_{key}": value for key, value in artifacts.items()}
+        )
 
     @staticmethod
     def _repairable_engineering_failure(candidate: CandidateResult) -> bool:

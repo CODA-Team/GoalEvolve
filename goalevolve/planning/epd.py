@@ -45,6 +45,9 @@ class EPDRecord:
     epd_record_ids: tuple[str, ...]
     round_index: int
     updated_at: int
+    # Student reflection is advisory evidence. The controller-derived
+    # ``epd_status`` above remains the only lifecycle authority.
+    student_recommended_lifecycle: str = "unavailable"
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -699,6 +702,12 @@ class EvolutionProgramDatabase:
             epd_record_ids=tuple(candidate.hypothesis.epd_record_ids),
             round_index=round_index,
             updated_at=int(time.time()),
+            student_recommended_lifecycle=(
+                str(candidate.artifacts.get("student_reflection_recommendation") or "unavailable")
+                if str(candidate.artifacts.get("student_reflection_recommendation") or "")
+                in {"validated", "promising", "invalid", "unactivated"}
+                else "unavailable"
+            ),
         )
         existing = {
             str(item.get("record_id") or ""): item

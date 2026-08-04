@@ -68,6 +68,19 @@ class StudentEditor(Protocol):
         repair_kind: str = "engineering",
     ): ...
 
+    def reflect(
+        self,
+        *,
+        state_root: Path,
+        round_index: int,
+        student_id: str,
+        workspace: Path,
+        parent: Parent,
+        hypothesis: Hypothesis,
+        prompt_path: Path,
+        candidate: CandidateResult,
+    ): ...
+
 
 class Teacher(Protocol):
     name: str
