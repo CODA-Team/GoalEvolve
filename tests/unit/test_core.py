@@ -382,6 +382,167 @@ Retain parent.
         self.assertIn("missing_assignment:student_3", errors)
         self.assertIn("missing_assignment:student_4", errors)
 
+    def test_teacher_plan_parses_explorer_novelty_evidence(self) -> None:
+        from goalevolve.agents.markdown_protocol import parse_teacher_plan
+
+        parsed = parse_teacher_plan(
+            """## Evolution Ideas
+### idea_1
+- Idea: Bound a late candidate by measured post-route debt.
+- Draft Signature: draft_1
+- EPD Search Query: draft_1
+- Retrieved Historical Ideas: IDEA_A, IDEA_B
+- Opened EPD Records: IDEA_A, IDEA_B
+- Nearest Historical Idea: IDEA_A
+- Semantic Overlap: Both alter candidate admission.
+- Material Difference: This reads post-route debt rather than raw slack.
+- Novelty Conclusion: Retain because the observed state is materially different.
+
+## Parent Policy
+Keep parent.
+
+## Student Assignments
+"""
+        )
+        idea = parsed["evolution_idea_records"][0]
+        self.assertEqual(idea["draft_signature_id"], "draft_1")
+        self.assertEqual(idea["retrieved_historical_ideas"], ("IDEA_A", "IDEA_B"))
+        self.assertEqual(idea["nearest_historical_idea"], "IDEA_A")
+        self.assertIn("post-route debt", idea["material_difference"])
+
+    def test_codex_teacher_uses_draft_retrieval_then_novelty_review(self) -> None:
+        from goalevolve.agents.teacher import CodexTeacher, CodexTeacherConfig
+
+        def draft_markdown() -> str:
+            rows = ["## Draft Mechanism Signatures"]
+            for index in range(1, 6):
+                rows.extend(
+                    [
+                        f"### draft_{index}",
+                        "- Stage: timing_recovery",
+                        f"- Problem: endpoint timing debt {index}",
+                        "- Source Hook: src/rsz/src/Timing.cc",
+                        "- Decision Type: candidate admission",
+                        "- Observed State: endpoint slack",
+                        "- Action: bound one candidate",
+                        "- Guard: official timing evidence",
+                        "- Expected Effect: reduce timing debt",
+                        "",
+                    ]
+                )
+            return "\n".join(rows)
+
+        def final_markdown() -> str:
+            rows = [
+                "## Diagnosis Summary",
+                "Timing debt remains at the endpoint admission boundary.",
+                "",
+                "## Source Investigation",
+                "### investigation_1",
+                "- Source Evidence: src/rsz/src/Timing.cc::adjustTiming",
+                "- Observed Control Point: The current parent ranks endpoint candidates here.",
+                "### investigation_2",
+                "- Source Evidence: src/rsz/src/Timing.cc::adjustTiming",
+                "- Observed Control Point: The same hook applies the final bounded admission decision.",
+                "",
+                "## Evolution Ideas",
+            ]
+            for index in range(1, 6):
+                rows.extend(
+                    [
+                        f"### idea_{index}",
+                        f"- Idea: Use draft {index} to bound endpoint candidate admission by measured timing debt.",
+                        "- Predicted Stage Effect: Reduce timing debt.",
+                        "- Source Hooks: src/rsz/src/Timing.cc",
+                        "- Source Evidence: src/rsz/src/Timing.cc::adjustTiming",
+                        "- Evaluation Recipe: legacy_setup",
+                        "- Expected Signals: endpoint_examined",
+                        "- Falsification Condition: No official timing gain.",
+                        f"- Draft Signature: draft_{index}",
+                        f"- EPD Search Query: draft_{index}",
+                        "- Retrieved Historical Ideas: none",
+                        "- Opened EPD Records: none",
+                        "- Nearest Historical Idea: none",
+                        "- Semantic Overlap: no historical overlap",
+                        "- Material Difference: no historical record exists",
+                        "- Novelty Conclusion: new mechanism on an empty EPD",
+                        "- Paper Card References: none",
+                        f"- Priority: {index}",
+                        "",
+                    ]
+                )
+            rows.extend(
+                [
+                    "## Parent Policy",
+                    "Keep the checked parent.",
+                    "- Retire Pending Ideas: none",
+                    "",
+                    "## Student Assignments",
+                    "### student_1",
+                    "- Role: explorer",
+                    "- Candidate:",
+                    "- EPD Idea: idea_1",
+                    "- Claim: Use draft 1 to bound endpoint candidate admission by measured timing debt.",
+                    "- Selection Rationale: It is the most direct bounded timing experiment.",
+                    "- Source Hooks: src/rsz/src/Timing.cc",
+                    "- Source Evidence: src/rsz/src/Timing.cc::adjustTiming",
+                    "- Evaluation Recipe: legacy_setup",
+                    "- Expected Signals: endpoint_examined",
+                    "- Falsification Condition: No official timing gain.",
+                    "- EPD References: none",
+                ]
+            )
+            return "\n".join(rows)
+
+        class FakeRunner:
+            def __init__(self) -> None:
+                self.calls = []
+
+            def run(self, *, operation_id, artifact_root, prompt, **_):
+                self.calls.append((operation_id, prompt))
+                artifact_root.mkdir(parents=True, exist_ok=True)
+                last = artifact_root / "last_message.md"
+                last.write_text(
+                    draft_markdown() if "draft_signatures" in operation_id else final_markdown(),
+                    encoding="utf-8",
+                )
+                events = artifact_root / "events.jsonl"
+                events.write_text(
+                    "\n".join(
+                        json.dumps({"type": "item.completed", "item": {"type": "command_execution", "command": "rg -n adjustTiming src/rsz/src/Timing.cc", "exit_code": 0}})
+                        for _ in range(2)
+                    ) + "\n",
+                    encoding="utf-8",
+                )
+                return SimpleNamespace(
+                    ok=True,
+                    operation_id=operation_id,
+                    detail="ok",
+                    artifacts={"codex_last_message": str(last), "codex_events": str(events)},
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            teacher = CodexTeacher(CodexTeacherConfig())
+            runner = FakeRunner()
+            teacher.runner = runner
+            plan = teacher.plan(
+                state_root=root,
+                round_root=root / "rounds" / "round_001",
+                round_index=1,
+                parent=self.parent,
+                contract=self.contract,
+                diagnosis=SimpleNamespace(to_dict=lambda: {}),
+                fallback=(replace(self.hypothesis, student_id="student_1"),),
+                previous_review={},
+                decision_context={"stage": "timing_recovery", "evaluation_mode": "timing_only"},
+            )
+
+        self.assertEqual([call[0] for call in runner.calls], ["r001_teacher_draft_signatures", "r001_teacher_plan_novelty_review"])
+        self.assertTrue(plan.plan["retrieval_audit"]["accepted"])
+        self.assertEqual(len(plan.plan["draft_signatures"]), 5)
+        self.assertIn("teacher_epd_retrieval_packet.json", runner.calls[1][1])
+
     def test_controller_materializes_teacher_authored_explorer_idea(self) -> None:
         from goalevolve.execution.teacher_assignment import (
             build_role_templates,
@@ -438,6 +599,96 @@ Retain parent.
         self.assertEqual(hypothesis.source_hooks, ("src/rsz/src/Timing.cc",))
         self.assertEqual(hypothesis.allowed_patch_paths, ())
         self.assertEqual(hypothesis.teacher_idea_reference, "idea_3")
+
+    def test_explorer_assignment_requires_retrieval_audit(self) -> None:
+        from goalevolve.execution.teacher_assignment import (
+            build_role_templates,
+            materialize_teacher_assignments,
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "source"
+            hook = source / "src/rsz/src/Timing.cc"
+            hook.parent.mkdir(parents=True)
+            hook.write_text("namespace rsz { void adjustTiming() {} }\n", encoding="utf-8")
+            templates = build_role_templates(
+                student_ids=("student_1",),
+                round_index=6,
+                decision_context={"evaluation_mode": "timing_only"},
+                portfolio={},
+                suspend_explorers=False,
+            )
+            assignment = {
+                "student_id": "student_1",
+                "role": "explorer",
+                "idea_reference": "idea_1",
+                "claim": "Rank endpoint recovery by bounded post-route timing debt.",
+                "selection_rationale": "The dominant timing debt needs a new candidate admission rule.",
+                "source_hooks": ("src/rsz/src/Timing.cc",),
+                "source_evidence": ("src/rsz/src/Timing.cc::adjustTiming",),
+                "expected_signals": ("endpoint_recovery_examined",),
+                "falsification_condition": "No official timing improvement with complete checks.",
+                "epd_record_ids": (),
+            }
+            idea = {
+                "reference": "idea_1",
+                "idea": assignment["claim"],
+                "predicted_stage_effect": "Reduce post-route timing debt.",
+                "source_hooks": assignment["source_hooks"],
+                "source_evidence": assignment["source_evidence"],
+                "expected_signals": assignment["expected_signals"],
+                "falsification_condition": assignment["falsification_condition"],
+                "draft_signature_id": "draft_1",
+                "epd_search_query": "draft_1",
+                "retrieved_historical_ideas": ("IDEA_NEAR",),
+                "opened_epd_records": ("IDEA_NEAR",),
+                "nearest_historical_idea": "IDEA_NEAR",
+                "semantic_overlap": "Both modify candidate admission.",
+                "material_difference": "This uses post-route debt rather than raw slack.",
+                "novelty_conclusion": "Novel because the decision state differs.",
+            }
+            common = {
+                "assignments": (assignment,),
+                "evolution_ideas": (idea,),
+                "templates": templates,
+                "source_root": source,
+                "allowed_patch_roots": ("src/rsz",),
+                "historical_ideas": (),
+                "explorer_retrieval_audit": {"signatures": {"draft_1": {"accepted": False, "errors": ["missing_search_trace"]}}},
+            }
+            rejected = materialize_teacher_assignments(**common)
+            accepted = materialize_teacher_assignments(
+                **{
+                    **common,
+                    "explorer_retrieval_audit": {
+                        "signatures": {
+                            "draft_1": {
+                                "accepted": True,
+                                "result_ids": ["IDEA_NEAR"],
+                                "opened_idea_ids": ["IDEA_NEAR"],
+                            }
+                        }
+                    },
+                }
+            )
+
+        self.assertIn("explorer_retrieval_audit_rejected:student_1", rejected.errors)
+        self.assertEqual(accepted.errors, ())
+
+    def test_controller_keeps_epd_roles_when_only_explorer_assignment_is_rejected(self) -> None:
+        from goalevolve.execution.engine import _partition_controller_assignment_errors
+
+        templates = (
+            replace(self.hypothesis, student_id="student_1", student_role="explorer"),
+            replace(self.hypothesis, student_id="student_2", student_role="enhancer", role_mode="epd_enhancement"),
+        )
+        blocking, rejected = _partition_controller_assignment_errors(
+            errors=("explorer_retrieval_audit_rejected:student_1",),
+            templates=templates,
+        )
+
+        self.assertEqual(blocking, ())
+        self.assertEqual(rejected, ("explorer_retrieval_audit_rejected:student_1",))
 
     def test_repository_graph_extracts_qualified_symbols_and_includes(self) -> None:
         from goalevolve.planning.repository_graph import RepositoryGraphIndex

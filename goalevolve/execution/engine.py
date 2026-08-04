@@ -31,6 +31,38 @@ from .teacher_assignment import (
 from ..evaluation.leaderboard import update_unified_leaderboard
 
 
+def _partition_controller_assignment_errors(
+    *,
+    errors: Sequence[str],
+    templates: Sequence[Hypothesis],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Keep executable EPD roles when only fresh Explorer work is rejected.
+
+    A malformed or unsupported fresh mechanism must not silently convert an
+    Enhancer/Integrator portfolio into an empty round.  The Controller keeps
+    only already-materialized EPD hypotheses; if every slot was Explorer, the
+    ordinary no-hypothesis guard still stops the round safely.
+    """
+    explorer_ids = {
+        str(template.student_id)
+        for template in templates
+        if template.student_role == "explorer" and str(template.student_id)
+    }
+    blocking: list[str] = []
+    rejected: list[str] = []
+    for raw in errors:
+        error = str(raw)
+        related_explorer = any(
+            re.search(rf"(?<![A-Za-z0-9_]){re.escape(student_id)}(?![A-Za-z0-9_])", error)
+            for student_id in explorer_ids
+        )
+        if related_explorer:
+            rejected.append(error)
+        else:
+            blocking.append(error)
+    return tuple(dict.fromkeys(blocking)), tuple(dict.fromkeys(rejected))
+
+
 @dataclass
 class GoalEvolveEngine:
     contract: GoalContract
@@ -408,9 +440,18 @@ class GoalEvolveEngine:
                     "diagnosis_summary": parsed_plan.get("diagnosis_summary"),
                     "parent_policy": parsed_plan.get("parent_policy"),
                 },
+                explorer_retrieval_audit=(
+                    dict(teacher_plan_payload.get("retrieval_audit") or {})
+                    if "retrieval_audit" in teacher_plan_payload
+                    else None
+                ),
             )
             recovery_repairs = list(
                 teacher_plan_payload.get("controller_assignment_repairs") or ()
+            )
+            recovery_blocking_errors, recovery_rejected_explorers = _partition_controller_assignment_errors(
+                errors=materialized.errors,
+                templates=role_templates,
             )
             recovered_repair_count = len(recovery_repairs)
             repair_budget = max(
@@ -418,14 +459,14 @@ class GoalEvolveEngine:
                 int(getattr(getattr(self.teacher, "config", None), "max_plan_format_repairs", 1)),
             )
             for _ in range(repair_budget):
-                if not materialized.errors:
+                if not recovery_blocking_errors:
                     break
                 repair = self.teacher.repair_plan_after_controller_validation(
                     state_root=self.state_root,
                     round_root=round_root,
                     round_index=round_index,
                     prior_markdown=recovered_markdown,
-                    errors=materialized.errors,
+                    errors=recovery_blocking_errors,
                     role_templates=role_templates,
                     execution_contracts=self._teacher_execution_contracts(role_templates),
                     repair_index=len(recovery_repairs) + 1,
@@ -465,13 +506,27 @@ class GoalEvolveEngine:
                         "diagnosis_summary": parsed_plan.get("diagnosis_summary"),
                         "parent_policy": parsed_plan.get("parent_policy"),
                     },
+                    explorer_retrieval_audit=(
+                        dict(teacher_plan_payload.get("retrieval_audit") or {})
+                        if "retrieval_audit" in teacher_plan_payload
+                        else None
+                    ),
                 )
-            if materialized.errors:
-                teacher_plan_payload["controller_assignment_errors"] = list(materialized.errors)
+                recovery_blocking_errors, newly_rejected = _partition_controller_assignment_errors(
+                    errors=materialized.errors,
+                    templates=role_templates,
+                )
+                recovery_rejected_explorers = tuple(
+                    dict.fromkeys((*recovery_rejected_explorers, *newly_rejected))
+                )
+            if recovery_rejected_explorers:
+                teacher_plan_payload["rejected_explorer_assignments"] = list(recovery_rejected_explorers)
+            if recovery_blocking_errors:
+                teacher_plan_payload["controller_assignment_errors"] = list(recovery_blocking_errors)
                 atomic_json(round_root / "teacher_plan.json", teacher_plan_payload)
                 raise RuntimeError(
                     "incomplete_round_controller_repair_still_invalid:"
-                    + ";".join(materialized.errors)
+                    + ";".join(recovery_blocking_errors)
                 )
             hypotheses = list(materialized.hypotheses)
             teacher_plan_payload["teacher_markdown"] = recovered_markdown
@@ -590,6 +645,11 @@ class GoalEvolveEngine:
                             "diagnosis_summary": plan.get("diagnosis_summary"),
                             "parent_policy": plan.get("parent_policy"),
                         },
+                        explorer_retrieval_audit=(
+                            dict(teacher_plan_payload.get("retrieval_audit") or {})
+                            if "retrieval_audit" in teacher_plan_payload
+                            else None
+                        ),
                     )
 
                 materialized = materialize(parsed_plan)
@@ -599,7 +659,11 @@ class GoalEvolveEngine:
                 )
                 controller_repairs: list[dict[str, object]] = []
                 prior_markdown = str(teacher_plan_payload.get("teacher_markdown") or "")
-                controller_errors = list(materialized.errors)
+                blocking_errors, rejected_explorer_assignments = _partition_controller_assignment_errors(
+                    errors=materialized.errors,
+                    templates=role_templates,
+                )
+                controller_errors = list(blocking_errors)
                 for repair_index in range(1, repair_budget + 1):
                     if not controller_errors:
                         break
@@ -624,7 +688,14 @@ class GoalEvolveEngine:
                         continue
                     parsed_plan = dict(repaired.get("parsed_markdown") or {})
                     materialized = materialize(parsed_plan)
-                    controller_errors = list(materialized.errors)
+                    blocking_errors, newly_rejected = _partition_controller_assignment_errors(
+                        errors=materialized.errors,
+                        templates=role_templates,
+                    )
+                    rejected_explorer_assignments = tuple(
+                        dict.fromkeys((*rejected_explorer_assignments, *newly_rejected))
+                    )
+                    controller_errors = list(blocking_errors)
                     prior_markdown = str(repaired.get("teacher_markdown") or prior_markdown)
                     if not controller_errors:
                         teacher_plan_payload["teacher_markdown"] = prior_markdown
@@ -632,6 +703,10 @@ class GoalEvolveEngine:
                 if controller_repairs:
                     teacher_plan_payload["controller_assignment_repair"] = controller_repairs[-1]
                     teacher_plan_payload["controller_assignment_repairs"] = controller_repairs
+                if rejected_explorer_assignments:
+                    teacher_plan_payload["rejected_explorer_assignments"] = list(
+                        rejected_explorer_assignments
+                    )
                 if controller_errors:
                     teacher_plan_payload["controller_assignment_errors"] = controller_errors
                     atomic_json(round_root / "teacher_plan.json", teacher_plan_payload)

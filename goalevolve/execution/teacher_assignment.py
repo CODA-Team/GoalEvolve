@@ -201,6 +201,7 @@ def materialize_teacher_assignments(
     paper_card_ids: Sequence[str] = (),
     teacher_context: Mapping[str, object] | None = None,
     repository_graph: RepositoryGraph | None = None,
+    explorer_retrieval_audit: Mapping[str, object] | None = None,
 ) -> AssignmentMaterialization:
     """Validate Markdown assignments and construct executable hypotheses.
 
@@ -326,6 +327,13 @@ def materialize_teacher_assignments(
                 continue
             if _duplicate_explorer_idea(claim=claim, hooks=hooks, historical_ideas=normalized_history):
                 errors.append(f"duplicate_explorer_idea:{student_id}")
+                continue
+            retrieval_errors = _explorer_retrieval_errors(
+                idea=linked_idea,
+                audit=explorer_retrieval_audit,
+            )
+            if retrieval_errors:
+                errors.extend(f"{error}:{student_id}" for error in retrieval_errors)
                 continue
             novelty_key = _novelty_key(claim, hooks)
             if novelty_key in used_explorer_keys:
@@ -514,6 +522,54 @@ def _duplicate_explorer_idea(*, claim: str, hooks: Sequence[str], historical_ide
         if set(hooks) == set(previous_hooks) and _text_similarity(claim, previous_text) >= 0.72:
             return True
     return False
+
+
+def _explorer_retrieval_errors(
+    *,
+    idea: Mapping[str, object],
+    audit: Mapping[str, object] | None,
+) -> tuple[str, ...]:
+    """Enforce Controller evidence for a fresh Explorer mechanism.
+
+    ``None`` preserves the legacy direct-materialization API.  The Codex
+    planning path always supplies an audit, where every Explorer idea needs a
+    Controller-created draft-signature trace before it becomes executable.
+    """
+    if audit is None:
+        return ()
+    signature_id = str(idea.get("draft_signature_id") or "").strip()
+    if not signature_id:
+        return ("missing_explorer_draft_signature",)
+    signatures = dict(audit.get("signatures") or {})
+    row = dict(signatures.get(signature_id) or {})
+    if not row or not bool(row.get("accepted")):
+        return ("explorer_retrieval_audit_rejected",)
+    required = (
+        "epd_search_query",
+        "retrieved_historical_ideas",
+        "opened_epd_records",
+        "nearest_historical_idea",
+        "semantic_overlap",
+        "material_difference",
+        "novelty_conclusion",
+    )
+    if any(not str(idea.get(field) or "").strip() and not tuple(idea.get(field) or ()) for field in required):
+        return ("missing_explorer_novelty_evidence",)
+    query = str(idea.get("epd_search_query") or "").strip()
+    if query != signature_id:
+        return ("explorer_search_query_mismatch",)
+    result_ids = {str(item) for item in list(row.get("result_ids") or ()) if str(item)}
+    opened_ids = {str(item) for item in list(row.get("opened_idea_ids") or ()) if str(item)}
+    cited_results = set(_items(idea.get("retrieved_historical_ideas")))
+    cited_opened = set(_items(idea.get("opened_epd_records")))
+    if not cited_results.issubset(result_ids) or not cited_opened.issubset(opened_ids):
+        return ("explorer_novelty_evidence_not_in_trace",)
+    nearest = str(idea.get("nearest_historical_idea") or "").strip()
+    if result_ids and nearest not in result_ids:
+        return ("explorer_nearest_idea_not_in_trace",)
+    if not result_ids and nearest.lower() not in {"none", "no historical idea"}:
+        return ("explorer_nearest_idea_not_in_trace",)
+    return ()
 
 
 def _text_similarity(left: str, right: str) -> float:

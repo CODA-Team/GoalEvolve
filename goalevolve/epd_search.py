@@ -8,7 +8,7 @@ from itertools import combinations
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .core.io import canonical_json, load_json
+from .core.io import atomic_json, canonical_json, load_json
 
 
 def _tokens(value: object) -> set[str]:
@@ -94,6 +94,7 @@ class EPDSearch:
         stage: str = "",
         top_k: int = 8,
         trace_path: Path | None = None,
+        trace_context: Mapping[str, object] | None = None,
     ) -> list[dict[str, object]]:
         normalized = self._query(query)
         requested_stage = stage or str(normalized["stage"])
@@ -137,6 +138,7 @@ class EPDSearch:
             trace_path,
             {
                 "operation": "search",
+                **dict(trace_context or {}),
                 "query": dict(query),
                 "stage": requested_stage,
                 "top_k": int(top_k),
@@ -152,6 +154,7 @@ class EPDSearch:
         idea_id: str,
         include: Sequence[str] = ("idea",),
         trace_path: Path | None = None,
+        trace_context: Mapping[str, object] | None = None,
     ) -> dict[str, object]:
         catalog = self._catalog()
         card = catalog.get(idea_id)
@@ -181,7 +184,7 @@ class EPDSearch:
                 for row in attempts
                 if (self.root / "attempts" / str(row.get("record_id") or "") / "student_reflection.md").is_file()
             ]
-        self._trace(trace_path, {"operation": "show", "idea_id": idea_id, "include": sorted(requested), "opened_idea_ids": [idea_id]})
+        self._trace(trace_path, {"operation": "show", **dict(trace_context or {}), "idea_id": idea_id, "include": sorted(requested), "opened_idea_ids": [idea_id]})
         return payload
 
     def compare(
@@ -190,6 +193,7 @@ class EPDSearch:
         query: Mapping[str, object],
         idea_id: str,
         trace_path: Path | None = None,
+        trace_context: Mapping[str, object] | None = None,
     ) -> dict[str, object]:
         shown = self.show(idea_id=idea_id, include=("idea",), trace_path=None)
         idea = dict(shown.get("idea") or {})
@@ -222,8 +226,29 @@ class EPDSearch:
             "semantic_overlap": sorted(set(overlap)),
             "material_difference": "none" if not differences else ", ".join(sorted(set(differences))),
         }
-        self._trace(trace_path, {"operation": "compare", "idea_id": idea_id, "query": dict(query), "opened_idea_ids": [idea_id], **result})
+        self._trace(trace_path, {"operation": "compare", **dict(trace_context or {}), "idea_id": idea_id, "query": dict(query), "opened_idea_ids": [idea_id], **result})
         return result
+
+    def same_hook_boundary_ids(self, *, query: Mapping[str, object]) -> list[str]:
+        """Return every record sharing an explicit hook and decision boundary.
+
+        These records need opening even when a top-k ranking would truncate
+        them: they are the highest-risk duplicate mechanisms for an Explorer.
+        """
+        normalized = self._query(query)
+        hooks = set(normalized["source_hooks"])
+        boundary = str(normalized["decision_boundary"])
+        if not hooks or not boundary:
+            return []
+        return sorted(
+            {
+                str(row.get("idea_id") or "")
+                for row in self._corpus()
+                if str(row.get("idea_id") or "")
+                and hooks.intersection(_as_strings(row.get("source_hooks")))
+                and str(row.get("decision_boundary") or "") == boundary
+            }
+        )
 
     def compatible_pairs(
         self,
@@ -263,6 +288,172 @@ class EPDSearch:
         selected = pairs[: max(0, int(top_k))]
         self._trace(trace_path, {"operation": "compatible-pairs", "parent": parent, "stage": stage, "top_k": int(top_k), "pair_count": len(selected), "opened_idea_ids": []})
         return selected
+
+
+def _trace_rows(path: Path) -> list[dict[str, object]]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    rows: list[dict[str, object]] = []
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict):
+            rows.append(row)
+    return rows
+
+
+def _signature_id(signature: Mapping[str, object], index: int) -> str:
+    return str(signature.get("signature_id") or f"draft_{index}").strip()
+
+
+def build_explorer_retrieval_packet(
+    *,
+    state_root: Path,
+    signatures: Sequence[Mapping[str, object]],
+    trace_path: Path,
+    packet_path: Path | None = None,
+    top_k: int = 8,
+    opened_top_k: int = 3,
+) -> dict[str, object]:
+    """Run Controller-owned novelty retrieval for Teacher draft signatures.
+
+    The Teacher never gets to self-attest that it searched history.  For each
+    bounded draft the Controller runs deterministic search, opens the top
+    candidates plus *every* same-hook/same-boundary record, writes an
+    append-only trace, and materializes a compact packet for the second
+    Teacher pass.
+    """
+    search = EPDSearch(Path(state_root))
+    rendered: list[dict[str, object]] = []
+    for index, raw in enumerate(signatures, start=1):
+        signature = dict(raw)
+        signature_id = _signature_id(signature, index)
+        if not signature_id:
+            continue
+        context = {"signature_id": signature_id, "controller_owned": True}
+        results = search.search(
+            query=signature,
+            stage=str(signature.get("stage") or ""),
+            top_k=top_k,
+            trace_path=trace_path,
+            trace_context=context,
+        )
+        same_hook_boundary = search.same_hook_boundary_ids(query=signature)
+        opened_ids = list(
+            dict.fromkeys(
+                [
+                    *[str(row.get("idea_id") or "") for row in results[: max(0, int(opened_top_k))]],
+                    *same_hook_boundary,
+                ]
+            )
+        )
+        opened_ids = [idea_id for idea_id in opened_ids if idea_id]
+        opened: list[dict[str, object]] = []
+        comparisons: list[dict[str, object]] = []
+        for idea_id in opened_ids:
+            opened.append(
+                search.show(
+                    idea_id=idea_id,
+                    include=("idea", "attempts", "reflections"),
+                    trace_path=trace_path,
+                    trace_context=context,
+                )
+            )
+            comparisons.append(
+                search.compare(
+                    query=signature,
+                    idea_id=idea_id,
+                    trace_path=trace_path,
+                    trace_context=context,
+                )
+            )
+        rendered.append(
+            {
+                "signature_id": signature_id,
+                "draft_signature": signature,
+                "results": results,
+                "opened_idea_ids": opened_ids,
+                "same_hook_boundary_ids": same_hook_boundary,
+                "opened_records": opened,
+                "comparisons": comparisons,
+            }
+        )
+    packet = {
+        "schema_version": "goalevolve.epd.retrieval-packet.v1",
+        "trace_path": str(trace_path),
+        "top_k": int(top_k),
+        "opened_top_k": int(opened_top_k),
+        "signatures": rendered,
+    }
+    destination = packet_path or Path(trace_path).with_name("teacher_epd_retrieval_packet.json")
+    atomic_json(destination, packet)
+    packet["artifact_path"] = str(destination)
+    return packet
+
+
+def validate_explorer_retrieval_audit(
+    *,
+    state_root: Path,
+    signatures: Sequence[Mapping[str, object]],
+    trace_path: Path,
+    top_k: int = 8,
+    opened_top_k: int = 3,
+) -> dict[str, object]:
+    """Validate Controller trace evidence required before an Explorer runs."""
+    search = EPDSearch(Path(state_root))
+    rows = _trace_rows(Path(trace_path))
+    audits: dict[str, dict[str, object]] = {}
+    for index, raw in enumerate(signatures, start=1):
+        signature = dict(raw)
+        signature_id = _signature_id(signature, index)
+        search_rows = [
+            row
+            for row in rows
+            if row.get("operation") == "search" and str(row.get("signature_id") or "") == signature_id
+        ]
+        trace = search_rows[-1] if search_rows else {}
+        result_ids = [str(item) for item in list(trace.get("result_ids") or ()) if str(item)]
+        opened_ids = {
+            str(idea_id)
+            for row in rows
+            if str(row.get("signature_id") or "") == signature_id
+            for idea_id in list(row.get("opened_idea_ids") or ())
+            if str(idea_id)
+        }
+        corpus_size = len(search._corpus())
+        expected_result_count = min(max(0, int(top_k)), corpus_size)
+        required_top_ids = result_ids[: min(max(0, int(opened_top_k)), len(result_ids))]
+        same_hook_boundary = search.same_hook_boundary_ids(query=signature)
+        errors: list[str] = []
+        if not trace:
+            errors.append("missing_search_trace")
+        if trace and int(trace.get("top_k") or 0) < int(top_k):
+            errors.append("search_top_k_too_small")
+        if trace and len(result_ids) < expected_result_count:
+            errors.append("search_result_count_too_small")
+        if any(idea_id not in opened_ids for idea_id in required_top_ids):
+            errors.append("top_candidates_not_opened")
+        if any(idea_id not in opened_ids for idea_id in same_hook_boundary):
+            errors.append("same_hook_boundary_not_opened")
+        audits[signature_id] = {
+            "signature_id": signature_id,
+            "query": signature,
+            "result_ids": result_ids,
+            "opened_idea_ids": sorted(opened_ids),
+            "same_hook_boundary_ids": same_hook_boundary,
+            "errors": errors,
+            "accepted": not errors,
+        }
+    return {
+        "schema_version": "goalevolve.epd.retrieval-audit.v1",
+        "trace_path": str(trace_path),
+        "accepted": all(bool(row["accepted"]) for row in audits.values()),
+        "signatures": audits,
+    }
 
 
 def _load_query(path: str) -> dict[str, object]:

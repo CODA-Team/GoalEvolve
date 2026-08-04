@@ -4,10 +4,12 @@ import json
 import re
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Iterable, Mapping, Sequence
 
 from .codex_runtime import CodexRuntimeConfig, PersistentCodexRunner
 from .markdown_protocol import (
+    draft_signature_validation_errors,
+    parse_draft_signatures,
     parse_teacher_plan,
     parse_teacher_review,
     render_teacher_plan,
@@ -19,6 +21,7 @@ from ..planning.epd import EvolutionProgramDatabase
 from ..core.models import CandidateResult, EvidenceVerdict, Hypothesis, Parent
 from ..planning.observations import ObservationMemory
 from ..planning.timing_recovery import schedule_memory_summary, teacher_selectable_recipe_ids
+from ..epd_search import build_explorer_retrieval_packet, validate_explorer_retrieval_audit
 
 
 @dataclass(frozen=True)
@@ -141,11 +144,6 @@ class CodexTeacher:
             source_root=source_root,
             paper_cards=paper_cards,
         )
-        # Planning and review for one round share compact local context; the
-        # next round starts a clean thread because EPD/review are supplied in
-        # its packet.  This bounds remote conversation-token accumulation.
-        turn = self.runner.run(state_root=state_root, identity=self._round_identity(round_index), operation_id=f"r{round_index:03d}_teacher_plan", cwd=round_root, artifact_root=round_root / "teacher" / "plan", prompt=prompt)
-        markdown = self._read_markdown(turn.artifacts.get("codex_last_message")) if turn.ok else ""
         validation_attempts: list[dict[str, object]] = []
         required_roles = tuple(item.student_role for item in fallback)
         required_student_roles = {
@@ -155,6 +153,82 @@ class CodexTeacher:
         }
         requires_explorer_ideas = any(role == "explorer" for role in required_roles)
         requires_source_investigation = requires_explorer_ideas
+        draft_turn_artifacts: dict[str, str] = {}
+        draft_signatures: tuple[dict[str, object], ...] = ()
+        retrieval_packet: dict[str, object] = {}
+        retrieval_audit: dict[str, object] = {}
+        draft_errors: tuple[str, ...] = ()
+        # Planning and review share a bounded Teacher thread for one round;
+        # fresh rounds get their durable context from compact packets. Explorer
+        # work deliberately has two turns: creation of signatures is separate
+        # from Controller-owned historical retrieval and final novelty review.
+        if requires_explorer_ideas:
+            draft_turn = self.runner.run(
+                state_root=state_root,
+                identity=self._round_identity(round_index),
+                operation_id=f"r{round_index:03d}_teacher_draft_signatures",
+                cwd=round_root,
+                artifact_root=round_root / "teacher" / "draft_signatures",
+                prompt=self._draft_signature_prompt(planning_prompt=prompt),
+            )
+            draft_turn_artifacts = draft_turn.artifacts
+            draft_markdown = self._read_markdown(draft_turn.artifacts.get("codex_last_message")) if draft_turn.ok else ""
+            draft_signatures = parse_draft_signatures(draft_markdown) if draft_turn.ok else ()
+            draft_errors = (
+                draft_signature_validation_errors(draft_signatures)
+                if draft_turn.ok
+                else ("teacher_draft_signature_turn_failed",)
+            )
+            validation_attempts.append(
+                {
+                    "attempt": "draft_signatures",
+                    "operation_id": draft_turn.operation_id,
+                    "errors": list(draft_errors),
+                }
+            )
+            if not draft_errors:
+                trace_path = round_root / "teacher_epd_retrieval_trace.jsonl"
+                retrieval_packet = build_explorer_retrieval_packet(
+                    state_root=state_root,
+                    signatures=draft_signatures,
+                    trace_path=trace_path,
+                )
+                retrieval_audit = validate_explorer_retrieval_audit(
+                    state_root=state_root,
+                    signatures=draft_signatures,
+                    trace_path=trace_path,
+                )
+                if not bool(retrieval_audit.get("accepted")):
+                    draft_errors = tuple(
+                        f"retrieval_audit_rejected:{signature_id}:{','.join(str(item) for item in list(row.get('errors') or ()))}"
+                        for signature_id, row in dict(retrieval_audit.get("signatures") or {}).items()
+                        if not bool(dict(row).get("accepted"))
+                    )
+                review_prompt = self._novelty_review_prompt(
+                    planning_prompt=prompt,
+                    draft_signatures=draft_signatures,
+                    retrieval_packet=retrieval_packet,
+                )
+                turn = self.runner.run(
+                    state_root=state_root,
+                    identity=self._round_identity(round_index),
+                    operation_id=f"r{round_index:03d}_teacher_plan_novelty_review",
+                    cwd=round_root,
+                    artifact_root=round_root / "teacher" / "plan",
+                    prompt=review_prompt,
+                )
+            else:
+                turn = draft_turn
+        else:
+            turn = self.runner.run(
+                state_root=state_root,
+                identity=self._round_identity(round_index),
+                operation_id=f"r{round_index:03d}_teacher_plan",
+                cwd=round_root,
+                artifact_root=round_root / "teacher" / "plan",
+                prompt=prompt,
+            )
+        markdown = self._read_markdown(turn.artifacts.get("codex_last_message")) if turn.ok and not draft_errors else ""
         errors = teacher_plan_validation_errors(
             markdown,
             required_roles=required_roles,
@@ -162,7 +236,7 @@ class CodexTeacher:
             require_explorer_ideas=requires_explorer_ideas,
             require_source_investigation=requires_source_investigation,
             require_evaluation_recipe=True,
-        ) if turn.ok else ("teacher_turn_failed",)
+        ) if turn.ok and not draft_errors else tuple(draft_errors or ("teacher_turn_failed",))
         validation_attempts.append({"attempt": 0, "operation_id": turn.operation_id, "errors": list(errors)})
         initial_artifacts = turn.artifacts
         repair_turns: list[dict[str, str]] = []
@@ -204,7 +278,7 @@ class CodexTeacher:
         source_audit = source_inspection_audit(
             tuple(
                 Path(path)
-                for artifacts in (initial_artifacts, *repair_turns)
+                for artifacts in (draft_turn_artifacts, initial_artifacts, *repair_turns)
                 if (path := artifacts.get("codex_events"))
             )
         )
@@ -225,6 +299,9 @@ class CodexTeacher:
             "format_validation": validation_attempts,
             "format_repair_artifacts": repair_turns,
             "source_inspection_audit": source_audit,
+            "draft_signatures": list(draft_signatures),
+            "retrieval_packet": retrieval_packet,
+            "retrieval_audit": retrieval_audit,
             "diagnosis": diagnosis.to_dict(),
             "epd": epd,
             "observations": observations,
@@ -524,6 +601,61 @@ class CodexTeacher:
         return selected
 
     @staticmethod
+    def _draft_signature_prompt(*, planning_prompt: str) -> str:
+        context = planning_prompt.split("Return Markdown field blocks only.", 1)[0]
+        return "\n".join(
+            [
+                context,
+                "# Pass A: Draft mechanism signatures only",
+                "Do not assign Students, decide promotion, or write a final idea. Form exactly five distinct Explorer draft signatures from the current bottleneck and live source; each will be searched by the Controller before any final assignment is allowed.",
+                "Return Markdown only, with exactly this schema:",
+                "## Draft Mechanism Signatures",
+                "### draft_1",
+                "- Stage: <active stage>",
+                "- Problem: <mechanism-level bottleneck>",
+                "- Source Hook: <one live-source path>",
+                "- Decision Type: <candidate admission|ranking|commit guard|rollback|other bounded boundary>",
+                "- Observed State: <state read by the decision>",
+                "- Action: <bounded proposed source action>",
+                "- Guard: <falsification or preservation guard>",
+                "- Expected Effect: <expected stage/final QoR effect>",
+                "Repeat through `draft_5`. No additional headings or assignments.",
+            ]
+        )
+
+    @staticmethod
+    def _novelty_review_prompt(
+        *,
+        planning_prompt: str,
+        draft_signatures: Sequence[Mapping[str, object]],
+        retrieval_packet: Mapping[str, object],
+    ) -> str:
+        compact_packet = [
+            {
+                "signature_id": row.get("signature_id"),
+                "result_ids": [item.get("idea_id") for item in list(row.get("results") or ()) if isinstance(item, Mapping)],
+                "opened_idea_ids": list(row.get("opened_idea_ids") or ()),
+                "same_hook_boundary_ids": list(row.get("same_hook_boundary_ids") or ()),
+            }
+            for row in list(retrieval_packet.get("signatures") or ())
+            if isinstance(row, Mapping)
+        ]
+        return "\n".join(
+            [
+                planning_prompt,
+                "",
+                "## Pass B: Controller retrieval and novelty review",
+                "The Controller has already searched every Pass-A draft and opened top candidates plus all same-hook/same-boundary records. Use this evidence to remove or revise duplicates, then return the final Markdown plan in the exact schema above. Do not claim a search that is not shown here; open the path-routed retrieval packet if you need evidence detail.",
+                f"Controller retrieval packet: {retrieval_packet.get('artifact_path') or '<not available>'}",
+                "## Draft Signatures (Controller input)",
+                json.dumps(list(draft_signatures), ensure_ascii=False, indent=2),
+                "## Retrieval Summary (Controller input)",
+                json.dumps(compact_packet, ensure_ascii=False, indent=2),
+                "For every final Explorer idea, copy its Draft Signature ID and provide EPD Search Query, Retrieved Historical Ideas, Opened EPD Records, Nearest Historical Idea, Semantic Overlap, Material Difference, and Novelty Conclusion. Use `none` only when the Controller result set is empty. A different source hook or a materially different decision boundary is required to retain a near mechanism.",
+            ]
+        )
+
+    @staticmethod
     def _plan_prompt(*, parent: Parent, diagnosis: Diagnosis, epd: dict[str, object], observations: dict[str, object], schedule_memory: dict[str, object] | None = None, previous_review: dict[str, object], fallback: Sequence[Hypothesis], contract=None, decision_context: dict[str, object] | None = None, source_index: dict[str, object] | None = None, repository_graph: dict[str, object] | None = None, search_policy: dict[str, object] | None = None, source_root: Path | None = None, paper_cards: Sequence[dict[str, object]] = ()) -> str:
         contract_view = contract.to_dict() if contract is not None and hasattr(contract, "to_dict") else {}
         # Put the decision semantics in the structured stage payload as well
@@ -607,6 +739,14 @@ class CodexTeacher:
                 "- Evaluation Recipe: <one controller recipe ID from the supplied menu>",
                 "- Expected Signals: <new mechanism telemetry signal names>",
                 "- Falsification Condition: <official evidence condition>",
+                "- Draft Signature: <Pass-A draft_N for an Explorer; none for an EPD role>",
+                "- EPD Search Query: <same draft_N for an Explorer; none for an EPD role>",
+                "- Retrieved Historical Ideas: <comma-separated IDEA_* IDs from Controller results, or none>",
+                "- Opened EPD Records: <comma-separated IDEA_* IDs opened by Controller, or none>",
+                "- Nearest Historical Idea: <IDEA_* from Controller results, or none>",
+                "- Semantic Overlap: <specific shared mechanism or none>",
+                "- Material Difference: <specific distinct hook/state/boundary or no history>",
+                "- Novelty Conclusion: <why retain, revise, or suppress this Explorer idea>",
                 "- Paper Card References: <optional comma-separated card_id from supplied references, or none>",
                 "- Priority: 0",
                 "",
@@ -659,7 +799,7 @@ class CodexTeacher:
                 "## Prior Markdown",
                 prior_markdown or "<no usable prior Markdown>",
                 "## Required Format",
-                "## Diagnosis Summary\n<text>\n\n## Source Investigation\n### investigation_1\n- Source Evidence: <path::symbol>\n- Observed Control Point: <text>\n\n## Evolution Ideas\n### idea_1\n- Idea: <text>\n- Predicted Stage Effect: <text>\n- Source Hooks: <path; another/path>\n- Source Evidence: <path::symbol; another/path::symbol>\n- Evaluation Recipe: <controller recipe ID from the prior plan>\n- Expected Signals: <signal>\n- Falsification Condition: <text>\n- Paper Card References: none\n- Priority: 0\n\n## Parent Policy\n<text>\n- Retire Pending Ideas: none\n\n## Student Assignments\n### student_1\n- Role: explorer\n- Candidate: \n- EPD Idea: idea_1\n- Claim: <text>\n- Selection Rationale: <text>\n- Source Hooks: <path; another/path>\n- Source Evidence: <path::symbol; another/path::symbol>\n- Evaluation Recipe: <same controller recipe ID>\n- Expected Signals: <signal>\n- Falsification Condition: <text>\n- EPD References: none",
+                "## Diagnosis Summary\n<text>\n\n## Source Investigation\n### investigation_1\n- Source Evidence: <path::symbol>\n- Observed Control Point: <text>\n\n## Evolution Ideas\n### idea_1\n- Idea: <text>\n- Predicted Stage Effect: <text>\n- Source Hooks: <path; another/path>\n- Source Evidence: <path::symbol; another/path::symbol>\n- Evaluation Recipe: <controller recipe ID from the prior plan>\n- Expected Signals: <signal>\n- Falsification Condition: <text>\n- Draft Signature: <draft_N or none>\n- EPD Search Query: <draft_N or none>\n- Retrieved Historical Ideas: <IDEA_* IDs or none>\n- Opened EPD Records: <IDEA_* IDs or none>\n- Nearest Historical Idea: <IDEA_* or none>\n- Semantic Overlap: <text>\n- Material Difference: <text>\n- Novelty Conclusion: <text>\n- Paper Card References: none\n- Priority: 0\n\n## Parent Policy\n<text>\n- Retire Pending Ideas: none\n\n## Student Assignments\n### student_1\n- Role: explorer\n- Candidate: \n- EPD Idea: idea_1\n- Claim: <text>\n- Selection Rationale: <text>\n- Source Hooks: <path; another/path>\n- Source Evidence: <path::symbol; another/path::symbol>\n- Evaluation Recipe: <same controller recipe ID>\n- Expected Signals: <signal>\n- Falsification Condition: <text>\n- EPD References: none",
             ]
         )
 

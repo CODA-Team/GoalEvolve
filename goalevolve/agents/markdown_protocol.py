@@ -117,6 +117,16 @@ def _evolution_idea_records(section: str) -> tuple[dict[str, object], ...]:
                 ),
                 "paper_card_ids": _items(_field(block, "Paper Card References")),
                 "priority": _field(block, "Priority"),
+                "draft_signature_id": _field(block, "Draft Signature"),
+                "epd_search_query": _field(block, "EPD Search Query"),
+                "retrieved_historical_ideas": _items(
+                    _field(block, "Retrieved Historical Ideas")
+                ),
+                "opened_epd_records": _items(_field(block, "Opened EPD Records")),
+                "nearest_historical_idea": _field(block, "Nearest Historical Idea"),
+                "semantic_overlap": _field(block, "Semantic Overlap"),
+                "material_difference": _field(block, "Material Difference"),
+                "novelty_conclusion": _field(block, "Novelty Conclusion"),
             }
         )
     if records:
@@ -134,6 +144,14 @@ def _evolution_idea_records(section: str) -> tuple[dict[str, object], ...]:
                 "falsification_condition": "",
                 "paper_card_ids": (),
                 "priority": index - 1,
+                "draft_signature_id": "",
+                "epd_search_query": "",
+                "retrieved_historical_ideas": (),
+                "opened_epd_records": (),
+                "nearest_historical_idea": "",
+                "semantic_overlap": "",
+                "material_difference": "",
+                "novelty_conclusion": "",
             }
         )
     return tuple(records)
@@ -193,6 +211,59 @@ def parse_teacher_plan(text: str) -> dict[str, object]:
         "retire_pending_ideas": _items(_field(parent_policy_block, "Retire Pending Ideas")),
         "assignments": assignments,
     }
+
+
+def parse_draft_signatures(text: str) -> tuple[dict[str, object], ...]:
+    """Parse Pass-A mechanism signatures without granting assignment authority."""
+    signatures: list[dict[str, object]] = []
+    for heading, block in _blocks(_section(text, "Draft Mechanism Signatures")):
+        signatures.append(
+            {
+                "signature_id": heading,
+                "stage": _field(block, "Stage"),
+                "problem": _field(block, "Problem"),
+                "source_hook": _field(block, "Source Hook"),
+                "decision_type": _field(block, "Decision Type"),
+                "observed_state": _field(block, "Observed State"),
+                "action": _field(block, "Action"),
+                "guard": _field(block, "Guard"),
+                "expected_effect": _field(block, "Expected Effect"),
+            }
+        )
+    return tuple(signatures)
+
+
+def draft_signature_validation_errors(
+    signatures: Iterable[Mapping[str, object]],
+    *,
+    minimum_count: int = 5,
+) -> tuple[str, ...]:
+    """Reject malformed Pass-A output before Controller retrieval begins."""
+    rows = [dict(row) for row in signatures if isinstance(row, Mapping)]
+    errors: list[str] = []
+    if len(rows) < minimum_count:
+        errors.append(f"draft_signature_count:{len(rows)}<{minimum_count}")
+    seen: set[str] = set()
+    for index, row in enumerate(rows, start=1):
+        signature_id = str(row.get("signature_id") or "").strip()
+        if not signature_id:
+            errors.append(f"missing_draft_signature_id:{index}")
+        elif signature_id in seen:
+            errors.append(f"duplicate_draft_signature_id:{signature_id}")
+        seen.add(signature_id)
+        for field in (
+            "stage",
+            "problem",
+            "source_hook",
+            "decision_type",
+            "observed_state",
+            "action",
+            "guard",
+            "expected_effect",
+        ):
+            if not str(row.get(field) or "").strip():
+                errors.append(f"missing_draft_signature_field:{signature_id or index}:{field}")
+    return tuple(dict.fromkeys(errors))
 
 
 def teacher_plan_validation_errors(

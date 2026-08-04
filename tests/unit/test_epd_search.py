@@ -10,6 +10,35 @@ from goalevolve.planning.epd import EvolutionProgramDatabase
 
 
 class EPDProjectionTests(unittest.TestCase):
+    def test_idea_projection_preserves_explorer_novelty_audit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            parent = Parent("baseline", {"tns_abs_ns": 12.0}, "base", "hash", 0.5)
+            epd = EvolutionProgramDatabase(root)
+            idea_id = epd.register_teacher_ideas(
+                round_index=7,
+                parent=parent,
+                evolution_ideas=(
+                    {
+                        "idea": "Use post-route debt to bound endpoint candidate admission.",
+                        "draft_signature_id": "draft_1",
+                        "epd_search_query": "draft_1",
+                        "retrieved_historical_ideas": ("IDEA_NEAR",),
+                        "opened_epd_records": ("IDEA_NEAR",),
+                        "nearest_historical_idea": "IDEA_NEAR",
+                        "semantic_overlap": "Both alter candidate admission.",
+                        "material_difference": "This reads post-route debt.",
+                        "novelty_conclusion": "Novel decision state.",
+                    },
+                ),
+            )[0]
+
+            idea = load_json(root / "knowledge" / "epd" / "ideas" / idea_id / "idea.json")
+
+        self.assertEqual(idea["draft_signature_id"], "draft_1")
+        self.assertEqual(idea["retrieved_historical_ideas"], ["IDEA_NEAR"])
+        self.assertEqual(idea["novelty_conclusion"], "Novel decision state.")
+
     def test_projection_materializes_path_addressable_idea_attempt_and_indexes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -95,6 +124,72 @@ class EPDProjectionTests(unittest.TestCase):
 
 
 class EPDSearchTests(unittest.TestCase):
+    def test_controller_audits_each_explorer_signature_before_assignment(self) -> None:
+        from goalevolve.epd_search import (
+            build_explorer_retrieval_packet,
+            validate_explorer_retrieval_audit,
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            parent = Parent("baseline", {"tns_abs_ns": 12.0}, "base", "hash", 0.5)
+            epd = EvolutionProgramDatabase(root)
+            epd.register_teacher_ideas(
+                round_index=6,
+                parent=parent,
+                evolution_ideas=tuple(
+                    {
+                        "idea": f"Bounded late VT mechanism {index} with measured cone debt.",
+                        "stage": "power_reclaim",
+                        "decision_boundary": "candidate admission" if index < 4 else "window commit",
+                        "source_hooks": (
+                            "src/rsz/src/policy/RepairPowerPolicy.cc"
+                            if index < 4
+                            else "src/rsz/src/Resizer.cc",
+                        ),
+                        "proposed_action": f"bounded action {index}",
+                    }
+                    for index in range(8)
+                ),
+            )
+            signature = {
+                "signature_id": "draft_1",
+                "stage": "power_reclaim",
+                "problem": "late VT reclaim consumes timing reserve",
+                "source_hook": "src/rsz/src/policy/RepairPowerPolicy.cc",
+                "decision_type": "candidate admission",
+                "observed_state": "VT rank distance and timing state",
+                "action": "restrict aggressive VT transitions",
+                "guard": "TNS safety ceiling",
+                "expected_effect": "retain leakage gain with less timing debt",
+            }
+            trace = root / "rounds" / "round_006" / "teacher_epd_retrieval_trace.jsonl"
+
+            rejected = validate_explorer_retrieval_audit(
+                state_root=root,
+                signatures=(signature,),
+                trace_path=trace,
+            )
+            packet = build_explorer_retrieval_packet(
+                state_root=root,
+                signatures=(signature,),
+                trace_path=trace,
+            )
+            accepted = validate_explorer_retrieval_audit(
+                state_root=root,
+                signatures=(signature,),
+                trace_path=trace,
+            )
+
+            self.assertFalse(rejected["accepted"])
+            self.assertIn("missing_search_trace", rejected["signatures"]["draft_1"]["errors"])
+            self.assertTrue(accepted["accepted"])
+            row = packet["signatures"][0]
+            self.assertEqual(len(row["results"]), 8)
+            self.assertEqual(row["opened_idea_ids"][:3], [item["idea_id"] for item in row["results"][:3]])
+            self.assertTrue(set(row["same_hook_boundary_ids"]).issubset(set(row["opened_idea_ids"])))
+            self.assertTrue(trace.is_file())
+
     def test_search_show_compare_pairs_and_trace_are_deterministic(self) -> None:
         from goalevolve.epd_search import EPDSearch
 
