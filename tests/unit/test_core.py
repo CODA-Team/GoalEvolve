@@ -25,7 +25,7 @@ from goalevolve.planning.epd import EPD_STATUSES, EvolutionProgramDatabase
 from goalevolve.execution.engine import GoalEvolveEngine
 from goalevolve.testing.evaluators import MockEvaluator
 from goalevolve.evaluation.evidence import classify_candidate
-from goalevolve.core.io import atomic_json, load_json
+from goalevolve.core.io import atomic_json, load_json, sha256_json
 from goalevolve.legacy import LegacyImporter
 from goalevolve.core.models import CandidateResult, CheckResult, EvidenceVerdict, Hypothesis, Parent
 from goalevolve.planning.observations import ObservationMemory
@@ -4045,6 +4045,7 @@ Keep the checked parent.
         self.assertEqual(evaluator.mode, "power_then_timing")
         self.assertEqual(staged.evaluation_mode, "power_then_timing")
         self.assertEqual(staged.metrics["tns_abs_ns"], 40.0)
+        self.assertNotIn("drv_count", staged.metrics)
         self.assertEqual(repeated, staged)
 
     def test_power_stage_remeasures_imported_full_flow_parent(self) -> None:
@@ -4059,14 +4060,18 @@ Keep the checked parent.
                 self.mode = kwargs["optimization_mode"]
                 return {
                     "ok": True,
-                    "metrics": {"tns_abs_ns": 170.0, "leakage_power_pw": 110.0},
+                    "metrics": {
+                        "tns_abs_ns": 170.0,
+                        "leakage_power_pw": 110.0,
+                        "drv_count": 0.0,
+                    },
                     "checks": [],
                     "artifacts": {},
                 }
 
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            parent = Parent("imported_full_flow", {"tns_abs_ns": 51.0, "leakage_power_pw": 120.0}, "commit", "hash", 0.0, "power_then_timing")
+            parent = Parent("imported_full_flow", {"tns_abs_ns": 51.0, "leakage_power_pw": 120.0, "drv_count": 0.0}, "commit", "hash", 0.0, "power_then_timing")
             (root / "parents" / parent.source_hash / "source").mkdir(parents=True)
             evaluator = StageEvaluator()
             engine = GoalEvolveEngine(
@@ -4090,6 +4095,362 @@ Keep the checked parent.
         self.assertEqual(staged.evaluation_mode, "power_only")
         self.assertEqual(staged.metrics["leakage_power_pw"], 110.0)
         self.assertEqual(repeated, staged)
+
+    def test_power_stage_rejects_nonzero_drv_parent_baseline(self) -> None:
+        class StageEvaluator:
+            name = "stage_evaluator"
+
+            def evaluate_parent(self, **_: object):
+                return {
+                    "ok": True,
+                    "metrics": {
+                        "tns_abs_ns": 170.0,
+                        "leakage_power_pw": 110.0,
+                        "drv_count": 160.0,
+                    },
+                    "checks": [],
+                    "artifacts": {},
+                }
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            parent = Parent(
+                "imported_full_flow",
+                {"tns_abs_ns": 51.0, "leakage_power_pw": 120.0},
+                "commit",
+                "hash",
+                0.0,
+                "power_then_timing",
+            )
+            (root / "parents" / parent.source_hash / "source").mkdir(parents=True)
+            engine = GoalEvolveEngine(
+                contract=self.contract,
+                state_root=root,
+                planner=SimpleNamespace(name="planner"),
+                evaluator=StageEvaluator(),
+                workspace_provider=SimpleNamespace(name="workspace"),
+                promotion_policy=SimpleNamespace(name="promotion"),
+            )
+            with self.assertRaisesRegex(RuntimeError, "stage_parent_baseline_nonzero_drv:160.0"):
+                engine._stage_matched_parent(
+                    parent=parent,
+                    decision_context={"evaluation_mode": "power_only"},
+                )
+
+    def test_power_stage_requires_an_explicit_finite_zero_drv_baseline(self) -> None:
+        class StageEvaluator:
+            name = "stage_evaluator"
+
+            def __init__(self, drv_count: object, *, include_drv: bool = True) -> None:
+                self.drv_count = drv_count
+                self.include_drv = include_drv
+
+            def evaluate_parent(self, **_: object) -> dict[str, object]:
+                metrics: dict[str, object] = {
+                    "tns_abs_ns": 170.0,
+                    "leakage_power_pw": 110.0,
+                }
+                if self.include_drv:
+                    metrics["drv_count"] = self.drv_count
+                return {"ok": True, "metrics": metrics, "checks": [], "artifacts": {}}
+
+        cases = (
+            ("missing", None, False, "stage_parent_baseline_invalid_drv:missing"),
+            ("string", "0", True, "stage_parent_baseline_invalid_drv:non_numeric"),
+            ("nan", float("nan"), True, "stage_parent_baseline_invalid_drv:non_finite"),
+            ("infinity", float("inf"), True, "stage_parent_baseline_invalid_drv:non_finite"),
+            ("nonzero", 160.0, True, "stage_parent_baseline_nonzero_drv:160.0"),
+        )
+        for label, drv_count, include_drv, reason in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                parent = Parent(
+                    "imported_full_flow",
+                    {"tns_abs_ns": 51.0, "leakage_power_pw": 120.0, "drv_count": 0.0},
+                    "commit",
+                    "hash",
+                    0.0,
+                    "power_then_timing",
+                )
+                (root / "parents" / parent.source_hash / "source").mkdir(parents=True)
+                engine = GoalEvolveEngine(
+                    contract=self.contract,
+                    state_root=root,
+                    planner=SimpleNamespace(name="planner"),
+                    evaluator=StageEvaluator(drv_count, include_drv=include_drv),
+                    workspace_provider=SimpleNamespace(name="workspace"),
+                    promotion_policy=SimpleNamespace(name="promotion"),
+                )
+                with self.assertRaisesRegex(RuntimeError, reason):
+                    engine._stage_matched_parent(
+                        parent=parent,
+                        decision_context={"evaluation_mode": "power_only"},
+                    )
+                rejection = next(root.glob("stage_baselines/*/parent_stage_baseline_rejected.json"))
+                self.assertEqual(load_json(rejection)["reason"], reason)
+
+    def test_resume_restores_invalid_power_stage_parent_from_recorded_pre_stage_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            before = Parent(
+                "baseline",
+                {"tns_abs_ns": 70.0, "leakage_power_pw": 180.0, "drv_count": 0.0},
+                "commit",
+                "hash",
+                0.5,
+                "unknown",
+            )
+            invalid = Parent(
+                "baseline",
+                {"tns_abs_ns": 170.0, "leakage_power_pw": 110.0, "drv_count": 160.0},
+                "commit",
+                "hash",
+                1.0,
+                "power_only",
+            )
+            atomic_json(root / "parent.json", invalid.to_dict())
+            atomic_json(
+                root / "stage_baselines" / "invalid_power_only" / "parent_stage_baseline.json",
+                {
+                    "parent_before": before.to_dict(),
+                    "parent_after": invalid.to_dict(),
+                    "parent_after_hash": sha256_json(invalid.to_dict()),
+                    "evaluation_mode": "power_only",
+                },
+            )
+            engine = GoalEvolveEngine(
+                contract=self.contract,
+                state_root=root,
+                planner=SimpleNamespace(name="planner"),
+                evaluator=SimpleNamespace(name="evaluator"),
+                workspace_provider=SimpleNamespace(name="workspace"),
+                promotion_policy=SimpleNamespace(name="promotion"),
+            )
+            resumed = engine.run(rounds=0)
+        self.assertEqual(resumed, before)
+
+    def test_resume_recovers_legacy_power_stage_record_without_after_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            before = Parent(
+                "baseline",
+                {"tns_abs_ns": 70.0, "leakage_power_pw": 180.0},
+                "commit",
+                "hash",
+                0.5,
+                "unknown",
+            )
+            invalid = Parent(
+                "baseline",
+                {"tns_abs_ns": 170.0, "leakage_power_pw": 110.0, "drv_count": 160.0},
+                "commit",
+                "hash",
+                1.0,
+                "power_only",
+            )
+            atomic_json(
+                root / "stage_baselines" / "legacy_invalid_power_only" / "parent_stage_baseline.json",
+                {
+                    "parent_before": before.to_dict(),
+                    "parent_after": invalid.to_dict(),
+                    "evaluation_mode": "power_only",
+                },
+            )
+            engine = GoalEvolveEngine(
+                contract=self.contract,
+                state_root=root,
+                planner=SimpleNamespace(name="planner"),
+                evaluator=SimpleNamespace(name="evaluator"),
+                workspace_provider=SimpleNamespace(name="workspace"),
+                promotion_policy=SimpleNamespace(name="promotion"),
+            )
+            restored = engine._restore_invalid_power_stage_parent(invalid)
+        self.assertEqual(restored, before)
+
+    def test_power_stage_recovery_rejects_explicit_malformed_after_hash(self) -> None:
+        for label, recorded_hash in (
+            ("blank", ""),
+            ("null", None),
+            ("numeric", 1),
+        ):
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                before = Parent(
+                    "baseline",
+                    {"tns_abs_ns": 70.0, "leakage_power_pw": 180.0, "drv_count": 0.0},
+                    "commit",
+                    "hash",
+                    0.5,
+                    "unknown",
+                )
+                invalid = Parent(
+                    "baseline",
+                    {"tns_abs_ns": 170.0, "leakage_power_pw": 110.0, "drv_count": 160.0},
+                    "commit",
+                    "hash",
+                    1.0,
+                    "power_only",
+                )
+                atomic_json(
+                    root / "stage_baselines" / "invalid_power_only" / "parent_stage_baseline.json",
+                    {
+                        "parent_before": before.to_dict(),
+                        "parent_after": invalid.to_dict(),
+                        "parent_after_hash": recorded_hash,
+                        "evaluation_mode": "power_only",
+                    },
+                )
+                engine = GoalEvolveEngine(
+                    contract=self.contract,
+                    state_root=root,
+                    planner=SimpleNamespace(name="planner"),
+                    evaluator=SimpleNamespace(name="evaluator"),
+                    workspace_provider=SimpleNamespace(name="workspace"),
+                    promotion_policy=SimpleNamespace(name="promotion"),
+                )
+                with self.assertRaisesRegex(RuntimeError, "invalid_power_stage_parent"):
+                    engine._restore_invalid_power_stage_parent(invalid)
+                self.assertFalse((root / "stage_parent_recovery.json").exists())
+
+    def test_recovery_invalidates_stale_power_baseline_before_remeasurement(self) -> None:
+        class StageEvaluator:
+            name = "stage_evaluator"
+
+            def __init__(self) -> None:
+                self.calls = 0
+                self.compatibility_roots: list[Path] = []
+
+            def baseline_artifact_compatible(self, *, baseline_root: Path, **_: object) -> bool:
+                self.compatibility_roots.append(baseline_root)
+                return True
+
+            def evaluate_parent(self, **_: object) -> dict[str, object]:
+                self.calls += 1
+                return {
+                    "ok": True,
+                    "metrics": {
+                        "tns_abs_ns": 70.0,
+                        "leakage_power_pw": 180.0,
+                        "drv_count": 0.0,
+                    },
+                    "checks": [],
+                    "artifacts": {},
+                }
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            before = Parent(
+                "baseline",
+                {"tns_abs_ns": 70.0, "leakage_power_pw": 180.0, "drv_count": 0.0},
+                "commit",
+                "hash",
+                0.5,
+                "unknown",
+            )
+            invalid = replace(
+                before,
+                metrics={"tns_abs_ns": 170.0, "leakage_power_pw": 110.0, "drv_count": 160.0},
+                goal_distance=1.0,
+                evaluation_mode="power_only",
+            )
+            stale_root = root / "stage_baselines" / f"{before.source_hash}_power_only_stale"
+            stale_baseline = {
+                "ok": True,
+                "source_hash": before.source_hash,
+                "evaluation_mode": "power_only",
+                "timing_recipe_id": "legacy_setup",
+                "metrics": dict(invalid.metrics),
+                "checks": [],
+                "artifacts": {},
+            }
+            atomic_json(stale_root / "baseline.json", stale_baseline)
+            atomic_json(
+                stale_root / "parent_stage_baseline.json",
+                {
+                    "parent_before": before.to_dict(),
+                    "parent_after": invalid.to_dict(),
+                    "parent_after_hash": sha256_json(invalid.to_dict()),
+                    "evaluation_mode": "power_only",
+                },
+            )
+            (root / "parents" / before.source_hash / "source").mkdir(parents=True)
+            evaluator = StageEvaluator()
+            engine = GoalEvolveEngine(
+                contract=self.contract,
+                state_root=root,
+                planner=SimpleNamespace(name="planner"),
+                evaluator=evaluator,
+                workspace_provider=SimpleNamespace(name="workspace"),
+                promotion_policy=SimpleNamespace(name="promotion"),
+            )
+            recovered = engine._restore_invalid_power_stage_parent(invalid)
+            staged = engine._stage_matched_parent(
+                parent=recovered,
+                decision_context={"evaluation_mode": "power_only"},
+            )
+            invalidation = load_json(stale_root / "parent_stage_baseline_invalidated.json")
+        self.assertEqual(evaluator.calls, 1)
+        self.assertEqual(evaluator.compatibility_roots, [])
+        self.assertEqual(staged.metrics["drv_count"], 0.0)
+        self.assertEqual(invalidation["invalidated_baseline"], stale_baseline)
+
+    def test_power_stage_recovery_requires_valid_current_previous_drv_and_after_hash(self) -> None:
+        cases = (
+            (
+                "missing_current_drv",
+                {"tns_abs_ns": 170.0, "leakage_power_pw": 110.0},
+                {"tns_abs_ns": 70.0, "leakage_power_pw": 180.0, "drv_count": 0.0},
+                True,
+                "unknown",
+            ),
+            (
+                "malformed_previous_drv",
+                {"tns_abs_ns": 170.0, "leakage_power_pw": 110.0, "drv_count": 160.0},
+                {"tns_abs_ns": 70.0, "leakage_power_pw": 180.0, "drv_count": "0"},
+                True,
+                "unknown",
+            ),
+            (
+                "mismatched_after_hash",
+                {"tns_abs_ns": 170.0, "leakage_power_pw": 110.0, "drv_count": 160.0},
+                {"tns_abs_ns": 70.0, "leakage_power_pw": 180.0, "drv_count": 0.0},
+                False,
+                "unknown",
+            ),
+            (
+                "missing_previous_power_only_drv",
+                {"tns_abs_ns": 170.0, "leakage_power_pw": 110.0, "drv_count": 160.0},
+                {"tns_abs_ns": 70.0, "leakage_power_pw": 180.0},
+                True,
+                "power_only",
+            ),
+        )
+        for label, current_metrics, before_metrics, matching_after_hash, before_mode in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                current = Parent("baseline", current_metrics, "commit", "hash", 1.0, "power_only")
+                before = Parent("baseline", before_metrics, "commit", "hash", 0.5, before_mode)
+                after_hash = sha256_json(current.to_dict())
+                atomic_json(
+                    root / "stage_baselines" / "invalid_power_only" / "parent_stage_baseline.json",
+                    {
+                        "parent_before": before.to_dict(),
+                        "parent_after": current.to_dict(),
+                        "parent_after_hash": after_hash if matching_after_hash else "different-recorded-parent",
+                        "evaluation_mode": "power_only",
+                    },
+                )
+                engine = GoalEvolveEngine(
+                    contract=self.contract,
+                    state_root=root,
+                    planner=SimpleNamespace(name="planner"),
+                    evaluator=SimpleNamespace(name="evaluator"),
+                    workspace_provider=SimpleNamespace(name="workspace"),
+                    promotion_policy=SimpleNamespace(name="promotion"),
+                )
+                with self.assertRaisesRegex(RuntimeError, "invalid_power_stage_parent"):
+                    engine._restore_invalid_power_stage_parent(current)
+                self.assertFalse((root / "stage_parent_recovery.json").exists())
 
     def test_stage_parent_does_not_remeasure_same_mode_after_evaluator_revision(self) -> None:
         class StageEvaluator:

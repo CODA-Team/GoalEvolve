@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import shutil
 from copy import deepcopy
@@ -169,6 +170,7 @@ class GoalEvolveEngine:
 
     def run(self, *, rounds: int, baseline_metrics: dict[str, float] | None = None) -> Parent:
         parent = self._load_parent() if (self.state_root / "parent.json").is_file() else self.initialize(baseline_metrics=baseline_metrics or self.contract.baseline_metrics)
+        parent = self._restore_invalid_power_stage_parent(parent)
         reclassified = self._epd().reclassify_historical_unactivated_attempts()
         if reclassified:
             print(f"[GoalEvolve][epd] reclassified_unactivated={len(reclassified)}", flush=True)
@@ -2192,6 +2194,144 @@ class GoalEvolveEngine:
             raise RuntimeError("parent.json is missing or invalid")
         return Parent(**data)
 
+    def _restore_invalid_power_stage_parent(self, parent: Parent) -> Parent:
+        """Recover the prior lineage parent if an old power-only stage was invalid.
+
+        A stage baseline only changes the controller's Tcl operating point; it
+        has no source attribution authority.  A nonzero-DRV power-only stage
+        therefore cannot remain the campaign parent, because every child
+        measured by that stage would fail promotion before its source delta is
+        considered.  Older state roots could persist such a stage before the
+        admission check existed, so restore its recorded pre-stage parent on
+        resume rather than spending additional Student rounds on it.
+        """
+        if parent.evaluation_mode != "power_only":
+            return parent
+        drv, drv_error = self._explicit_finite_drv(parent.metrics)
+        if drv_error:
+            reason = f"invalid_power_stage_parent_drv_count:{drv_error}"
+            atomic_json(
+                self.state_root / "stage_parent_recovery_rejected.json",
+                {
+                    "rejected_stage_parent": parent.to_dict(),
+                    "reason": reason,
+                    "recovery_authority": "none",
+                },
+            )
+            raise RuntimeError(reason)
+        assert drv is not None
+        if drv == 0.0:
+            return parent
+        for path in sorted((self.state_root / "stage_baselines").glob("*/parent_stage_baseline.json"), reverse=True):
+            payload = load_json(path, {}) or {}
+            if not isinstance(payload, Mapping):
+                continue
+            before_data = payload.get("parent_before")
+            after_data = payload.get("parent_after")
+            if not isinstance(before_data, Mapping) or not isinstance(after_data, Mapping):
+                continue
+            try:
+                before = Parent(**dict(before_data))
+                after = Parent(**dict(after_data))
+            except (TypeError, ValueError):
+                continue
+            after_hash = sha256_json(after.to_dict())
+            parent_hash = sha256_json(parent.to_dict())
+            if "parent_after_hash" in payload:
+                recorded_after_hash = payload.get("parent_after_hash")
+                after_matches_parent = (
+                    isinstance(recorded_after_hash, str)
+                    and bool(recorded_after_hash)
+                    and recorded_after_hash == after_hash
+                    and recorded_after_hash == parent_hash
+                )
+            else:
+                # Stage records pre-dating parent_after_hash remain safe to
+                # recover only when their canonical parent_after payload is
+                # exactly the persisted current parent.
+                after_matches_parent = after_hash == parent_hash
+            if not after_matches_parent:
+                continue
+            if before.evaluation_mode == "power_only" or "drv_count" in before.metrics:
+                before_drv, before_drv_error = self._explicit_finite_drv(before.metrics)
+                if before_drv_error or before_drv != 0.0:
+                    continue
+            self._invalidate_recovered_stage_baseline(
+                stage_record=path,
+                recovered_parent=before,
+                rejected_parent=parent,
+                reason=f"stage_parent_baseline_nonzero_drv:{drv}",
+            )
+            atomic_json(self.state_root / "parent.json", before.to_dict())
+            atomic_json(
+                self.state_root / "stage_parent_recovery.json",
+                {
+                    "recovered_parent": before.to_dict(),
+                    "rejected_stage_parent": parent.to_dict(),
+                    "stage_record": str(path),
+                    "reason": f"stage_parent_baseline_nonzero_drv:{drv}",
+                },
+            )
+            print(
+                f"[GoalEvolve][stage-baseline] restored_pre_stage_parent={before.parent_id} "
+                f"rejected_drv={drv}",
+                flush=True,
+            )
+            return before
+        raise RuntimeError(f"invalid_power_stage_parent_without_recovery_record:drv_count={drv}")
+
+    @staticmethod
+    def _explicit_finite_drv(metrics: Mapping[str, object]) -> tuple[float | None, str]:
+        """Return an explicit finite numeric DRV count, never a permissive default."""
+        if "drv_count" not in metrics:
+            return None, "missing"
+        value = metrics.get("drv_count")
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None, "non_numeric"
+        drv = float(value)
+        if not math.isfinite(drv):
+            return None, "non_finite"
+        return drv, ""
+
+    def _invalidate_recovered_stage_baseline(
+        self,
+        *,
+        stage_record: Path,
+        recovered_parent: Parent,
+        rejected_parent: Parent,
+        reason: str,
+    ) -> None:
+        """Quarantine the exact cache payload that produced a recovered parent."""
+        baseline_path = stage_record.parent / "baseline.json"
+        baseline = load_json(baseline_path, {}) or {}
+        invalidated_baseline = dict(baseline) if isinstance(baseline, Mapping) else {}
+        atomic_json(
+            stage_record.parent / "parent_stage_baseline_invalidated.json",
+            {
+                "schema_version": "goalevolve.v2.stage-baseline-invalidation.v1",
+                "stage_record": str(stage_record),
+                "recovered_parent": recovered_parent.to_dict(),
+                "rejected_parent": rejected_parent.to_dict(),
+                "reason": reason,
+                "invalidated_baseline": invalidated_baseline,
+                "invalidated_baseline_hash": sha256_json(invalidated_baseline),
+            },
+        )
+
+    @staticmethod
+    def _is_invalidated_stage_baseline(baseline_root: Path) -> bool:
+        """Whether the current cache payload is the one rejected on recovery."""
+        invalidation = load_json(
+            baseline_root / "parent_stage_baseline_invalidated.json", {}
+        ) or {}
+        if not isinstance(invalidation, Mapping):
+            return False
+        baseline = load_json(baseline_root / "baseline.json", {}) or {}
+        if not isinstance(baseline, Mapping):
+            return True
+        expected_hash = str(invalidation.get("invalidated_baseline_hash") or "")
+        return not expected_hash or expected_hash == sha256_json(dict(baseline))
+
     def _adopt_execution_champion(self, parent: Parent) -> Parent:
         """Adopt the closest complete source+recipe operating point.
 
@@ -2409,7 +2549,8 @@ class GoalEvolveEngine:
             / f"{parent.source_hash}_{mode}_{cache_suffix}"
         )
         baseline_path = baseline_root / "baseline.json"
-        if not baseline_path.is_file():
+        baseline_invalidated = self._is_invalidated_stage_baseline(baseline_root)
+        if not baseline_path.is_file() or baseline_invalidated:
             compatible = self._compatible_cached_baseline(
                 parent=parent,
                 mode=mode,
@@ -2422,7 +2563,12 @@ class GoalEvolveEngine:
                     f"[GoalEvolve][stage-baseline] reuse_compatible_cache={baseline_path}",
                     flush=True,
                 )
-        payload = load_json(baseline_path, {}) if baseline_path.is_file() else {}
+        baseline_invalidated = self._is_invalidated_stage_baseline(baseline_root)
+        payload = (
+            {}
+            if baseline_invalidated
+            else load_json(baseline_path, {}) if baseline_path.is_file() else {}
+        )
         if not isinstance(payload, dict) or not bool(payload.get("ok")):
             print(
                 f"[GoalEvolve][stage-baseline] start parent={parent.parent_id} mode={mode}",
@@ -2440,9 +2586,10 @@ class GoalEvolveEngine:
             raise RuntimeError(
                 f"stage_parent_baseline_failed:{baseline_path}"
             )
+        raw_metrics = dict(payload.get("metrics") or {})
         metrics = {
             str(name): float(value)
-            for name, value in dict(payload.get("metrics") or {}).items()
+            for name, value in raw_metrics.items()
             if isinstance(value, (int, float))
         }
         required = {metric.name for metric in self.contract.metrics}
@@ -2451,6 +2598,25 @@ class GoalEvolveEngine:
                 "stage_parent_baseline_missing_metrics:"
                 + ",".join(sorted(required - set(metrics)))
             )
+        rejection_reason = ""
+        if mode == "power_only":
+            stage_drv, drv_error = self._explicit_finite_drv(raw_metrics)
+            if drv_error:
+                rejection_reason = f"stage_parent_baseline_invalid_drv:{drv_error}"
+            elif stage_drv != 0.0:
+                rejection_reason = f"stage_parent_baseline_nonzero_drv:{stage_drv}"
+        if rejection_reason:
+            atomic_json(
+                baseline_root / "parent_stage_baseline_rejected.json",
+                {
+                    "parent_before": parent.to_dict(),
+                    "evaluation_mode": mode,
+                    "baseline": payload,
+                    "reason": rejection_reason,
+                    "promotion_authority": "none",
+                },
+            )
+            raise RuntimeError(rejection_reason)
         distance, _, _ = self.contract.evaluate(metrics)
         staged = replace(
             parent,
@@ -2476,6 +2642,7 @@ class GoalEvolveEngine:
             {
                 "parent_before": parent.to_dict(),
                 "parent_after": staged.to_dict(),
+                "parent_after_hash": sha256_json(staged.to_dict()),
                 "evaluation_mode": mode,
                 "baseline": payload,
             },
@@ -2659,6 +2826,8 @@ class GoalEvolveEngine:
         for candidate_root in root.glob(f"{parent.source_hash}_{mode}_*"):
             baseline_path = candidate_root / "baseline.json"
             if not baseline_path.is_file():
+                continue
+            if self._is_invalidated_stage_baseline(candidate_root):
                 continue
             payload = load_json(baseline_path, {}) or {}
             if not isinstance(payload, Mapping):
