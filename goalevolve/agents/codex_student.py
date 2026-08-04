@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import shutil
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .codex_runtime import CodexRuntimeConfig, PersistentCodexRunner
+from ..core.io import atomic_json
 from ..core.models import Hypothesis, Parent
 
 
@@ -141,6 +143,31 @@ class CodexStudentEditor:
                 path.unlink()
             removed.append(path.name if path.parent == workspace else "source/.git")
         return tuple(removed)
+
+    @staticmethod
+    def _write_internal_cpp_scheduling_decision(
+        *, artifact_root: Path, last_message: Path, suggestion: str
+    ) -> Path:
+        """Persist the Student's advisory scheduling decision for later audit."""
+        try:
+            message = last_message.read_text(encoding="utf-8")
+        except OSError:
+            message = ""
+        decision_match = re.search(
+            r"(?im)^\s*-\s*Decision:\s*(accepted|adapted|rejected)\s*$", message
+        )
+        rationale_match = re.search(r"(?im)^\s*-\s*Rationale:\s*(.+?)\s*$", message)
+        path = artifact_root / "internal_cpp_scheduling_decision.json"
+        atomic_json(
+            path,
+            {
+                "suggestion": suggestion,
+                "decision": decision_match.group(1).lower() if decision_match else "not_recorded",
+                "rationale": rationale_match.group(1).strip() if rationale_match else "not_recorded",
+                "advisory_only": True,
+            },
+        )
+        return path
 
     def _execution_prompt(self, *, prompt_path: Path, source: Path, parent: Parent, hypothesis: Hypothesis) -> str:
         allowed = ", ".join(self.config.allowed_patch_roots) or "only the assigned source hooks"
