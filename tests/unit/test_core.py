@@ -2867,9 +2867,9 @@ Keep the checked parent.
         self.assertIn("## Integrator Operating Protocol", packet)
         self.assertIn("EPD_timing", packet)
         self.assertIn("/tmp/power.diff", packet)
-        self.assertIn("Do not blindly apply", packet)
+        self.assertIn("Do not concatenate", packet)
 
-    def test_enhancer_packet_includes_prior_source_change_bundle(self) -> None:
+    def test_enhancer_packet_routes_prior_source_change_through_artifact_path(self) -> None:
         from goalevolve.agents.prompting import student_packet
 
         hypothesis = Hypothesis(
@@ -2897,13 +2897,229 @@ Keep the checked parent.
                 },
             ),
         )
-        self.assertIn("## Prior Source Change Bundle", packet)
-        self.assertIn("src/rsz/src/Timing.cc", packet)
-        self.assertIn("add bounded endpoint guard", packet)
-        self.assertIn("remove unguarded selection", packet)
-        self.assertIn("added:endpoint_guard", packet)
-        self.assertIn("removed:unguarded_selection", packet)
-        self.assertIn("added:METRIC|timing_examined", packet)
+        self.assertIn("## Enhancer Candidate Directory", packet)
+        self.assertIn("## Previous-round Enhancer Dossier", packet)
+        self.assertIn("/tmp/promising.diff", packet)
+        self.assertNotIn("add bounded endpoint guard", packet)
+        self.assertNotIn("remove unguarded selection", packet)
+        self.assertNotIn("added:endpoint_guard", packet)
+        self.assertNotIn("removed:unguarded_selection", packet)
+        self.assertNotIn("added:METRIC|timing_examined", packet)
+
+    def test_student_packets_route_epd_evidence_by_role(self) -> None:
+        from goalevolve.agents.prompting import student_packet
+
+        with tempfile.TemporaryDirectory() as temporary:
+            epd_root = Path(temporary) / "knowledge" / "epd"
+            mechanism_path = epd_root / "mechanisms" / "MECH_demo" / "mechanism_card.json"
+            atomic_json(
+                mechanism_path,
+                {
+                    "mechanism_id": "MECH_demo",
+                    "attempt_ids": ["EPD_promising", "EPD_validated"],
+                    "status": "promising",
+                    "mechanism_summary": "Bound endpoint candidate admission.",
+                    "decision_boundary": "candidate admission",
+                    "source_hooks": ["src/rsz/src/Timing.cc"],
+                    "state_read_set": ["endpoint slack"],
+                    "source_write_set": ["candidate admission"],
+                    "action_type": "candidate_filter",
+                    "commit_scope": "candidate",
+                    "dependencies": [],
+                    "known_conflicts": ["shared ranking guard"],
+                    "parent_compatibility": ["baseline"],
+                    "observed_qor_effects": [],
+                    "downstream_retention": [],
+                    "student_reflection_paths": [str(epd_root / "attempts" / "EPD_promising" / "student_reflection.md")],
+                    "implementation_artifact_paths": [str(epd_root / "attempts" / "EPD_promising" / "implementation.diff")],
+                },
+            )
+            atomic_json(epd_root / "manifest.json", {"mechanisms": [{"mechanism_id": "MECH_demo", "path": str(mechanism_path), "status": "promising"}]})
+            records = (
+                {
+                    "record_id": "EPD_promising",
+                    "idea_id": "IDEA_promising",
+                    "epd_status": "promising",
+                    "metrics": {"tns_abs_ns": 99.0},
+                    "phase_signals": {"endpoint_examined": 1.0},
+                    "source_hooks": ("src/rsz/src/Timing.cc",),
+                    "source_change_bundle": {"added_code": ["do not inline this source"]},
+                },
+                {
+                    "record_id": "EPD_validated",
+                    "idea_id": "IDEA_validated",
+                    "epd_status": "validated",
+                    "metrics": {"tns_abs_ns": 98.0},
+                    "phase_signals": {"endpoint_examined": 2.0},
+                    "source_hooks": ("src/rsz/src/Timing.cc",),
+                },
+            )
+            explorer = replace(self.hypothesis, student_id="student_1", student_role="explorer", epd_idea_id="IDEA_new")
+            enhancer = replace(self.hypothesis, student_id="student_2", student_role="enhancer", role_mode="epd_enhancement", epd_record_ids=("EPD_promising",))
+            integrator = replace(self.hypothesis, student_id="student_3", student_role="integrator", role_mode="epd_integration", epd_record_ids=("EPD_promising", "EPD_validated"))
+            explorer_packet = student_packet(
+                parent=self.parent,
+                hypothesis=explorer,
+                prior=(),
+                epd_root=epd_root,
+                idea_record={"draft_signature_id": "draft_1", "epd_search_query": "draft_1", "retrieved_historical_ideas": ["IDEA_old"], "opened_epd_records": ["IDEA_old"], "nearest_historical_idea": "IDEA_old", "novelty_conclusion": "different decision state"},
+            )
+            enhancer_packet = student_packet(parent=self.parent, hypothesis=enhancer, prior=(), epd_records=records, epd_root=epd_root)
+            integrator_packet = student_packet(parent=self.parent, hypothesis=integrator, prior=(), epd_records=records, epd_root=epd_root)
+
+        self.assertIn("## Explorer Novelty Obligations", explorer_packet)
+        self.assertIn("draft_1", explorer_packet)
+        self.assertNotIn("EPD_promising", explorer_packet)
+        self.assertIn("## Enhancer Candidate Directory", enhancer_packet)
+        self.assertIn("student_reflection.md", enhancer_packet)
+        self.assertNotIn("do not inline this source", enhancer_packet)
+        self.assertIn("## Integrator Compatibility Directory", integrator_packet)
+        self.assertIn("source_write_set", integrator_packet)
+        self.assertIn("shared ranking guard", integrator_packet)
+        for packet in (explorer_packet, enhancer_packet, integrator_packet):
+            self.assertIn("## Student Reflection", packet)
+
+    def test_enhancer_packet_routes_mechanism_card_and_compact_evidence(self) -> None:
+        from goalevolve.agents.prompting import student_packet
+
+        with tempfile.TemporaryDirectory() as temporary:
+            epd_root = Path(temporary) / "knowledge" / "epd"
+            mechanism_path = epd_root / "mechanisms" / "MECH_promising" / "mechanism_card.json"
+            atomic_json(
+                mechanism_path,
+                {
+                    "mechanism_id": "MECH_promising",
+                    "attempt_ids": ["EPD_promising"],
+                    "status": "promising",
+                },
+            )
+            atomic_json(
+                epd_root / "manifest.json",
+                {"mechanisms": [{"mechanism_id": "MECH_promising", "path": str(mechanism_path), "status": "promising"}]},
+            )
+            enhancer = replace(
+                self.hypothesis,
+                student_role="enhancer",
+                role_mode="epd_enhancement",
+                epd_record_ids=("EPD_promising",),
+            )
+            packet = student_packet(
+                parent=self.parent,
+                hypothesis=enhancer,
+                prior=(),
+                epd_root=epd_root,
+                epd_records=(
+                    {
+                        "record_id": "EPD_promising",
+                        "idea_id": "IDEA_promising",
+                        "epd_status": "promising",
+                        "evidence_state": "verified_qor_unattributed",
+                        "distance_gain": 0.25,
+                        "metrics": {"full_metric_must_stay_path_addressable": 123.0},
+                        "phase_signals": {"full_signal_must_stay_path_addressable": 1.0},
+                        "expected_signals": ("expected_signal",),
+                    },
+                ),
+            )
+
+        self.assertIn(str(mechanism_path), packet)
+        self.assertIn('"evidence_state": "verified_qor_unattributed"', packet)
+        self.assertIn('"activation_summary"', packet)
+        self.assertNotIn("full_metric_must_stay_path_addressable", packet)
+        self.assertNotIn("full_signal_must_stay_path_addressable", packet)
+
+    def test_enhancer_dossier_excludes_unselected_eligible_record(self) -> None:
+        from goalevolve.agents.prompting import student_packet
+
+        enhancer = replace(
+            self.hypothesis,
+            student_role="enhancer",
+            role_mode="epd_enhancement",
+            epd_record_ids=("EPD_selected",),
+        )
+        packet = student_packet(
+            parent=self.parent,
+            hypothesis=enhancer,
+            prior=(),
+            epd_records=(
+                {
+                    "record_id": "EPD_selected",
+                    "epd_status": "promising",
+                    "source_change_bundle": {"prior_claim": "selected dossier claim"},
+                },
+                {
+                    "record_id": "EPD_unrelated",
+                    "epd_status": "promising",
+                    "source_change_bundle": {"prior_claim": "unrelated dossier claim"},
+                },
+            ),
+            enhancement_eligible_record_ids=("EPD_selected", "EPD_unrelated"),
+        )
+
+        self.assertIn("EPD_unrelated", packet)
+        self.assertIn("selected dossier claim", packet)
+        self.assertNotIn("unrelated dossier claim", packet)
+
+    def test_integrator_packet_uses_only_controller_eligible_mechanisms(self) -> None:
+        from goalevolve.agents.prompting import student_packet
+
+        with tempfile.TemporaryDirectory() as temporary:
+            epd_root = Path(temporary) / "knowledge" / "epd"
+            cards = {
+                "MECH_valid": ("EPD_valid", "validated", "large_valid_metric"),
+                "MECH_promising": ("EPD_promising", "promising", "large_promising_metric"),
+                "MECH_inherited": ("EPD_inherited", "validated", "large_inherited_metric"),
+            }
+            manifest_rows = []
+            for mechanism_id, (record_id, status, metric) in cards.items():
+                mechanism_path = epd_root / "mechanisms" / mechanism_id / "mechanism_card.json"
+                atomic_json(
+                    mechanism_path,
+                    {
+                        "mechanism_id": mechanism_id,
+                        "attempt_ids": [record_id],
+                        "status": status,
+                        "mechanism_summary": mechanism_id,
+                        "observed_qor_effects": [{"record_id": record_id, "metrics": {metric: 1.0}, "distance_gain": 0.1}],
+                        "downstream_retention": [{"record_id": record_id, "checkpoint_effects": {metric: {"tns_abs_ns": 1.0}}}],
+                    },
+                )
+                manifest_rows.append({"mechanism_id": mechanism_id, "path": str(mechanism_path), "status": status})
+            atomic_json(epd_root / "manifest.json", {"mechanisms": manifest_rows})
+            integrator = replace(
+                self.hypothesis,
+                student_role="integrator",
+                role_mode="epd_integration",
+                epd_record_ids=("EPD_valid",),
+            )
+            packet = student_packet(
+                parent=self.parent,
+                hypothesis=integrator,
+                prior=(),
+                epd_root=epd_root,
+                epd_records=(
+                    {"record_id": "EPD_valid", "epd_status": "validated"},
+                    {"record_id": "EPD_promising", "epd_status": "promising"},
+                    {"record_id": "EPD_inherited", "epd_status": "validated"},
+                ),
+                integration_eligible_record_ids=("EPD_valid",),
+            )
+
+        self.assertIn("MECH_valid", packet)
+        self.assertNotIn("MECH_promising", packet)
+        self.assertNotIn("MECH_inherited", packet)
+        self.assertIn('"qor_summary"', packet)
+        self.assertIn('"downstream_retention_summary"', packet)
+        self.assertNotIn("large_valid_metric", packet)
+
+    def test_student_reflection_contract_requires_bounded_avoidance_recommendation(self) -> None:
+        from goalevolve.agents.prompting import student_packet
+
+        packet = student_packet(parent=self.parent, hypothesis=self.hypothesis, prior=())
+
+        self.assertIn("avoid-next-time mechanism", packet)
+        self.assertIn("exactly one of validated|promising|invalid|unactivated", packet)
+        self.assertIn("Controller alone decides promotion", packet)
 
     def test_teacher_markdown_handoff_is_compiled_into_the_student_packet(self) -> None:
         from goalevolve.agents.prompting import student_packet

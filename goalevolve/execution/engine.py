@@ -846,6 +846,10 @@ class GoalEvolveEngine:
         for student_id, hypothesis in zip(assigned_student_ids, hypotheses, strict=True):
             prompt = round_root / "prompts" / f"{student_id}.md"
             if not prompt.is_file():
+                try:
+                    idea_record = epd_database.idea(hypothesis.epd_idea_id)
+                except KeyError:
+                    idea_record = {}
                 prompt.write_text(
                     student_packet(
                         parent=parent,
@@ -853,6 +857,16 @@ class GoalEvolveEngine:
                         prior=prior,
                         decision_context=decision_context,
                         epd_records=epd_records,
+                        epd_root=epd_database.projection_root,
+                        idea_record=idea_record,
+                        integration_eligible_record_ids=tuple(
+                            str(record_id)
+                            for record_id in list(epd_portfolio.get("integration_eligible_record_ids") or ())
+                        ),
+                        enhancement_eligible_record_ids=tuple(
+                            str(record_id)
+                            for record_id in list(epd_portfolio.get("enhancement_candidates") or ())
+                        ),
                     ),
                     encoding="utf-8",
                 )
