@@ -1490,6 +1490,30 @@ Keep parent.
         self.assertEqual(candidate_window.status, "resolved")
         self.assertEqual(mismatched.status, "missing")
 
+    def test_repository_graph_does_not_merge_separated_reference_markers(self) -> None:
+        from goalevolve.planning.repository_graph import RepositoryGraphIndex
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            implementation = source / "src/rsz/Foo.cc"
+            implementation.parent.mkdir(parents=True)
+            implementation.write_text(
+                "namespace rsz { void f(int &&value) {} }\n",
+                encoding="utf-8",
+            )
+            graph = RepositoryGraphIndex(
+                state_root=root / "state",
+                p0_source_root=source,
+                p0_artifact_root=root / "p0_graph",
+            ).build_p0(source_hash="p0")
+
+        valid = graph.resolve_anchor("src/rsz/Foo.cc::rsz::f(int && value)")
+        malformed = graph.resolve_anchor("src/rsz/Foo.cc::rsz::f(int & &value)")
+
+        self.assertEqual(valid.status, "resolved")
+        self.assertEqual(malformed.status, "missing")
+
     def test_controller_rejects_source_evidence_from_a_stale_graph_file(self) -> None:
         from goalevolve.execution.teacher_assignment import (
             build_role_templates,

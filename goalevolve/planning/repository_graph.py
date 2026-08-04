@@ -947,9 +947,10 @@ def _qualified_declarator(symbol: GraphSymbol) -> str:
 
 
 def _normalized_declarator_spacing(declarator: str) -> str:
-    """Ignore whitespace next to C++ declarator punctuation only."""
+    """Ignore safe C++ declarator-punctuation whitespace only."""
 
-    return re.sub(r"\s*(::|[(),*&\[\]])\s*", r"\1", declarator)
+    normalized = re.sub(r"\s*(::|&&|[(),*\[\]])\s*", r"\1", declarator)
+    return re.sub(r"(?<!&)\s*&\s*(?!&)", "&", normalized)
 
 
 def _call_names(*, node: Any, raw: bytes) -> tuple[str, ...]:
