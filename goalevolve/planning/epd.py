@@ -39,6 +39,7 @@ class EPDRecord:
     artifacts: dict[str, str]
     source_hooks: tuple[str, ...]
     expected_signals: tuple[str, ...]
+    activation_signals: tuple[str, ...]
     source_change_bundle: dict[str, object]
     student_role: str
     role_mode: str
@@ -157,6 +158,7 @@ class EvolutionProgramDatabase:
         parent_id: str,
         source_hooks: Sequence[str] = (),
         expected_signals: Sequence[str] = (),
+        activation_signals: Sequence[str] = (),
         predicted_stage_effect: str = "",
         source_evidence: Sequence[str] = (),
         falsification_condition: str = "",
@@ -188,6 +190,7 @@ class EvolutionProgramDatabase:
             "falsification_condition": falsification_condition,
             "paper_card_ids": list(paper_card_ids),
             "expected_signals": list(expected_signals),
+            "activation_signals": list(activation_signals or expected_signals),
             "source_hooks": list(source_hooks),
             "teacher_priority": int(teacher_priority),
             "proposed_round": int(round_index),
@@ -521,6 +524,7 @@ class EvolutionProgramDatabase:
                     parent_id=parent.parent_id,
                     source_hooks=tuple(str(path) for path in list(source.get("source_hooks") or ()) if path),
                     expected_signals=tuple(str(signal) for signal in list(source.get("expected_signals") or ()) if signal),
+                    activation_signals=tuple(str(signal) for signal in list(source.get("activation_signals") or source.get("expected_signals") or ()) if signal),
                     predicted_stage_effect=str(source.get("predicted_stage_effect") or ""),
                     source_evidence=tuple(str(item) for item in list(source.get("source_evidence") or ()) if item),
                     falsification_condition=str(source.get("falsification_condition") or ""),
@@ -603,6 +607,7 @@ class EvolutionProgramDatabase:
                 parent_id=parent.parent_id,
                 source_hooks=hypothesis.source_hooks,
                 expected_signals=hypothesis.expected_signals,
+                activation_signals=hypothesis.activation_signals or hypothesis.expected_signals,
             )
         )
         ideas[-1]["parent_idea_ids"] = parent_ideas
@@ -696,6 +701,7 @@ class EvolutionProgramDatabase:
             artifacts=artifacts,
             source_hooks=tuple(candidate.hypothesis.source_hooks),
             expected_signals=tuple(candidate.hypothesis.expected_signals),
+            activation_signals=tuple(candidate.hypothesis.activation_signals or candidate.hypothesis.expected_signals),
             source_change_bundle=bundle,
             student_role=candidate.hypothesis.student_role,
             role_mode=candidate.hypothesis.role_mode,
@@ -832,6 +838,7 @@ class EvolutionProgramDatabase:
                 artifacts={},
                 source_hooks=(),
                 expected_signals=(),
+                activation_signals=(),
                 source_change_bundle={},
                 student_role="baseline",
                 role_mode="baseline",
@@ -1119,6 +1126,11 @@ class EvolutionProgramDatabase:
             "candidate_source_artifact": str(artifacts.get("candidate_source") or ""),
             "source_hooks": tuple(str(path) for path in list(row.get("source_hooks") or ()) if path),
             "expected_signals": tuple(str(signal) for signal in list(row.get("expected_signals") or ()) if signal),
+            "activation_signals": tuple(
+                str(signal)
+                for signal in list(row.get("activation_signals") or row.get("expected_signals") or ())
+                if signal
+            ),
             "source_change_bundle": dict(row.get("source_change_bundle") or {}),
         }
 

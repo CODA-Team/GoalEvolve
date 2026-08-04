@@ -1735,6 +1735,18 @@ class DiversePlanner:
                 if signal
             )
         )
+        activation_signals = tuple(
+            dict.fromkeys(
+                str(signal)
+                for record in records
+                for signal in list(
+                    record.get("activation_signals")
+                    or record.get("expected_signals")
+                    or ()
+                )
+                if signal
+            )
+        )
         families = tuple(
             dict.fromkeys(
                 str(record.get("mechanism_family") or "mechanism")
@@ -1748,6 +1760,7 @@ class DiversePlanner:
             symptom_tags=(),
             source_hooks=hooks,
             expected_signals=signals,
+            activation_signals=activation_signals,
             claim_template=(
                 f"{action} the source-backed non-invalid EPD mechanisms ({', '.join(families)}) "
                 "through one bounded source change with fresh evidence."

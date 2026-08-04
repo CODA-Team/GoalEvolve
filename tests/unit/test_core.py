@@ -372,6 +372,7 @@ Timing remains the active residual.
 - Predicted Stage Effect: Reduce post-repair timing debt.
 - Source Hooks: src/rsz/src/Timing.cc
 - Expected Signals: endpoint_guard_examined
+- Activation Signals: endpoint_guard_examined
 - Priority: 3
 
 ## Parent Policy
@@ -386,6 +387,7 @@ Keep the checked parent.
 - Selection Rationale: Highest current timing value.
 - Source Hooks: src/rsz/src/Timing.cc
 - Expected Signals: endpoint_guard_examined
+- Activation Signals: endpoint_guard_examined
 - Falsification Condition: No official gain.
 - EPD References: none
 """
@@ -396,7 +398,12 @@ Keep the checked parent.
         self.assertEqual(idea["predicted_stage_effect"], "Reduce post-repair timing debt.")
         self.assertEqual(idea["source_hooks"], ("src/rsz/src/Timing.cc",))
         self.assertEqual(idea["expected_signals"], ("endpoint_guard_examined",))
+        self.assertEqual(idea["activation_signals"], ("endpoint_guard_examined",))
         self.assertEqual(parsed["assignments"][0]["idea_reference"], "idea_1")
+        self.assertEqual(
+            parsed["assignments"][0]["activation_signals"],
+            ("endpoint_guard_examined",),
+        )
 
     def test_teacher_plan_validation_requires_five_explorer_ideas_and_four_role_blocks(self) -> None:
         from goalevolve.agents.markdown_protocol import teacher_plan_validation_errors
@@ -500,6 +507,7 @@ Keep parent.
                         "- Source Evidence: src/rsz/src/Timing.cc::adjustTiming",
                         "- Evaluation Recipe: legacy_setup",
                         "- Expected Signals: endpoint_examined",
+                        "- Activation Signals: endpoint_examined",
                         "- Falsification Condition: No official timing gain.",
                         f"- Draft Signature: draft_{index}",
                         f"- EPD Search Query: draft_{index}",
@@ -531,6 +539,7 @@ Keep parent.
                     "- Source Evidence: src/rsz/src/Timing.cc::adjustTiming",
                     "- Evaluation Recipe: legacy_setup",
                     "- Expected Signals: endpoint_examined",
+                    "- Activation Signals: endpoint_examined",
                     "- Falsification Condition: No official timing gain.",
                     "- EPD References: none",
                 ]
@@ -615,6 +624,7 @@ Keep parent.
                         "source_hooks": ("src/rsz/src/Timing.cc",),
                         "source_evidence": ("src/rsz/src/Timing.cc::adjustTiming",),
                         "expected_signals": ("endpoint_repair_examined",),
+                        "activation_signals": ("endpoint_repair_examined",),
                         "falsification_condition": "No official timing improvement with complete checks.",
                         "epd_record_ids": (),
                     },
@@ -627,6 +637,7 @@ Keep parent.
                         "source_hooks": ("src/rsz/src/Timing.cc",),
                         "source_evidence": ("src/rsz/src/Timing.cc::adjustTiming",),
                         "expected_signals": ("endpoint_repair_examined",),
+                        "activation_signals": ("endpoint_repair_examined",),
                         "falsification_condition": "No official timing improvement with complete checks.",
                     },
                 ),
@@ -640,6 +651,7 @@ Keep parent.
         hypothesis = result.hypotheses[0]
         self.assertEqual(hypothesis.claim, "Rank one endpoint repair move by post-route timing debt.")
         self.assertEqual(hypothesis.source_hooks, ("src/rsz/src/Timing.cc",))
+        self.assertEqual(hypothesis.activation_signals, ("endpoint_repair_examined",))
         self.assertEqual(hypothesis.allowed_patch_paths, ())
         self.assertEqual(hypothesis.teacher_idea_reference, "idea_3")
 
@@ -2682,6 +2694,7 @@ Timing is active.
 - Source Evidence: src/rsz/src/Timing.cc::adjustTiming
 - Evaluation Recipe: legacy_deep
 - Expected Signals: timing_move_examined
+- Activation Signals: timing_move_examined
 - Falsification Condition: No official gain.
 - Paper Card References: none
 - Priority: 0
@@ -2691,6 +2704,7 @@ Timing is active.
 - Source Hooks: src/rsz/src/Timing.cc
 - Source Evidence: src/rsz/src/Timing.cc::adjustTiming
 - Expected Signals: endpoint_admission_examined
+- Activation Signals: endpoint_admission_examined
 - Falsification Condition: No official gain.
 - Paper Card References: none
 - Priority: 1
@@ -2700,6 +2714,7 @@ Timing is active.
 - Source Hooks: src/rsz/src/Timing.cc
 - Source Evidence: src/rsz/src/Timing.cc::adjustTiming
 - Expected Signals: timing_reserve_examined
+- Activation Signals: timing_reserve_examined
 - Falsification Condition: No official gain.
 - Paper Card References: none
 - Priority: 2
@@ -2709,6 +2724,7 @@ Timing is active.
 - Source Hooks: src/rsz/src/Timing.cc
 - Source Evidence: src/rsz/src/Timing.cc::adjustTiming
 - Expected Signals: timing_rejection_examined
+- Activation Signals: timing_rejection_examined
 - Falsification Condition: No official gain.
 - Paper Card References: none
 - Priority: 3
@@ -2718,6 +2734,7 @@ Timing is active.
 - Source Hooks: src/rsz/src/Timing.cc
 - Source Evidence: src/rsz/src/Timing.cc::adjustTiming
 - Expected Signals: timing_choice_examined
+- Activation Signals: timing_choice_examined
 - Falsification Condition: No official gain.
 - Paper Card References: none
 - Priority: 4
@@ -2736,6 +2753,7 @@ Keep the checked parent.
 - Source Evidence: src/rsz/src/Timing.cc::adjustTiming
 - Evaluation Recipe: legacy_deep
 - Expected Signals: timing_move_examined
+- Activation Signals: timing_move_examined
 - Falsification Condition: No official gain.
 - EPD References: none
 """
@@ -3721,7 +3739,7 @@ Keep the checked parent.
 
         slot = Hypothesis(
             "r2_student_1_timing", "timing", "default timing claim",
-            ("src/rsz/src/Timing.cc",), ("timing_examined",), ("timing_card",), "timing",
+            ("src/rsz/src/Timing.cc",), ("timing_examined", "timing_retained"), ("timing_card",), "timing",
             student_id="student_1",
         )
         selected = CodexTeacher._sanitize_hypotheses(
@@ -3731,6 +3749,7 @@ Keep the checked parent.
                     "idea_reference": "idea_1",
                     "claim": "Prefer endpoint ranking with a bounded stale-cache guard.",
                     "selection_rationale": "Timing debt dominates and this hook has not been refuted.",
+                    "activation_signals": ("timing_examined",),
                 },
             ),
             (slot,),
@@ -3753,6 +3772,7 @@ Keep the checked parent.
         self.assertIn("endpoint freshness", packet)
         self.assertIn("Timing debt dominates", packet)
         self.assertIn("Reduce timing debt after the repair stage.", packet)
+        self.assertEqual(selected[0].activation_signals, ("timing_examined",))
 
     def test_teacher_internal_cpp_schedule_suggestion_reaches_student_as_advisory(self) -> None:
         from goalevolve.agents.markdown_protocol import parse_teacher_plan
@@ -3843,7 +3863,8 @@ Keep the checked parent.
             )
             for index, (family, hook, signal, metrics) in enumerate(seeds, start=1):
                 hypothesis = Hypothesis(
-                    f"old_{family}", family, f"old {family}", (hook,), (signal,), (f"{family}_card",), family,
+                    f"old_{family}", family, f"old {family}", (hook,), (signal, f"{signal}_retained"), (f"{family}_card",), family,
+                    activation_signals=(signal,),
                 )
                 epd.record(
                     round_index=1,
@@ -3866,6 +3887,7 @@ Keep the checked parent.
         integration_options = [Hypothesis(**option) for option in integrator.candidate_options]
         self.assertTrue(all(option.student_role == "integrator" for option in integration_options))
         self.assertTrue(all(len(option.epd_record_ids) == 2 for option in integration_options))
+        self.assertTrue(all(option.activation_signals for option in integration_options))
         selected = CodexTeacher._sanitize_hypotheses(
             ({"student_id": "student_3", "candidate_id": integration_options[-1].hypothesis_id},),
             (integrator,),

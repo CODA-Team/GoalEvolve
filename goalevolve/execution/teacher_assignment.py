@@ -267,6 +267,7 @@ def materialize_teacher_assignments(
         rationale = str(row.get("selection_rationale") or "").strip()
         hooks = _source_hook_items(row.get("source_hooks"))
         signals = _items(row.get("expected_signals"))
+        declared_activation = _items(row.get("activation_signals"))
         evidence = _source_evidence_items(row.get("source_evidence"))
         falsification = str(row.get("falsification_condition") or "").strip()
         if not claim or not rationale or not hooks or not signals or not evidence or not falsification:
@@ -285,6 +286,13 @@ def materialize_teacher_assignments(
         invalid_signals = [signal for signal in signals if not _IDENTIFIER.fullmatch(signal)]
         if invalid_signals:
             errors.append(f"invalid_expected_signal:{student_id}:{invalid_signals[0]}")
+            continue
+        invalid_activation = [signal for signal in declared_activation if not _IDENTIFIER.fullmatch(signal)]
+        if invalid_activation:
+            errors.append(f"invalid_activation_signal:{student_id}:{invalid_activation[0]}")
+            continue
+        if declared_activation and not set(declared_activation).issubset(signals):
+            errors.append(f"activation_signal_not_expected:{student_id}")
             continue
         idea_reference = str(row.get("idea_reference") or "").strip()
         linked_idea = ideas.get(idea_reference)
@@ -343,6 +351,15 @@ def materialize_teacher_assignments(
             if linked_idea is None:
                 errors.append(f"unknown_explorer_idea:{student_id}:{idea_reference or 'none'}")
                 continue
+            idea_signals = _items(linked_idea.get("expected_signals"))
+            idea_activation = _items(linked_idea.get("activation_signals")) or idea_signals
+            if not set(idea_activation).issubset(idea_signals):
+                errors.append(f"invalid_idea_activation_signals:{student_id}")
+                continue
+            if declared_activation and set(declared_activation) != set(idea_activation):
+                errors.append(f"explorer_activation_signals_do_not_match_idea:{student_id}")
+                continue
+            activation_signals = idea_activation
             if not _same_or_compatible_idea(
                 claim=claim,
                 hooks=hooks,
@@ -371,6 +388,7 @@ def materialize_teacher_assignments(
             predicted_effect = str(linked_idea.get("predicted_stage_effect") or "").strip()
             retrieval_ids = (f"teacher_idea:{idea_reference}",)
         else:
+            activation_signals = declared_activation or signals
             role_records = _items(row.get("epd_record_ids"))
             if not _valid_epd_selection(template, role_records):
                 errors.append(f"invalid_epd_references:{student_id}")
@@ -385,6 +403,7 @@ def materialize_teacher_assignments(
                 claim=claim,
                 source_hooks=hooks,
                 expected_signals=signals,
+                activation_signals=activation_signals,
                 retrieval_ids=retrieval_ids,
                 novelty_key=novelty_key,
                 scope_evidence=tuple(

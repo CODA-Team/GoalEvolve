@@ -499,6 +499,11 @@ class CodexTeacher:
                 chosen = _first_unallocated_option(base, selected_allocation_keys)
             allowed_hooks = tuple(hook for hook in list(row.get("source_hooks") or []) if hook in chosen.source_hooks) or chosen.source_hooks
             expected = tuple(signal for signal in list(row.get("expected_signals") or []) if signal in chosen.expected_signals) or chosen.expected_signals
+            activation = tuple(
+                signal
+                for signal in list(row.get("activation_signals") or [])
+                if signal in expected
+            ) or tuple(signal for signal in chosen.activation_signals if signal in expected)
             claim = str(row.get("claim") or chosen.claim).strip()
             # Retrieval and the stage controller own experiment allocation.
             # Once they emit a source-verified slot, the Teacher may make its
@@ -565,6 +570,7 @@ class CodexTeacher:
                     claim=claim,
                     source_hooks=allowed_hooks,
                     expected_signals=expected,
+                    activation_signals=activation,
                     epd_record_ids=selected_epd_ids,
                     teacher_idea_reference=(
                         str(row.get("idea_reference") or "").strip()
@@ -738,6 +744,7 @@ class CodexTeacher:
                 "- Source Evidence: <path::symbol; one anchor for every Source Hook>",
                 "- Evaluation Recipe: <one controller recipe ID from the supplied menu>",
                 "- Expected Signals: <new mechanism telemetry signal names>",
+                "- Activation Signals: <nonempty subset of Expected Signals that proves the source-side mechanism boundary was entered; exclude optional/fallback outcome counters>",
                 "- Falsification Condition: <official evidence condition>",
                 "- Draft Signature: <Pass-A draft_N for an Explorer; none for an EPD role>",
                 "- EPD Search Query: <same draft_N for an Explorer; none for an EPD role>",
@@ -767,6 +774,7 @@ class CodexTeacher:
                 "- Source Evidence: <semicolon-separated path::symbol anchors; use a full Doc Card declarator for overloads>",
                 "- Evaluation Recipe: <the same controller recipe ID as its referenced idea>",
                 "- Expected Signals: <comma-separated new telemetry signals>",
+                "- Activation Signals: <exactly the same subset declared by its referenced idea>",
                 "- Falsification Condition: <official evidence condition>",
                 "- EPD References: none",
                 "",
@@ -799,7 +807,7 @@ class CodexTeacher:
                 "## Prior Markdown",
                 prior_markdown or "<no usable prior Markdown>",
                 "## Required Format",
-                "## Diagnosis Summary\n<text>\n\n## Source Investigation\n### investigation_1\n- Source Evidence: <path::symbol>\n- Observed Control Point: <text>\n\n## Evolution Ideas\n### idea_1\n- Idea: <text>\n- Predicted Stage Effect: <text>\n- Source Hooks: <path; another/path>\n- Source Evidence: <path::symbol; another/path::symbol>\n- Evaluation Recipe: <controller recipe ID from the prior plan>\n- Expected Signals: <signal>\n- Falsification Condition: <text>\n- Draft Signature: <draft_N or none>\n- EPD Search Query: <draft_N or none>\n- Retrieved Historical Ideas: <IDEA_* IDs or none>\n- Opened EPD Records: <IDEA_* IDs or none>\n- Nearest Historical Idea: <IDEA_* or none>\n- Semantic Overlap: <text>\n- Material Difference: <text>\n- Novelty Conclusion: <text>\n- Paper Card References: none\n- Priority: 0\n\n## Parent Policy\n<text>\n- Retire Pending Ideas: none\n\n## Student Assignments\n### student_1\n- Role: explorer\n- Candidate: \n- EPD Idea: idea_1\n- Claim: <text>\n- Selection Rationale: <text>\n- Source Hooks: <path; another/path>\n- Source Evidence: <path::symbol; another/path::symbol>\n- Evaluation Recipe: <same controller recipe ID>\n- Expected Signals: <signal>\n- Falsification Condition: <text>\n- EPD References: none",
+                "## Diagnosis Summary\n<text>\n\n## Source Investigation\n### investigation_1\n- Source Evidence: <path::symbol>\n- Observed Control Point: <text>\n\n## Evolution Ideas\n### idea_1\n- Idea: <text>\n- Predicted Stage Effect: <text>\n- Source Hooks: <path; another/path>\n- Source Evidence: <path::symbol; another/path::symbol>\n- Evaluation Recipe: <controller recipe ID from the prior plan>\n- Expected Signals: <signal>\n- Activation Signals: <subset of Expected Signals that proves entry, excluding optional outcome counters>\n- Falsification Condition: <text>\n- Draft Signature: <draft_N or none>\n- EPD Search Query: <draft_N or none>\n- Retrieved Historical Ideas: <IDEA_* IDs or none>\n- Opened EPD Records: <IDEA_* IDs or none>\n- Nearest Historical Idea: <IDEA_* or none>\n- Semantic Overlap: <text>\n- Material Difference: <text>\n- Novelty Conclusion: <text>\n- Paper Card References: none\n- Priority: 0\n\n## Parent Policy\n<text>\n- Retire Pending Ideas: none\n\n## Student Assignments\n### student_1\n- Role: explorer\n- Candidate: \n- EPD Idea: idea_1\n- Claim: <text>\n- Selection Rationale: <text>\n- Source Hooks: <path; another/path>\n- Source Evidence: <path::symbol; another/path::symbol>\n- Evaluation Recipe: <same controller recipe ID>\n- Expected Signals: <signal>\n- Activation Signals: <exactly the idea activation subset>\n- Falsification Condition: <text>\n- EPD References: none",
             ]
         )
 
@@ -885,6 +893,7 @@ def _assignment_from_hypothesis(hypothesis: Hypothesis) -> dict[str, object]:
         "claim": hypothesis.claim,
         "source_hooks": hypothesis.source_hooks,
         "expected_signals": hypothesis.expected_signals,
+        "activation_signals": hypothesis.activation_signals,
         "epd_record_ids": hypothesis.epd_record_ids,
         "epd_idea_id": hypothesis.epd_idea_id,
         "idea_reference": hypothesis.teacher_idea_reference,
@@ -895,6 +904,7 @@ def _assignment_from_hypothesis(hypothesis: Hypothesis) -> dict[str, object]:
                 or next(iter(option.get("retrieval_ids") or ()), ""),
                 "mechanism_family": option.get("mechanism_family"),
                 "source_hooks": option.get("source_hooks"),
+                "activation_signals": option.get("activation_signals"),
                 "role_mode": option.get("role_mode"),
                 "epd_record_ids": option.get("epd_record_ids"),
                 "epd_idea_id": option.get("epd_idea_id"),

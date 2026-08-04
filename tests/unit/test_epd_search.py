@@ -21,6 +21,8 @@ class EPDProjectionTests(unittest.TestCase):
                 evolution_ideas=(
                     {
                         "idea": "Use post-route debt to bound endpoint candidate admission.",
+                        "expected_signals": ("endpoint_examined", "endpoint_retained"),
+                        "activation_signals": ("endpoint_examined",),
                         "draft_signature_id": "draft_1",
                         "epd_search_query": "draft_1",
                         "retrieved_historical_ideas": ("IDEA_NEAR",),
@@ -36,6 +38,7 @@ class EPDProjectionTests(unittest.TestCase):
             idea = load_json(root / "knowledge" / "epd" / "ideas" / idea_id / "idea.json")
 
         self.assertEqual(idea["draft_signature_id"], "draft_1")
+        self.assertEqual(idea["activation_signals"], ["endpoint_examined"])
         self.assertEqual(idea["retrieved_historical_ideas"], ["IDEA_NEAR"])
         self.assertEqual(idea["novelty_conclusion"], "Novel decision state.")
 

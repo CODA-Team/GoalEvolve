@@ -297,11 +297,18 @@ class GoalEvolveEngine:
             return ""
         hooks = tuple(str(path) for path in list(idea.get("source_hooks") or ()) if path)
         signals = tuple(str(signal) for signal in list(idea.get("expected_signals") or ()) if signal)
+        activation = tuple(
+            str(signal)
+            for signal in list(idea.get("activation_signals") or signals)
+            if signal
+        )
         if not hooks or not signals:
             return ""
         if not set(hooks).issubset(hypothesis.source_hooks):
             return ""
         if not set(signals).issubset(hypothesis.expected_signals):
+            return ""
+        if not set(activation).issubset(hypothesis.activation_signals or hypothesis.expected_signals):
             return ""
         return idea_id
 

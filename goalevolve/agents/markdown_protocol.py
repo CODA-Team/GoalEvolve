@@ -109,6 +109,7 @@ def _evolution_idea_records(section: str) -> tuple[dict[str, object], ...]:
                 "predicted_stage_effect": _field(block, "Predicted Stage Effect"),
                 "source_hooks": _source_hook_items(_field(block, "Source Hooks")),
                 "expected_signals": _items(_field(block, "Expected Signals")),
+                "activation_signals": _items(_field(block, "Activation Signals")),
                 "source_evidence": _source_evidence_items(_field(block, "Source Evidence")),
                 "evaluation_recipe": _field(block, "Evaluation Recipe"),
                 "falsification_condition": _field(block, "Falsification Condition"),
@@ -188,6 +189,7 @@ def parse_teacher_plan(text: str) -> dict[str, object]:
                 "selection_rationale": _field(block, "Selection Rationale"),
                 "source_hooks": _source_hook_items(_field(block, "Source Hooks")),
                 "expected_signals": _items(_field(block, "Expected Signals")),
+                "activation_signals": _items(_field(block, "Activation Signals")),
                 "source_evidence": _source_evidence_items(_field(block, "Source Evidence")),
                 "evaluation_recipe": _field(block, "Evaluation Recipe"),
                 "falsification_condition": _field(block, "Falsification Condition"),
@@ -310,6 +312,7 @@ def teacher_plan_validation_errors(
                 "predicted_stage_effect",
                 "source_hooks",
                 "expected_signals",
+                "activation_signals",
                 "source_evidence",
                 "falsification_condition",
             ):
@@ -349,6 +352,7 @@ def teacher_plan_validation_errors(
             "selection_rationale",
             "source_hooks",
             "expected_signals",
+            "activation_signals",
             "source_evidence",
             "falsification_condition",
         ):
@@ -358,6 +362,29 @@ def teacher_plan_validation_errors(
             errors.append(f"missing_assignment_field:{student_id}:evaluation_recipe")
         if role == "explorer" and not str(assignment.get("idea_reference") or "").strip():
             errors.append(f"missing_assignment_field:{student_id}:epd_idea")
+    ideas_by_reference = {
+        str(idea.get("reference") or "").strip(): idea
+        for idea in ideas
+        if isinstance(idea, dict) and str(idea.get("reference") or "").strip()
+    }
+    for assignment in assignments.values():
+        expected = set(assignment.get("expected_signals") or ())
+        activation = set(assignment.get("activation_signals") or ())
+        student_id = str(assignment.get("student_id") or "")
+        if activation and not activation.issubset(expected):
+            errors.append(f"invalid_assignment_activation_signals:{student_id}")
+        if str(assignment.get("role") or "").lower() != "explorer":
+            continue
+        idea = ideas_by_reference.get(str(assignment.get("idea_reference") or "").strip())
+        if idea is not None and activation != set(idea.get("activation_signals") or ()):
+            errors.append(f"explorer_activation_signals_do_not_match_idea:{student_id}")
+    for idea in ideas:
+        if not isinstance(idea, dict):
+            continue
+        expected = set(idea.get("expected_signals") or ())
+        activation = set(idea.get("activation_signals") or ())
+        if activation and not activation.issubset(expected):
+            errors.append(f"invalid_idea_activation_signals:{idea.get('reference') or ''}")
     return tuple(dict.fromkeys(errors))
 
 
@@ -405,6 +432,7 @@ def render_teacher_plan(
                 f"- Predicted Stage Effect: {raw.get('predicted_stage_effect') or ''}",
                 f"- Source Hooks: {'; '.join(str(item) for item in raw.get('source_hooks') or ()) or 'none'}",
                 f"- Expected Signals: {', '.join(str(item) for item in raw.get('expected_signals') or ()) or 'none'}",
+                f"- Activation Signals: {', '.join(str(item) for item in raw.get('activation_signals') or raw.get('expected_signals') or ()) or 'none'}",
                 f"- Source Evidence: {'; '.join(str(item) for item in raw.get('source_evidence') or ()) or 'none'}",
                 f"- Evaluation Recipe: {raw.get('evaluation_recipe') or ''}",
                 f"- Falsification Condition: {raw.get('falsification_condition') or ''}",
@@ -436,6 +464,7 @@ def render_teacher_plan(
                 f"- Selection Rationale: {assignment.get('selection_rationale') or 'Controller-provided source-verified candidate.'}",
                 f"- Source Hooks: {'; '.join(str(item) for item in assignment.get('source_hooks') or ()) or 'none'}",
                 f"- Expected Signals: {', '.join(str(item) for item in assignment.get('expected_signals') or ()) or 'none'}",
+                f"- Activation Signals: {', '.join(str(item) for item in assignment.get('activation_signals') or assignment.get('expected_signals') or ()) or 'none'}",
                 f"- Source Evidence: {'; '.join(str(item) for item in assignment.get('source_evidence') or ()) or 'none'}",
                 f"- Evaluation Recipe: {assignment.get('evaluation_recipe') or ''}",
                 f"- Falsification Condition: {assignment.get('falsification_condition') or 'No verified contract improvement.'}",
