@@ -37,6 +37,7 @@ def _engine(
         teacher=registry.teacher(config.teacher),
         student_ids=config.students,
         max_campaign_rounds=config.max_campaign_rounds,
+        max_consecutive_no_promotion_rounds=config.max_consecutive_no_promotion_rounds,
         prefer_execution_champion=config.prefer_execution_champion,
         epd_max_reinforcement_attempts=config.epd_max_reinforcement_attempts,
         repository_graph_enabled=(

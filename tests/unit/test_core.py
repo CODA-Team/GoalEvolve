@@ -6131,6 +6131,58 @@ Keep the checked parent.
         self.assertEqual(report.recommended_lifecycle, "unactivated")
         self.assertIn("official checks", report.reflection)
 
+    def test_narrative_summarizer_is_registered_observer_only_plugin(self) -> None:
+        from goalevolve.agents.narrator import CodexNarrativeSummarizer, CodexNarratorConfig
+        from goalevolve.core.plugins import PluginRegistry
+
+        class RecordingRunner:
+            def __init__(self) -> None:
+                self.prompt = ""
+
+            def run(self, **kwargs: object) -> CodexTurn:
+                self.prompt = str(kwargs["prompt"])
+                artifact_root = Path(str(kwargs["artifact_root"]))
+                artifact_root.mkdir(parents=True, exist_ok=True)
+                message = artifact_root / "last_message.md"
+                message.write_text("The evidence indicates the measured path did not activate.\n", encoding="utf-8")
+                return CodexTurn(True, str(kwargs["operation_id"]), "narrator-thread", "completed", {"codex_last_message": str(message)})
+
+        with tempfile.TemporaryDirectory() as temporary:
+            narrator = CodexNarrativeSummarizer(CodexNarratorConfig())
+            runner = RecordingRunner()
+            narrator.runner = runner
+            report = narrator.summarize(
+                state_root=Path(temporary) / "state",
+                round_index=3,
+                cwd=Path(temporary),
+                purpose="diagnosis",
+                evidence={"phase_signals": {}},
+            )
+            registry = PluginRegistry()
+            registry.register_narrator(narrator)
+
+        self.assertEqual(report.text, "The evidence indicates the measured path did not activate.")
+        self.assertIn("observer only", runner.prompt.lower())
+        self.assertIn("must not edit", runner.prompt.lower())
+        self.assertIn("narrators", registry.manifest())
+
+    def test_campaign_stops_after_configured_consecutive_no_promotion_rounds(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "state"
+            for round_index, promoted in ((1, None), (2, None), (3, "student_1"), (4, None), (5, None)):
+                atomic_json(
+                    root / "rounds" / f"round_{round_index:03d}" / "round.json",
+                    {"round": round_index, "promoted_student": promoted},
+                )
+            engine = GoalEvolveEngine(
+                self.contract, root, DiversePlanner(), MockEvaluator(), IsolatedWorkspace(), StrictEvidencePromotion(),
+                max_consecutive_no_promotion_rounds=2,
+            )
+            completion = engine._no_promotion_completion(round_index=5)
+
+        self.assertEqual(completion["reason"], "max_consecutive_no_promotion_rounds_reached")
+        self.assertEqual(completion["consecutive_no_promotion_rounds"], 2)
+
     def test_telemetry_repair_stays_within_initial_changed_files(self) -> None:
         class RepairEditor:
             name = "repair_editor"

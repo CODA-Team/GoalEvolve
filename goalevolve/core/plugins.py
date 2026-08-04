@@ -90,6 +90,12 @@ class Teacher(Protocol):
     def review(self, **kwargs): ...
 
 
+class NarrativeSummarizer(Protocol):
+    name: str
+
+    def summarize(self, **kwargs): ...
+
+
 class WorkspaceProvider(Protocol):
     name: str
 
@@ -112,6 +118,7 @@ class PluginRegistry:
         self._evaluators: dict[str, Evaluator] = {}
         self._student_editors: dict[str, StudentEditor] = {}
         self._teachers: dict[str, Teacher] = {}
+        self._narrators: dict[str, NarrativeSummarizer] = {}
         self._workspaces: dict[str, WorkspaceProvider] = {}
         self._promotions: dict[str, PromotionPolicy] = {}
 
@@ -126,6 +133,9 @@ class PluginRegistry:
 
     def register_teacher(self, plugin: Teacher) -> None:
         self._register(self._teachers, plugin)
+
+    def register_narrator(self, plugin: NarrativeSummarizer) -> None:
+        self._register(self._narrators, plugin)
 
     def register_workspace(self, plugin: WorkspaceProvider) -> None:
         self._register(self._workspaces, plugin)
@@ -154,6 +164,9 @@ class PluginRegistry:
     def teacher(self, name: str) -> Teacher:
         return self._teachers[name]
 
+    def narrator(self, name: str) -> NarrativeSummarizer:
+        return self._narrators[name]
+
     def workspace(self, name: str) -> WorkspaceProvider:
         return self._workspaces[name]
 
@@ -166,6 +179,7 @@ class PluginRegistry:
             "evaluators": sorted(self._evaluators),
             "student_editors": sorted(self._student_editors),
             "teachers": sorted(self._teachers),
+            "narrators": sorted(self._narrators),
             "workspaces": sorted(self._workspaces),
             "promotions": sorted(self._promotions),
         }

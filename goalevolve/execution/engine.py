@@ -76,6 +76,7 @@ class GoalEvolveEngine:
     student_editor: StudentEditor | None = None
     teacher: Teacher | None = None
     max_campaign_rounds: int | None = None
+    max_consecutive_no_promotion_rounds: int = 3
     prefer_execution_champion: bool = False
     epd_max_reinforcement_attempts: int = 2
     repository_graph_enabled: bool = True
@@ -179,6 +180,8 @@ class GoalEvolveEngine:
             parent = self.run_round(round_index=round_index, parent=parent)
             parent = self._adopt_execution_champion(parent)
             completion = self._completion_reason(round_index=round_index)
+            if completion is None:
+                completion = self._no_promotion_completion(round_index=round_index)
             if completion is None and self.max_campaign_rounds is not None and round_index >= self.max_campaign_rounds:
                 completion = {
                     "reason": "campaign_round_limit_reached",
@@ -193,6 +196,28 @@ class GoalEvolveEngine:
                 )
                 break
         return parent
+
+    def _no_promotion_completion(self, *, round_index: int) -> dict[str, object] | None:
+        """Persistently stop a stalled campaign after its configured streak."""
+        limit = max(0, int(self.max_consecutive_no_promotion_rounds))
+        if limit == 0:
+            return None
+        streak = 0
+        for index in range(round_index, 0, -1):
+            summary = load_json(
+                self.state_root / "rounds" / f"round_{index:03d}" / "round.json", {}
+            ) or {}
+            if summary.get("promoted_student"):
+                break
+            streak += 1
+        if streak < limit:
+            return None
+        return {
+            "reason": "max_consecutive_no_promotion_rounds_reached",
+            "round": round_index,
+            "consecutive_no_promotion_rounds": streak,
+            "max_consecutive_no_promotion_rounds": limit,
+        }
 
     def _completion_reason(self, *, round_index: int) -> dict[str, object] | None:
         """Stop only on a complete official candidate, never a local proxy."""

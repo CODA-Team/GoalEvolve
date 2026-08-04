@@ -17,6 +17,7 @@ from .execution.execution import ExecutionPolicy
 from .planning.scope import SourceScopeResolver
 from .evaluation.contest2026 import Contest2026Config, Contest2026OpenROADEvaluator, _project_toolchain
 from .agents.codex_student import CodexStudentConfig, CodexStudentEditor, NoopStudentEditor
+from .agents.narrator import CodexNarrativeSummarizer, CodexNarratorConfig
 from .agents.teacher import CodexTeacher, CodexTeacherConfig, HeuristicTeacher
 
 
@@ -122,6 +123,7 @@ class ExperimentConfig:
     initial_parent_evaluation_mode: str = "unknown"
     initial_parent_artifacts: dict[str, str] | None = None
     max_campaign_rounds: int | None = None
+    max_consecutive_no_promotion_rounds: int = 3
     prefer_execution_champion: bool = False
     campaign_ready: bool | None = None
     epd_max_reinforcement_attempts: int = 2
@@ -208,6 +210,7 @@ def load_config(path: Path) -> ExperimentConfig:
             if optional_path(value) is not None
         } or None,
         max_campaign_rounds=int(raw["max_campaign_rounds"]) if raw.get("max_campaign_rounds") is not None else None,
+        max_consecutive_no_promotion_rounds=max(0, int(raw.get("max_consecutive_no_promotion_rounds", 3))),
         prefer_execution_champion=bool(raw.get("prefer_execution_champion", False)),
         campaign_ready=bool(raw["campaign_ready"]) if "campaign_ready" in raw else None,
         epd_max_reinforcement_attempts=max(0, int(raw.get("epd_max_reinforcement_attempts", 2))),
@@ -241,6 +244,18 @@ def build_runtime(config: ExperimentConfig) -> tuple[GoalContract, PluginRegistr
     registry.register_student_editor(NoopStudentEditor())
     registry.register_teacher(HeuristicTeacher())
     registry.register_teacher(CodexTeacher(CodexTeacherConfig(model=config.codex.teacher.model, reasoning_effort=config.codex.teacher.reasoning_effort, retries=config.codex.teacher.retries, timeout_s=config.codex.teacher.timeout_s, seed_home=config.state_root, credential_env=config.codex.credential_env, max_plan_format_repairs=int(config.codex.teacher.max_plan_format_repairs or 0))))
+    registry.register_narrator(
+        CodexNarrativeSummarizer(
+            CodexNarratorConfig(
+                model=config.codex.teacher.model,
+                reasoning_effort=config.codex.teacher.reasoning_effort,
+                retries=config.codex.teacher.retries,
+                timeout_s=config.codex.teacher.timeout_s,
+                seed_home=config.state_root,
+                credential_env=config.codex.credential_env,
+            )
+        )
+    )
     registry.register_student_editor(
         CodexStudentEditor(
             CodexStudentConfig(
