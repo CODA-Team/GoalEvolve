@@ -13,6 +13,7 @@ from .markdown_protocol import (
     render_teacher_plan,
     teacher_plan_validation_errors,
 )
+from .teacher_packet import TeacherPacketBuilder
 from ..planning.diagnosis import Diagnosis
 from ..planning.epd import EvolutionProgramDatabase
 from ..core.models import CandidateResult, EvidenceVerdict, Hypothesis, Parent
@@ -557,79 +558,34 @@ class CodexTeacher:
             str(decision_context.get("evaluation_mode") or "timing_only")
         )
         requires_explorer_ideas = any(item.student_role == "explorer" for item in fallback)
-        graph_enabled = repository_graph is not None
-        source_localization_sections = (
-            [
-                "## Compact Source Structure Index",
-                json.dumps(source_index or {}, ensure_ascii=False, indent=2),
-                "",
-                "## P0-rooted Source Graph and Doc Cards",
-                json.dumps(repository_graph, ensure_ascii=False, indent=2),
-                "This is an AST-derived localization aid. It is rooted in the frozen project P0 snapshot and incrementally refreshed for the current parent. It does not replace live rg/sed inspection or authorize a patch by itself.",
-                "Use a Doc Card's full `declarator` verbatim when a function name is overloaded. Separate multiple Source Evidence anchors with semicolons, never commas, because a C++ declarator may contain commas.",
-                "",
-            ]
-            if graph_enabled
-            else [
-                "## Source Localization",
-                "Repository graph is disabled for this ablation. Use live rg/sed inspection only; the Controller validates every path::symbol anchor against the current parent source.",
-                "",
-            ]
+        packet = TeacherPacketBuilder(
+            contract=contract_view,
+            parent=parent,
+            diagnosis=diagnosis.to_dict(),
+            epd=epd,
+            observations=observations,
+            schedule_memory=schedule_memory or {},
+            previous_review=previous_review,
+            slots=slots,
+            allowed_recipe_ids=allowed_recipe_ids,
+            decision_context=decision_context,
+            repository_graph=repository_graph,
+            search_policy=search_policy or {},
+            source_root=source_root,
+            paper_cards=paper_cards,
         )
         return "\n".join(
             [
+                *packet.usage_guide(),
                 "# GoalEvolve Persistent Teacher: diagnose and plan",
                 "",
-                "You are the Teacher, with expertise in digital backend physical design. Your responsibility is to propose the next-round OpenROAD source-code algorithm modification directions, specifically for the RSZ and RMP source code used in the post-placement optimization stage, as well as optional Tcl scheduling recommendations for a goal-driven algorithm auto-evolution framework based on the current QoR bottlenecks. Diagnose the frozen-goal gap using only the supplied compact EPDs, parent checkpoint trajectory, P0-rooted OpenROAD AST repository graph, live source structure, paper-card references, and empirical observation memory. Afterwards, propose the task directions for the next round from the perspectives of new-mechanism Explorers, promising-mechanism Enhancers, and validated-mechanism Integrators. You do not need to edit the source code.",
+                "You are the Teacher, with expertise in digital backend physical design. Your responsibility is to propose the next-round OpenROAD source-code algorithm modification directions, specifically for the RSZ and RMP source code used in the post-placement optimization stage, as well as optional Tcl scheduling recommendations for a goal-driven algorithm auto-evolution framework based on the current QoR bottlenecks. Diagnose the frozen-goal gap using only the compact decision packet, path-routed EPD evidence, parent checkpoint trajectory, P0-rooted OpenROAD AST repository graph, live source structure, paper-card references, and empirical observation memory. Afterwards, propose task directions for new-mechanism Explorers, promising-mechanism Enhancers, and validated-mechanism Integrators. You do not edit source code.",
                 "The frozen QoR decision contract consists of exactly TNS, dynamic power, and leakage power. Runtime is execution telemetry only: never use it to choose, rank, retain, suppress, reject, or promote a mechanism. The Controller owns source validation, evaluation, and promotion. You own mechanism creation and task assignment. The Controller supplies role envelopes, not candidate mechanisms.",
-                "For the Explorer role, the task is to explore new algorithmic mechanisms. As the Teacher, you must provide a global pool of at least five distinct Explorer directions and ideas in each round and assign them across the available Explorers. It is not necessary to provide five ideas to every individual Explorer. You may use the following methods to conceptualize new algorithmic mechanisms. When a P0-rooted AST graph and Doc Cards are supplied, use them first to localize candidate execution paths, and then verify the current parent using at least two successful, read-only rg or sed commands. Locate a real, executed, and bottleneck-relevant source hook and its decision boundary. Include an upstream hook only when its causal relationship to the active-stage bottleneck is explicit. Create a new, bounded, and falsifiable idea that targets the active decision-stage QoR residual or another objective permitted by the frozen contract while respecting all stage guards.",
-                "For the Integrator role, the task is to integrate into the current parent OpenROAD historical EPD mechanisms that have already been classified as validated but have not yet been inherited by the current parent, or mechanisms classified as promising that are complementary to mechanisms already present in the current parent. As the Teacher, you must choose a compatible pair from the supplied historical EPD options marked as validated or promising and explain how their decision boundaries can coexist in the current parent. You must provide the reasons for merging or supplementing them, identify possible conflicts or interactions, and describe the algorithm-level merge or supplementation plan. The proposed integration should have a clear, evidence-based hypothesis for improving final QoR under the frozen contract. If the supplied evidence does not support a compatible pair, explicitly state that no safe integration pair can be assigned in the current round rather than inventing one.",
-                "For the Enhancer role, the task is to strengthen mechanisms from EPD attempts that have been identified as pending, meaning that they produced phase-level or checkpoint-level QoR benefits but did not transmit those benefits stably to the final post-route result. The goal is to improve the final QoR retention of these mechanisms. As the Teacher, you must select one or more promising EPD attempts and explain the stage evidence that prevented stable post-route gain before proposing bounded strengthening. You may devise the implementation approach, but you must name real source paths and symbols. Clearly distinguish whether the previous failure was caused by insufficient candidate quality, excessive timing or power debt, downstream reversal, weak commit or rollback guards, stage-objective mismatch, or interaction with another mechanism.",
-                "You may propose Tcl scheduling recommendations, but whether to adopt them is determined by the Student responsible for implementation. The Teacher provides recommendations, and the Student makes the final technical judgment. External Tcl files and scripts must not be modified. Persistent scheduling changes may instead be implemented through the permitted internal C++ scheduling, policy-selection, dispatch, or phase-control logic. A Tcl scheduling recommendation alone is not a new algorithmic mechanism and should be paired with a concrete source-level mechanism.",
-                "Please make full use of your reasoning capabilities and your knowledge of EDA and digital backend physical design. If necessary, you may also inspect the available historical EPDs and previous-round execution logs to supplement information that is not explicitly included in this prompt. Do not invent missing evidence, source symbols, execution paths, mechanism statuses, or QoR results.",
+                "For Explorer, create a new algorithmic mechanism after at least two successful, read-only live-source rg/sed inspections and after the EPD draft-signature retrieval workflow. For Enhancer, explain the prior stage evidence and reinforce one bounded mechanism rather than restarting a failed patch. For Integrator, explain why all selected mechanism decision boundaries, read/write sets, guards, and rollback behavior coexist; explicitly leave the slot empty if no safe pair exists.",
+                "You may propose an advisory internal-C++ scheduling recommendation, but external Tcl files and scripts must not be modified. A Tcl scheduling recommendation alone is not a new algorithmic mechanism and must be paired with a concrete source-level mechanism.",
+                "Do not invent missing evidence, source symbols, execution paths, mechanism statuses, QoR results, or EPD records. Open path-routed evidence as needed before making an evidence claim.",
                 "",
-                "## Goal Contract",
-                json.dumps(contract_view, ensure_ascii=False, indent=2),
-                "",
-                "## Active Decision Stage",
-                json.dumps(decision_context or {"mode": "single_stage"}, ensure_ascii=False, indent=2),
-                "",
-                "## Parent",
-                json.dumps(parent.to_dict(), ensure_ascii=False, indent=2),
-                "",
-                "## Diagnosis",
-                json.dumps(diagnosis.to_dict(), ensure_ascii=False, indent=2),
-                "",
-                "## EPD (idea lifecycle and compact attempts)",
-                json.dumps(epd, ensure_ascii=False, indent=2),
-                "",
-                "## Observation Memory",
-                json.dumps(observations, ensure_ascii=False, indent=2),
-                "",
-                "## Timing Schedule / Cell-Reversal Memory",
-                json.dumps(schedule_memory or {}, ensure_ascii=False, indent=2),
-                "",
-                "## Previous Teacher Review",
-                json.dumps(previous_review, ensure_ascii=False, indent=2),
-                "",
-                "## Controller Role Envelopes",
-                json.dumps(slots, ensure_ascii=False, indent=2),
-                "The Controller owns Tcl and exposes only these evaluation recipes. Select exactly one recipe per idea and assignment; the same recipe is used for that Student and its no-diff parent baseline. Do not invent a recipe or modify Tcl.",
-                json.dumps(allowed_recipe_ids, ensure_ascii=False),
-                "",
-                "## Live Source Access",
-                f"Read-only parent source root: {source_root or '<not supplied>'}",
-                "Use rg and bounded local reads against that directory before choosing hooks. The Controller checks every `path::symbol` anchor below against this exact snapshot.",
-                "",
-                *source_localization_sections,
-                "## Evidence-only Search Policy",
-                json.dumps(search_policy or {}, ensure_ascii=False, indent=2),
-                "This policy is advisory. The listed incumbent is the only current parent; only the deterministic Controller can promote a candidate or alter roles. When `avoid_exact_source_hooks` is nonempty, do not repeat that exact source hook with the same decision boundary: either use a different AST-grounded hook or explain the materially distinct boundary and falsification condition.",
-                "",
-                "## Paper Card References",
-                json.dumps(list(paper_cards), ensure_ascii=False, indent=2),
-                "These are topics only. Their IDs may be cited, but they do not authorize reuse of an old patch recipe.",
-                "",
+                *packet.sections(),
                 "Return Markdown field blocks only. Do not return JSON or a code fence. Use exactly this structure:",
                 "",
                 "## Diagnosis Summary",
@@ -644,7 +600,7 @@ class CodexTeacher:
                 "",
                 "## Evolution Ideas",
                 "### idea_1",
-                "- Idea: <bounded source-level idea>",
+                "- Idea: <one substantial paragraph: formation reason, core algorithm principle, target decision boundary and problem, expected stage/final effect, and bounded cross-file actions when needed>",
                 "- Predicted Stage Effect: <expected phase/QoR movement>",
                 "- Source Hooks: <supplied controller hook(s)>",
                 "- Source Evidence: <path::symbol; one anchor for every Source Hook>",
@@ -654,7 +610,7 @@ class CodexTeacher:
                 "- Paper Card References: <optional comma-separated card_id from supplied references, or none>",
                 "- Priority: 0",
                 "",
-                ("Provide at least five ranked Explorer ideas. Unselected ideas remain pending in EPD for a later Explorer." if requires_explorer_ideas else "Explorers are suspended for this one transition round. Do not invent Explorer ideas; focus on the scheduled EPD cleanup roles."),
+                ("Provide at least five ranked Explorer ideas. Each must be a clear, substantive paragraph (roughly 1.5–2× the former terse idea), may span multiple source files, and must be a distinct falsifiable mechanism. Unselected ideas remain pending in EPD for a later Explorer." if requires_explorer_ideas else "Explorers are suspended for this one transition round. Do not invent Explorer ideas; focus on the scheduled EPD cleanup roles."),
                 "",
                 "## Parent Policy",
                 "<how the checked parent and frozen contract constrain this round>",
@@ -677,7 +633,6 @@ class CodexTeacher:
                 "Repeat one `### student_N` block for every supplied role envelope. Preserve each supplied Role. An Explorer's EPD Idea must reference one of this response's idea_N blocks. EPD References must exactly match one listed integrator pair or enhancer record. The Controller validates paths, symbols, EPD references, and Explorer novelty after this response.",
             ]
         )
-
     @staticmethod
     def _plan_repair_prompt(
         *,

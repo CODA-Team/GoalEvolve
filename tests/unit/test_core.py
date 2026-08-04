@@ -1648,6 +1648,80 @@ Keep the checked parent.
         self.assertNotIn("## P0-rooted Source Graph and Doc Cards", prompt)
         self.assertNotIn("## Compact Source Structure Index", prompt)
 
+    def test_teacher_packet_is_compact_and_evidence_routed(self) -> None:
+        diagnosis = SimpleNamespace(
+            to_dict=lambda: {
+                "dominant_bottleneck": "tns_abs_ns",
+                "dominant_residual": 0.25,
+                "checkpoint_effects": {"post_repair_power": {"tns_abs_ns": -2.0}},
+                "unresolved_debt": {"tns_abs_ns": 2.0},
+                "parent_goal_distance": self.parent.goal_distance,
+            }
+        )
+        prompt = CodexTeacher._plan_prompt(
+            parent=self.parent,
+            diagnosis=diagnosis,
+            contract=self.contract,
+            epd={
+                "full_epd_artifact": "/state/knowledge/epd.json",
+                "status_counts": {"promising": 1},
+                "decision_records": [{"record_id": "EPD_KEEP", "idea_id": "IDEA_KEEP", "mechanism_family": "keep", "epd_status": "promising", "metrics": {"tns_abs_ns": 99.0}}],
+                "pending_ideas": [{"idea_id": "IDEA_PENDING", "idea": "A bounded mechanism paragraph.", "status": "pending"}],
+            },
+            observations={
+                "family_hook_summary": [
+                    {"mechanism_family": f"family_{index}", "source_hooks": [f"src/rsz/{index}.cc"], "activation_count": index % 2, "best_distance_gain": float(index), "last_state": "invalid", "last_failure_signature": "bounded failure"}
+                    for index in range(12)
+                ]
+            },
+            schedule_memory={"full_schedule_memory_artifact": "/state/knowledge/timing_schedule_memory.json", "active_rules": [{"rule": "preserve timing handoff"}]},
+            previous_review={"round_assessment": "Student found a downstream reversal.", "mechanism_actions": [{"family": "keep", "action": "refine"}]},
+            fallback=(replace(self.hypothesis, student_id="student_1"),),
+            decision_context={"stage": "adaptive_tradeoff", "dominant_metric": "tns_abs_ns", "evaluation_mode": "power_then_timing", "falsification_rule": "hold the frozen contract"},
+            source_index={"src/rsz/huge.cc": ["giant_index_symbol"]},
+            repository_graph={
+                "entry_chain": ["Resizer::repairPower", "RepairPowerPolicy::iterate"],
+                "focused_files": ["src/rsz/src/Resizer.cc"],
+                "focused_graph_path": "/state/knowledge/repository_graph/focus.json",
+                "full_index_path": "/state/knowledge/repository_graph/compact_index.json",
+                "full_graph_path": "/state/knowledge/repository_graph/graph.json",
+            },
+            search_policy={
+                "no_promotion_streak": 2,
+                "diversification": {"avoid_exact_source_hooks": ["src/rsz/reused.cc"]},
+                "hill_climb": {"incumbent_parent_id": "baseline"},
+                "promotion_authority": False,
+                "diagnosis": {"duplicated": "must not be copied"},
+            },
+            source_root=Path("/state/parents/hash/source"),
+        )
+
+        self.assertTrue(prompt.startswith("## Packet Usage Guide"))
+        for heading in (
+            "## Goal Contract",
+            "## Active Decision Stage",
+            "## Diagnosis",
+            "## EPD (idea lifecycle and compact attempts)",
+            "## Observation Memory",
+            "## Timing Schedule / Cell-Reversal Memory",
+            "## Student Reflection Digest",
+            "## Controller Role Envelopes",
+            "## Evidence-only Search Policy",
+        ):
+            self.assertEqual(prompt.count(heading + "\n"), 1, heading)
+        self.assertNotIn("## Parent\n", prompt)
+        self.assertIn("- tns_abs_ns: baseline 100 → target ≤ 50", prompt)
+        self.assertIn("Parent QoR: tns_abs_ns=100", prompt)
+        self.assertLess(prompt.index("Current stage: adaptive_tradeoff"), prompt.index('"stage": "adaptive_tradeoff"'))
+        self.assertIn('"checkpoint_effects"', prompt)
+        self.assertNotIn('"parent_goal_distance"', prompt)
+        self.assertIn("/state/knowledge/epd/indexes/idea_catalog.jsonl", prompt)
+        self.assertNotIn("giant_index_symbol", prompt)
+        self.assertIn("/state/knowledge/repository_graph/focus.json", prompt)
+        self.assertEqual(sum(f"family_{index}" in prompt for index in range(12)), 10)
+        self.assertIn("no_promotion_streak: 2", prompt)
+        self.assertIn("promotion_authority: Controller only", prompt)
+
     def test_repository_graph_focus_filters_cards_to_allowed_patch_roots(self) -> None:
         from goalevolve.planning.repository_graph import RepositoryGraphIndex
 
