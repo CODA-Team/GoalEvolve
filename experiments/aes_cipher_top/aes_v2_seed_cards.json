@@ -1,0 +1,45 @@
+{
+  "cards": [
+    {
+      "seed_id": "default_pipeline_reclaim_activation",
+      "source_anchors": [
+        "src/rsz/src/Optimizer.cc::rsz::Optimizer::makePolicyForPhase",
+        "src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::iterateEarlyForcedReclaim"
+      ],
+      "decision_boundary": "Default repair sequencing may omit a reachable, bounded repair-power phase even though the policy implementation exists.",
+      "summary": "Revalidate whether the implicit/default repair sequence reaches early forced reclaim; keep explicit custom schedules unchanged and require retained-move telemetry before claiming activation.",
+      "expected_signals": [
+        "repair_power_committed",
+        "repair_power_leakage_gain"
+      ]
+    },
+    {
+      "seed_id": "early_reclaim_candidate_window",
+      "source_anchors": [
+        "src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::iterateEarlyForcedReclaim",
+        "src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::generateCandidates",
+        "src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::tryCommitCandidateWindow"
+      ],
+      "decision_boundary": "Candidate generation and a journal-backed timing-window commit are separate boundaries; a ranking change is not evidence unless candidates are generated and retained.",
+      "summary": "Focus on an early-reclaim candidate path that produces a measurable candidate/commit transition while preserving existing legality, max-cap, timing rollback, and zero-DRV constraints.",
+      "expected_signals": [
+        "repair_power_candidates",
+        "repair_power_committed",
+        "repair_power_timing_rejected"
+      ]
+    },
+    {
+      "seed_id": "measured_power_recovery_plus",
+      "source_anchors": [
+        "src/rsz/src/policy/PowerRecoveryPlusPolicy.cc::rsz::PowerRecoveryPlusPolicy::generateCandidates",
+        "src/rsz/src/Optimizer.cc::rsz::Optimizer::makePolicyForPhase"
+      ],
+      "decision_boundary": "A reversible local measurement path is useful only if the optimizer dispatch can reach it under the evaluated default flow.",
+      "summary": "Revalidate dispatch and retained-move signals before refining measured power candidate ranking; do not treat a historical mechanism description as current QoR evidence.",
+      "expected_signals": [
+        "power_recovery_plus_committed",
+        "power_recovery_plus_leakage_gain"
+      ]
+    }
+  ]
+}

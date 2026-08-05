@@ -7876,6 +7876,47 @@ Keep the checked parent.
         self.assertTrue(config.campaign_ready)
         self.assertIsNone(config.declared_power_reclaim_profile)
 
+    def test_aes_recovery_profile_is_fresh_p0_with_audited_unlimited_reclaim(self) -> None:
+        project_root = Path(__file__).resolve().parents[2]
+        baseline = load_config(
+            project_root
+            / "experiments/aes_cipher_top/p0_recovery_20260805_baseline.local.json"
+        )
+        config = load_config(
+            project_root / "experiments/aes_cipher_top/p0_recovery_20260805.local.json"
+        )
+
+        self.assertTrue(config.campaign_ready)
+        self.assertTrue(config.enforce_declared_power_reclaim_profile)
+        self.assertEqual(config.power_reclaim_phase, "early_forced_reclaim")
+        self.assertEqual(config.power_reclaim_proportion_percent, 80.0)
+        self.assertEqual(config.power_reclaim_max_moves, 0)
+        self.assertEqual(
+            config.declared_power_reclaim_profile.to_dict(),
+            {
+                "phase": "early_forced_reclaim",
+                "proportion_percent": 80.0,
+                "max_moves": 0,
+            },
+        )
+        self.assertEqual(config.baseline_evaluation_root, baseline.state_root)
+        self.assertNotEqual(config.state_root, baseline.state_root)
+        self.assertNotIn("supervision_20260805", str(config.state_root))
+        self.assertIsNone(config.initial_parent_id)
+        self.assertIsNone(config.initial_parent_source_root)
+        self.assertIsNone(config.initial_parent_metrics)
+        self.assertGreaterEqual(len(config.historical_seed_cards), 3)
+        allowed = {
+            "seed_id",
+            "source_anchors",
+            "decision_boundary",
+            "summary",
+            "expected_signals",
+        }
+        self.assertTrue(
+            all(set(card).issubset(allowed) for card in config.historical_seed_cards)
+        )
+
     def test_contest_profile_is_the_single_tcl_source(self) -> None:
         evaluator = Contest2026OpenROADEvaluator(
             Contest2026Config(

@@ -1,0 +1,40 @@
+{
+  "extends": "../ae3_base.json",
+  "design": "aes_cipher_top",
+  "state_root": "../../outputs/aes_recovery_20260805/aes_cipher_top/campaign",
+  "campaign_ready": true,
+  "source_root": "../../artifact_evaluation/lineage/openroad_power/p0/source",
+  "build_seed_root": "/home/haixuliu/MLCAD26/openroad-power",
+  "benchmark_root": "../../third_party/benchmarks/benchmarks",
+  "baseline_evaluation_root": "../../outputs/aes_recovery_20260805/aes_cipher_top/baseline",
+  "baseline_metrics": {
+    "tns_abs_ns": 12.69,
+    "dynamic_power_pw": 411904600000.0,
+    "leakage_power_pw": 95400000.0
+  },
+  "target_metrics": {
+    "tns_abs_ns": 12.0,
+    "dynamic_power_pw": 350000000000.0,
+    "leakage_power_pw": 35000000.0
+  },
+  "metric_weights": {
+    "tns_abs_ns": 1.0,
+    "dynamic_power_pw": 1.0,
+    "leakage_power_pw": 1.0
+  },
+  "promotion": "power_first_promotion",
+  "power_stage_tns_ceiling_ns": 60.0,
+  "power_stage_protected_rounds": 10,
+  "power_reclaim_phase": "early_forced_reclaim",
+  "power_reclaim_proportion_percent": 80.0,
+  "power_reclaim_max_moves": 0,
+  "enforce_declared_power_reclaim_profile": true,
+  "declared_power_reclaim_profile": {
+    "phase": "early_forced_reclaim",
+    "proportion_percent": 80.0,
+    "max_moves": 0
+  },
+  "historical_seed_cards": "aes_v2_seed_cards.json",
+  "max_campaign_rounds": 10,
+  "max_consecutive_no_promotion_rounds": 10
+}
