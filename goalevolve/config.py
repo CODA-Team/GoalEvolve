@@ -52,6 +52,22 @@ class CodexSettings:
     credential_env: Path
 
 
+@dataclass(frozen=True)
+class PowerReclaimProfile:
+    """Immutable command settings declared by a ready power campaign."""
+
+    phase: str
+    proportion_percent: float
+    max_moves: int
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "phase": self.phase,
+            "proportion_percent": self.proportion_percent,
+            "max_moves": self.max_moves,
+        }
+
+
 def load_codex_settings(path: Path = CODEX_CONFIG_PATH) -> CodexSettings:
     """Load one project-wide, versioned Codex runtime policy."""
     raw = json.loads(path.read_text(encoding="utf-8"))
@@ -104,6 +120,7 @@ class ExperimentConfig:
     power_reclaim_phase: str = "early_forced_reclaim"
     power_reclaim_proportion_percent: float = 80.0
     power_reclaim_max_moves: int = 0
+    declared_power_reclaim_profile: PowerReclaimProfile | None = None
     allowed_patch_roots: tuple[str, ...] = ()
     require_cpp_patch: bool = True
     command_timeout_s: int = 7200
@@ -167,6 +184,37 @@ def load_config(path: Path) -> ExperimentConfig:
     source_root = optional_path(raw.get("source_root"))
     if evaluator == "contest_openroad" and source_root is None:
         source_root = DEFAULT_OPENROAD_SEED
+    power_reclaim_phase = str(raw.get("power_reclaim_phase") or "early_forced_reclaim")
+    power_reclaim_proportion_percent = float(raw.get("power_reclaim_proportion_percent", 80.0))
+    power_reclaim_max_moves = int(raw.get("power_reclaim_max_moves", 0))
+    declared_profile_raw = raw.get("declared_power_reclaim_profile")
+    declared_power_reclaim_profile = None
+    if declared_profile_raw is not None:
+        if not isinstance(declared_profile_raw, dict):
+            raise ValueError("declared_power_reclaim_profile must be an object")
+        missing = {
+            "phase",
+            "proportion_percent",
+            "max_moves",
+        }.difference(declared_profile_raw)
+        if missing:
+            raise ValueError(
+                "declared_power_reclaim_profile lacks: " + ",".join(sorted(missing))
+            )
+        declared_power_reclaim_profile = PowerReclaimProfile(
+            phase=str(declared_profile_raw["phase"]),
+            proportion_percent=float(declared_profile_raw["proportion_percent"]),
+            max_moves=int(declared_profile_raw["max_moves"]),
+        )
+        effective_profile = PowerReclaimProfile(
+            phase=power_reclaim_phase,
+            proportion_percent=power_reclaim_proportion_percent,
+            max_moves=power_reclaim_max_moves,
+        )
+        if declared_power_reclaim_profile != effective_profile:
+            raise ValueError("declared power-reclaim profile differs from resolved profile")
+    if evaluator == "contest_openroad" and raw.get("campaign_ready") is True and declared_power_reclaim_profile is None:
+        raise ValueError("ready contest profile requires declared_power_reclaim_profile")
     return ExperimentConfig(
         design=design,
         state_root=optional_path(raw.get("state_root")) or (PROJECT_ROOT / "outputs" / "ae3" / design),
@@ -183,9 +231,10 @@ def load_config(path: Path) -> ExperimentConfig:
         promotion=str(raw.get("promotion") or "strict_evidence"),
         power_stage_tns_ceiling_ns=float(raw.get("power_stage_tns_ceiling_ns", 30.0)),
         power_stage_protected_rounds=int(raw.get("power_stage_protected_rounds", 10)),
-        power_reclaim_phase=str(raw.get("power_reclaim_phase") or "early_forced_reclaim"),
-        power_reclaim_proportion_percent=float(raw.get("power_reclaim_proportion_percent", 80.0)),
-        power_reclaim_max_moves=int(raw.get("power_reclaim_max_moves", 0)),
+        power_reclaim_phase=power_reclaim_phase,
+        power_reclaim_proportion_percent=power_reclaim_proportion_percent,
+        power_reclaim_max_moves=power_reclaim_max_moves,
+        declared_power_reclaim_profile=declared_power_reclaim_profile,
         students=tuple(raw.get("students") or ("student_1", "student_2", "student_3", "student_4")),
         allowed_patch_roots=tuple(raw.get("allowed_patch_roots") or ()),
         require_cpp_patch=bool(raw.get("require_cpp_patch", True)),

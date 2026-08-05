@@ -7845,6 +7845,50 @@ Keep the checked parent.
             )
         self.assertEqual(cards[0].card_id, "repair_power_explicit_timing_budget")
 
+    def test_ready_profile_rejects_power_reclaim_declaration_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "profile.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "design": "aes_cipher_top",
+                        "campaign_ready": True,
+                        "baseline_metrics": {"tns_abs_ns": 12.69},
+                        "target_metrics": {"tns_abs_ns": 12.0},
+                        "power_reclaim_phase": "early_forced_reclaim",
+                        "power_reclaim_proportion_percent": 1.0,
+                        "power_reclaim_max_moves": 1,
+                        "declared_power_reclaim_profile": {
+                            "phase": "early_forced_reclaim",
+                            "proportion_percent": 80.0,
+                            "max_moves": 0,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "declared power-reclaim profile differs"):
+                load_config(path)
+
+    def test_contest_profile_is_the_single_tcl_source(self) -> None:
+        evaluator = Contest2026OpenROADEvaluator(
+            Contest2026Config(
+                design="aes_cipher_top",
+                benchmark_root=Path("/bench"),
+                source_seed=Path("/source"),
+                power_reclaim_proportion_percent=80.0,
+                power_reclaim_max_moves=0,
+            )
+        )
+        self.assertEqual(
+            evaluator.effective_power_reclaim_profile(),
+            {
+                "phase": "early_forced_reclaim",
+                "proportion_percent": 80.0,
+                "max_moves": 0,
+            },
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

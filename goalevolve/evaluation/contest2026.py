@@ -583,6 +583,14 @@ class Contest2026OpenROADEvaluator:
         # concurrent OpenROAD flow turns runtime into scheduler noise.
         self._measurement_lock = threading.Lock()
 
+    def effective_power_reclaim_profile(self) -> dict[str, object]:
+        """Return the exact repair_power arguments emitted into every Tcl flow."""
+        return {
+            "phase": self.config.power_reclaim_phase,
+            "proportion_percent": self.config.power_reclaim_proportion_percent,
+            "max_moves": self.config.power_reclaim_max_moves,
+        }
+
     def baseline_identity(
         self,
         *,
@@ -614,9 +622,7 @@ class Contest2026OpenROADEvaluator:
             "optimization_mode": optimization_mode,
             "timing_recipe": recipe,
             "power_reclaim": {
-                "phase": self.config.power_reclaim_phase,
-                "proportion_percent": self.config.power_reclaim_proportion_percent,
-                "max_moves": self.config.power_reclaim_max_moves,
+                **self.effective_power_reclaim_profile(),
                 "stage_tns_ceiling_ns": self.config.power_stage_tns_ceiling_ns,
             },
         }
