@@ -4713,6 +4713,73 @@ Keep the checked parent.
         self.assertEqual(staged.metrics["leakage_power_pw"], 110.0)
         self.assertEqual(repeated, staged)
 
+    def test_power_stage_uses_unstaged_p0_parent_when_same_flow_baseline_exceeds_safety_ceiling(self) -> None:
+        class StageEvaluator:
+            name = "stage_evaluator"
+
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def evaluate_parent(self, **_: object) -> dict[str, object]:
+                self.calls += 1
+                return {
+                    "ok": True,
+                    "metrics": {
+                        "tns_abs_ns": 65.44,
+                        "leakage_power_pw": 110.0,
+                        "drv_count": 0.0,
+                    },
+                    "checks": [],
+                    "artifacts": {},
+                }
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            parent = Parent(
+                "baseline",
+                {"tns_abs_ns": 12.69, "leakage_power_pw": 200.0, "drv_count": 0.0},
+                "p0",
+                "p0_hash",
+                0.0,
+                "unknown",
+            )
+            (root / "parents" / parent.source_hash / "source").mkdir(parents=True)
+            evaluator = StageEvaluator()
+            engine = GoalEvolveEngine(
+                contract=self.contract,
+                state_root=root,
+                planner=SimpleNamespace(name="planner"),
+                evaluator=evaluator,
+                workspace_provider=SimpleNamespace(name="workspace"),
+                promotion_policy=SimpleNamespace(name="promotion"),
+            )
+            staged = engine._stage_matched_parent(
+                parent=parent,
+                decision_context={
+                    "evaluation_mode": "power_only",
+                    "power_stage_tns_ceiling_ns": 60.0,
+                },
+            )
+            repeated = engine._stage_matched_parent(
+                parent=parent,
+                decision_context={
+                    "evaluation_mode": "power_only",
+                    "power_stage_tns_ceiling_ns": 60.0,
+                },
+            )
+            rejection = next(
+                root.glob("stage_baselines/*/parent_stage_baseline_rejected.json")
+            )
+            payload = load_json(rejection)
+
+        self.assertEqual(staged, parent)
+        self.assertEqual(repeated, parent)
+        self.assertEqual(evaluator.calls, 1)
+        self.assertEqual(
+            payload["reason"], "stage_parent_baseline_tns_safety_ceiling:65.44"
+        )
+        self.assertEqual(payload["comparison_authority"], "unstaged_p0_parent")
+
     def test_power_stage_rejects_nonzero_drv_parent_baseline(self) -> None:
         class StageEvaluator:
             name = "stage_evaluator"

@@ -2608,6 +2608,15 @@ class GoalEvolveEngine:
             / f"{parent.source_hash}_{mode}_{cache_suffix}"
         )
         baseline_path = baseline_root / "baseline.json"
+        rejected_stage = load_json(
+            baseline_root / "parent_stage_baseline_rejected.json", {}
+        ) or {}
+        if (
+            mode == "power_only"
+            and isinstance(rejected_stage, Mapping)
+            and rejected_stage.get("comparison_authority") == "unstaged_p0_parent"
+        ):
+            return parent
         baseline_invalidated = self._is_invalidated_stage_baseline(baseline_root)
         if not baseline_path.is_file() or baseline_invalidated:
             compatible = self._compatible_cached_baseline(
@@ -2664,17 +2673,32 @@ class GoalEvolveEngine:
                 rejection_reason = f"stage_parent_baseline_invalid_drv:{drv_error}"
             elif stage_drv != 0.0:
                 rejection_reason = f"stage_parent_baseline_nonzero_drv:{stage_drv}"
+            else:
+                raw_ceiling = decision_context.get("power_stage_tns_ceiling_ns")
+                if isinstance(raw_ceiling, (int, float)) and not isinstance(raw_ceiling, bool):
+                    ceiling = float(raw_ceiling)
+                    tns = metrics.get("tns_abs_ns")
+                    if math.isfinite(ceiling) and ceiling > 0.0:
+                        if not isinstance(tns, (int, float)) or isinstance(tns, bool) or not math.isfinite(float(tns)):
+                            rejection_reason = "stage_parent_baseline_invalid_tns"
+                        elif float(tns) > ceiling:
+                            rejection_reason = (
+                                "stage_parent_baseline_tns_safety_ceiling:"
+                                f"{float(tns)}"
+                            )
         if rejection_reason:
-            atomic_json(
-                baseline_root / "parent_stage_baseline_rejected.json",
-                {
-                    "parent_before": parent.to_dict(),
-                    "evaluation_mode": mode,
-                    "baseline": payload,
-                    "reason": rejection_reason,
-                    "promotion_authority": "none",
-                },
-            )
+            rejection = {
+                "parent_before": parent.to_dict(),
+                "evaluation_mode": mode,
+                "baseline": payload,
+                "reason": rejection_reason,
+                "promotion_authority": "none",
+            }
+            if rejection_reason.startswith("stage_parent_baseline_tns_safety_ceiling:"):
+                rejection["comparison_authority"] = "unstaged_p0_parent"
+                atomic_json(baseline_root / "parent_stage_baseline_rejected.json", rejection)
+                return parent
+            atomic_json(baseline_root / "parent_stage_baseline_rejected.json", rejection)
             raise RuntimeError(rejection_reason)
         distance, _, _ = self.contract.evaluate(metrics)
         staged = replace(
