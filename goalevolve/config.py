@@ -15,6 +15,7 @@ from .core.provenance import toolchain_fingerprint
 from .evaluation.promotion import PowerFirstPromotion, StrictEvidencePromotion
 from .execution.execution import ExecutionPolicy
 from .planning.scope import SourceScopeResolver
+from .planning.historical_seeds import load_historical_seed_cards
 from .evaluation.contest2026 import Contest2026Config, Contest2026OpenROADEvaluator, _project_toolchain
 from .agents.codex_student import CodexStudentConfig, CodexStudentEditor, NoopStudentEditor
 from .agents.narrator import CodexNarrativeSummarizer, CodexNarratorConfig
@@ -121,6 +122,8 @@ class ExperimentConfig:
     power_reclaim_proportion_percent: float = 80.0
     power_reclaim_max_moves: int = 0
     declared_power_reclaim_profile: PowerReclaimProfile | None = None
+    enforce_declared_power_reclaim_profile: bool = False
+    historical_seed_cards: tuple[dict[str, object], ...] = ()
     allowed_patch_roots: tuple[str, ...] = ()
     require_cpp_patch: bool = True
     command_timeout_s: int = 7200
@@ -213,7 +216,14 @@ def load_config(path: Path) -> ExperimentConfig:
         )
         if declared_power_reclaim_profile != effective_profile:
             raise ValueError("declared power-reclaim profile differs from resolved profile")
-    if evaluator == "contest_openroad" and raw.get("campaign_ready") is True and declared_power_reclaim_profile is None:
+    enforce_declared_power_reclaim_profile = bool(
+        raw.get("enforce_declared_power_reclaim_profile", False)
+    )
+    if (
+        evaluator == "contest_openroad"
+        and enforce_declared_power_reclaim_profile
+        and declared_power_reclaim_profile is None
+    ):
         raise ValueError("ready contest profile requires declared_power_reclaim_profile")
     return ExperimentConfig(
         design=design,
@@ -235,6 +245,10 @@ def load_config(path: Path) -> ExperimentConfig:
         power_reclaim_proportion_percent=power_reclaim_proportion_percent,
         power_reclaim_max_moves=power_reclaim_max_moves,
         declared_power_reclaim_profile=declared_power_reclaim_profile,
+        enforce_declared_power_reclaim_profile=enforce_declared_power_reclaim_profile,
+        historical_seed_cards=load_historical_seed_cards(
+            optional_path(raw.get("historical_seed_cards"))
+        ),
         students=tuple(raw.get("students") or ("student_1", "student_2", "student_3", "student_4")),
         allowed_patch_roots=tuple(raw.get("allowed_patch_roots") or ()),
         require_cpp_patch=bool(raw.get("require_cpp_patch", True)),

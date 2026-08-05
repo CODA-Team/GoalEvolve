@@ -124,6 +124,7 @@ class CodexTeacher:
         search_policy: dict[str, object] | None = None,
         source_root: Path | None = None,
         paper_cards: Sequence[dict[str, object]] = (),
+        historical_seeds: Sequence[dict[str, object]] = (),
     ) -> TeacherPlan:
         epd = EvolutionProgramDatabase(state_root).teacher_summary()
         observations = ObservationMemory(state_root).summary()
@@ -143,6 +144,7 @@ class CodexTeacher:
             search_policy=search_policy,
             source_root=source_root,
             paper_cards=paper_cards,
+            historical_seeds=historical_seeds,
         )
         validation_attempts: list[dict[str, object]] = []
         required_roles = tuple(item.student_role for item in fallback)
@@ -662,7 +664,7 @@ class CodexTeacher:
         )
 
     @staticmethod
-    def _plan_prompt(*, parent: Parent, diagnosis: Diagnosis, epd: dict[str, object], observations: dict[str, object], schedule_memory: dict[str, object] | None = None, previous_review: dict[str, object], fallback: Sequence[Hypothesis], contract=None, decision_context: dict[str, object] | None = None, source_index: dict[str, object] | None = None, repository_graph: dict[str, object] | None = None, search_policy: dict[str, object] | None = None, source_root: Path | None = None, paper_cards: Sequence[dict[str, object]] = ()) -> str:
+    def _plan_prompt(*, parent: Parent, diagnosis: Diagnosis, epd: dict[str, object], observations: dict[str, object], schedule_memory: dict[str, object] | None = None, previous_review: dict[str, object], fallback: Sequence[Hypothesis], contract=None, decision_context: dict[str, object] | None = None, source_index: dict[str, object] | None = None, repository_graph: dict[str, object] | None = None, search_policy: dict[str, object] | None = None, source_root: Path | None = None, paper_cards: Sequence[dict[str, object]] = (), historical_seeds: Sequence[dict[str, object]] = ()) -> str:
         contract_view = contract.to_dict() if contract is not None and hasattr(contract, "to_dict") else {}
         # Put the decision semantics in the structured stage payload as well
         # as in controller code.  This prevents the model from interpreting
@@ -711,6 +713,7 @@ class CodexTeacher:
             search_policy=search_policy or {},
             source_root=source_root,
             paper_cards=paper_cards,
+            historical_seeds=historical_seeds,
         )
         return "\n".join(
             [

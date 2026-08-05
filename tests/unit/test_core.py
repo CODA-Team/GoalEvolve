@@ -7870,6 +7870,12 @@ Keep the checked parent.
             with self.assertRaisesRegex(ValueError, "declared power-reclaim profile differs"):
                 load_config(path)
 
+    def test_legacy_ready_profile_without_declaration_remains_loadable(self) -> None:
+        project_root = Path(__file__).resolve().parents[2]
+        config = load_config(project_root / "experiments/jpeg_encoder/evolve.json")
+        self.assertTrue(config.campaign_ready)
+        self.assertIsNone(config.declared_power_reclaim_profile)
+
     def test_contest_profile_is_the_single_tcl_source(self) -> None:
         evaluator = Contest2026OpenROADEvaluator(
             Contest2026Config(
@@ -8004,6 +8010,7 @@ Keep the checked parent.
             config = SimpleNamespace(
                 evaluator="contest_openroad",
                 campaign_ready=True,
+                enforce_declared_power_reclaim_profile=True,
                 baseline_metrics={"tns_abs_ns": 12.69},
                 declared_power_reclaim_profile=PowerReclaimProfile(
                     "early_forced_reclaim", 80.0, 0
@@ -8013,6 +8020,139 @@ Keep the checked parent.
                 with self.assertRaisesRegex(RuntimeError, "initialize sentinel"):
                     cli.command_baseline(SimpleNamespace(config="ignored.json", output=None))
             self.assertTrue((state_root / "execution_profile.json").is_file())
+
+    def test_teacher_packet_marks_historical_seed_as_revalidation_only(self) -> None:
+        prompt = CodexTeacher._plan_prompt(
+            parent=self.parent,
+            diagnosis=SimpleNamespace(to_dict=lambda: {}),
+            epd={},
+            observations={},
+            previous_review={},
+            fallback=(replace(self.hypothesis, student_id="student_1"),),
+            historical_seeds=(
+                {
+                    "seed_id": "v2_r3_repair_power",
+                    "source_anchors": (
+                        "src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::iterateEarlyForcedReclaim",
+                    ),
+                    "decision_boundary": "candidate admission",
+                    "summary": "Preserve a bounded leakage-positive VT path.",
+                    "expected_signals": ("repair_power_seed_examined",),
+                },
+            ),
+        )
+        self.assertIn("## Historical Mechanism Seeds (revalidation only)", prompt)
+        self.assertIn("cannot supply a parent, QoR metric, or promotion", prompt)
+        self.assertIn("v2_r3_repair_power", prompt)
+
+    def test_graph_filter_excludes_seed_with_unresolved_anchor(self) -> None:
+        from goalevolve.planning.historical_seeds import graph_resolvable_seeds
+
+        graph = SimpleNamespace(
+            resolve_anchor=lambda anchor: SimpleNamespace(resolved=anchor.endswith("::resolved"))
+        )
+        seeds = (
+            {
+                "seed_id": "valid",
+                "source_anchors": ("src/rsz/Power.cc::resolved",),
+                "decision_boundary": "admission",
+                "summary": "valid",
+                "expected_signals": (),
+            },
+            {
+                "seed_id": "missing",
+                "source_anchors": ("src/rsz/Power.cc::missing",),
+                "decision_boundary": "admission",
+                "summary": "missing",
+                "expected_signals": (),
+            },
+        )
+        self.assertEqual(["valid"], [seed["seed_id"] for seed in graph_resolvable_seeds(graph, seeds)])
+
+    def test_historical_seed_rejects_historical_qor_authority(self) -> None:
+        from goalevolve.planning.historical_seeds import load_historical_seed_cards
+
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "seeds.json"
+            atomic_json(
+                path,
+                {
+                    "cards": [
+                        {
+                            "seed_id": "bad",
+                            "source_anchors": ["src/rsz/Power.cc::resolved"],
+                            "decision_boundary": "admission",
+                            "summary": "must fail",
+                            "expected_signals": [],
+                            "metrics": {"leakage_power_pw": 1.0},
+                        }
+                    ]
+                },
+            )
+            with self.assertRaisesRegex(ValueError, "forbidden authority field:metrics"):
+                load_historical_seed_cards(path)
+
+    def test_config_loads_read_only_historical_seed_cards(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            seeds = root / "seeds.json"
+            atomic_json(
+                seeds,
+                {
+                    "cards": [
+                        {
+                            "seed_id": "v2_repair_power",
+                            "source_anchors": ["src/rsz/Power.cc::resolved"],
+                            "decision_boundary": "admission",
+                            "summary": "bounded revalidation evidence",
+                            "expected_signals": ["seed_examined"],
+                        }
+                    ]
+                },
+            )
+            profile = root / "profile.json"
+            atomic_json(
+                profile,
+                {
+                    "design": "unit",
+                    "baseline_metrics": {"tns_abs_ns": 10.0},
+                    "target_metrics": {"tns_abs_ns": 1.0},
+                    "historical_seed_cards": "seeds.json",
+                },
+            )
+            config = load_config(profile)
+        self.assertEqual("v2_repair_power", config.historical_seed_cards[0]["seed_id"])
+
+    def test_engine_filters_configured_seed_cards_through_parent_graph(self) -> None:
+        engine = GoalEvolveEngine(
+            self.contract,
+            Path("/state"),
+            DiversePlanner(),
+            MockEvaluator(),
+            IsolatedWorkspace(),
+            StrictEvidencePromotion(),
+            historical_seed_cards=(
+                {
+                    "seed_id": "resolved",
+                    "source_anchors": ("src/rsz/Power.cc::resolved",),
+                    "decision_boundary": "admission",
+                    "summary": "accepted",
+                    "expected_signals": (),
+                },
+                {
+                    "seed_id": "missing",
+                    "source_anchors": ("src/rsz/Power.cc::missing",),
+                    "decision_boundary": "admission",
+                    "summary": "rejected",
+                    "expected_signals": (),
+                },
+            ),
+        )
+        graph = SimpleNamespace(
+            resolve_anchor=lambda anchor: SimpleNamespace(resolved=anchor.endswith("::resolved"))
+        )
+        cards = engine._graph_resolvable_historical_seeds(graph)
+        self.assertEqual(["resolved"], [card["seed_id"] for card in cards])
 
 
 if __name__ == "__main__":

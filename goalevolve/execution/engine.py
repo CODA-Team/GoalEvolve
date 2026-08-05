@@ -17,6 +17,7 @@ from ..core.io import atomic_json, load_json, sha256_json
 from ..core.models import CandidateResult, EvidenceVerdict, Hypothesis, Parent
 from ..planning.observations import ObservationMemory
 from ..planning.repository_graph import RepositoryGraphIndex
+from ..planning.historical_seeds import graph_resolvable_seeds
 from ..planning.search_policy import SearchPolicyBuilder
 from ..core.plugins import Evaluator, Planner, PromotionPolicy, StudentEditor, Teacher, WorkspaceProvider
 from ..agents.markdown_protocol import parse_teacher_plan
@@ -107,6 +108,7 @@ class GoalEvolveEngine:
     max_consecutive_no_promotion_rounds: int = 3
     prefer_execution_champion: bool = False
     epd_max_reinforcement_attempts: int = 2
+    historical_seed_cards: tuple[dict[str, object], ...] = ()
     repository_graph_enabled: bool = True
 
     def _epd(self) -> EvolutionProgramDatabase:
@@ -130,6 +132,10 @@ class GoalEvolveEngine:
             source_hash=source_hash,
             allowed_patch_roots=allowed_patch_roots,
         )
+
+    def _graph_resolvable_historical_seeds(self, graph) -> tuple[dict[str, object], ...]:
+        """Expose prior mechanism descriptions only when this parent resolves them."""
+        return graph_resolvable_seeds(graph, self.historical_seed_cards)
 
     def initialize(self, *, baseline_metrics: dict[str, float], source_commit: str = "baseline", source_hash: str = "baseline") -> Parent:
         self.state_root.mkdir(parents=True, exist_ok=True)
@@ -667,6 +673,9 @@ class GoalEvolveEngine:
                     if retriever is not None and hasattr(retriever, "paper_card_references")
                     else []
                 )
+                historical_seeds = self._graph_resolvable_historical_seeds(
+                    repository_graph
+                )
                 teacher_plan = self.teacher.plan(
                     state_root=self.state_root,
                     round_root=round_root,
@@ -682,6 +691,7 @@ class GoalEvolveEngine:
                     search_policy=search_policy,
                     source_root=parent_source,
                     paper_cards=paper_cards,
+                    historical_seeds=historical_seeds,
                 )
                 teacher_plan_payload = teacher_plan.plan
                 if not bool(teacher_plan_payload.get("format_valid")):
@@ -780,6 +790,7 @@ class GoalEvolveEngine:
                 teacher_plan_payload["repository_graph_enabled"] = self.repository_graph_enabled
                 teacher_plan_payload["search_policy"] = search_policy
                 teacher_plan_payload["paper_cards"] = paper_cards
+                teacher_plan_payload["historical_seeds"] = list(historical_seeds)
                 cited_cards = [
                     str(card_id)
                     for idea in list(parsed_plan.get("evolution_idea_records") or ())

@@ -61,6 +61,7 @@ class TeacherPacketBuilder:
         search_policy: Mapping[str, object],
         source_root: Path | None,
         paper_cards: Sequence[Mapping[str, object]],
+        historical_seeds: Sequence[Mapping[str, object]] = (),
     ) -> None:
         self.contract = dict(contract)
         self.parent = parent
@@ -76,6 +77,7 @@ class TeacherPacketBuilder:
         self.search_policy = dict(search_policy)
         self.source_root = source_root
         self.paper_cards = [dict(card) for card in paper_cards]
+        self.historical_seeds = [dict(card) for card in historical_seeds]
 
     def usage_guide(self) -> list[str]:
         """Give the model a local, one-line operating guide for every slot."""
@@ -90,7 +92,7 @@ class TeacherPacketBuilder:
             "- **Timing Schedule / Cell-Reversal Memory** — Use this only to understand measured schedule interactions and to select from Controller recipes. Never edit Tcl or create a new recipe. Keep a source mechanism separate from a schedule recommendation. Follow the stated reversal and retention evidence.",
             "- **Student Reflection Digest** — Read this as implementation-level feedback from completed attempts. Reuse an actionable lesson only after checking its reflection and diff path in EPD. Turn a limitation into a bounded enhancer hypothesis rather than an ungrounded rewrite. The Controller still owns verdicts.",
             "- **Controller Role Envelopes** — Fill every supplied role and keep its source/evaluation boundary. Explorer creates a novel mechanism, Enhancer reinforces supported evidence, and Integrator checks compatibility. Choose only a listed recipe. Do not invent Students, parents, or EPD records.",
-            "- **Live Source Access / P0-rooted Source Graph** — Use the focused graph only to localize code, then run at least two successful read-only rg/sed inspections of the live parent. Quote real path::symbol anchors. Expand upstream only with explicit causality. The graph never authorizes a patch by itself.",
+            "- **Live Source Access / P0-rooted Source Graph** — Use the focused graph to localize code, then run at least two successful read-only rg/sed inspections of the live parent. Quote real path::symbol anchors. A live graph-resolvable off-slice hook is allowed only with explicit causality, a distinct boundary, and falsification condition. The graph never authorizes a patch by itself.",
             "- **Evidence-only Search Policy / Paper Cards** — Use the compact stagnation facts to diversify and paper cards for concepts, not patch recipes. The listed parent is the only parent. The Controller alone validates evidence and promotion. Full policy and literature details remain path-routed.",
             "",
         ]
@@ -107,6 +109,7 @@ class TeacherPacketBuilder:
         sections.extend(self._role_envelopes())
         sections.extend(self._live_source())
         sections.extend(self._source_graph())
+        sections.extend(self._historical_seeds())
         sections.extend(self._search_policy())
         sections.extend(self._paper_cards())
         return sections
@@ -356,9 +359,34 @@ class TeacherPacketBuilder:
         focused_files = graph.get("focused_files") or sorted({str(card.get("path") or "") for card in cards if card.get("path")})[:12]
         return [
             "## P0-rooted Source Graph and Doc Cards",
-            "This compact graph localizes likely execution paths; it is rooted in the frozen P0 snapshot and refreshed for the current parent. Read the focused graph, then verify live source with rg/sed before using a symbol; a Doc Card is evidence of location, not a patch prescription.",
+            "This compact graph localizes likely execution paths; it is rooted in the frozen P0 snapshot and refreshed for the current parent. Read the focused graph, then verify live source with rg/sed before using a symbol; a Doc Card is evidence of location, not a patch prescription or a restriction to the focus slice.",
             _json({"source_hash": graph_data.get("source_hash") or graph.get("source_hash"), "base_source_hash": graph_data.get("base_source_hash") or graph.get("base_source_hash"), "entry_chain": graph.get("entry_chain") or [], "focused_files": focused_files, "paths": paths, "cards": card_summary}),
             "Use a Doc Card's full `declarator` verbatim when a function name is overloaded. Separate multiple Source Evidence anchors with semicolons, never commas, because a C++ declarator may contain commas.",
+            "",
+        ]
+
+    def _historical_seeds(self) -> list[str]:
+        if not self.historical_seeds:
+            return []
+        compact = [
+            {
+                key: seed[key]
+                for key in (
+                    "seed_id",
+                    "source_anchors",
+                    "decision_boundary",
+                    "summary",
+                    "expected_signals",
+                )
+                if key in seed
+            }
+            for seed in self.historical_seeds
+        ]
+        return [
+            "## Historical Mechanism Seeds (revalidation only)",
+            "These cards describe source boundaries observed in an earlier campaign. They cannot supply a parent, QoR metric, or promotion. A Student must create a new diff and the Controller must re-run the complete official flow from this fresh lineage before any decision.",
+            "Every listed anchor has resolved in the current parent graph; use it only after live-source inspection and a distinct falsification condition.",
+            _json(compact),
             "",
         ]
 

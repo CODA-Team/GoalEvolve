@@ -40,6 +40,7 @@ def _engine(
         max_consecutive_no_promotion_rounds=config.max_consecutive_no_promotion_rounds,
         prefer_execution_champion=config.prefer_execution_champion,
         epd_max_reinforcement_attempts=config.epd_max_reinforcement_attempts,
+        historical_seed_cards=config.historical_seed_cards,
         repository_graph_enabled=(
             config.repository_graph_enabled
             if repository_graph_override is None
@@ -172,7 +173,10 @@ def command_run(args: argparse.Namespace) -> int:
             f"profile for {config.design!r} is not ready for evolution: measure the baseline, "
             "set absolute target_metrics, then set campaign_ready=true"
         )
-    if config.evaluator == "contest_openroad":
+    if (
+        config.evaluator == "contest_openroad"
+        and bool(getattr(config, "enforce_declared_power_reclaim_profile", False))
+    ):
         _verify_execution_profile(
             config=config,
             evaluator=engine.evaluator,
@@ -238,7 +242,11 @@ def command_official_check(args: argparse.Namespace) -> int:
 
 def command_baseline(args: argparse.Namespace) -> int:
     engine, config = _engine(Path(args.config).resolve())
-    if config.evaluator == "contest_openroad" and config.campaign_ready is True:
+    if (
+        config.evaluator == "contest_openroad"
+        and config.campaign_ready is True
+        and bool(getattr(config, "enforce_declared_power_reclaim_profile", False))
+    ):
         _verify_execution_profile(
             config=config,
             evaluator=engine.evaluator,
