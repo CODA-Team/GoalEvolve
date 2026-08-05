@@ -7889,6 +7889,131 @@ Keep the checked parent.
             },
         )
 
+    def test_execution_profile_audit_is_written_before_campaign_initialization(self) -> None:
+        from goalevolve import cli
+        from goalevolve.config import PowerReclaimProfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            state_root = Path(temporary)
+            profile = cli._verify_execution_profile(
+                config=SimpleNamespace(
+                    declared_power_reclaim_profile=PowerReclaimProfile(
+                        "early_forced_reclaim", 80.0, 0
+                    )
+                ),
+                evaluator=SimpleNamespace(
+                    effective_power_reclaim_profile=lambda: {
+                        "phase": "early_forced_reclaim",
+                        "proportion_percent": 80.0,
+                        "max_moves": 0,
+                    }
+                ),
+                state_root=state_root,
+            )
+            self.assertEqual(profile["declared"], profile["effective"])
+            self.assertEqual(
+                load_json(state_root / "execution_profile.json")["decision_role"],
+                "execution_audit_only",
+            )
+
+    def test_execution_profile_drift_rejects_before_campaign_initialization(self) -> None:
+        from goalevolve import cli
+        from goalevolve.config import PowerReclaimProfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            state_root = Path(temporary)
+            with self.assertRaisesRegex(
+                RuntimeError, "effective power-reclaim profile differs"
+            ):
+                cli._verify_execution_profile(
+                    config=SimpleNamespace(
+                        declared_power_reclaim_profile=PowerReclaimProfile(
+                            "early_forced_reclaim", 80.0, 0
+                        )
+                    ),
+                    evaluator=SimpleNamespace(
+                        effective_power_reclaim_profile=lambda: {
+                            "phase": "early_forced_reclaim",
+                            "proportion_percent": 1.0,
+                            "max_moves": 1,
+                        }
+                    ),
+                    state_root=state_root,
+                )
+            self.assertFalse((state_root / "contract.json").exists())
+
+    def test_execution_profile_cannot_change_when_resuming_campaign(self) -> None:
+        from goalevolve import cli
+        from goalevolve.config import PowerReclaimProfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            state_root = Path(temporary)
+            atomic_json(
+                state_root / "execution_profile.json",
+                {
+                    "schema_version": "goalevolve.execution-profile.v1",
+                    "decision_role": "execution_audit_only",
+                    "declared": {
+                        "phase": "early_forced_reclaim",
+                        "proportion_percent": 80.0,
+                        "max_moves": 0,
+                    },
+                    "effective": {
+                        "phase": "early_forced_reclaim",
+                        "proportion_percent": 80.0,
+                        "max_moves": 0,
+                    },
+                },
+            )
+            with self.assertRaisesRegex(
+                RuntimeError, "execution profile differs from existing campaign"
+            ):
+                cli._verify_execution_profile(
+                    config=SimpleNamespace(
+                        declared_power_reclaim_profile=PowerReclaimProfile(
+                            "early_forced_reclaim", 1.0, 1
+                        )
+                    ),
+                    evaluator=SimpleNamespace(
+                        effective_power_reclaim_profile=lambda: {
+                            "phase": "early_forced_reclaim",
+                            "proportion_percent": 1.0,
+                            "max_moves": 1,
+                        }
+                    ),
+                    state_root=state_root,
+                )
+
+    def test_ready_contest_baseline_writes_profile_before_initialization(self) -> None:
+        from goalevolve import cli
+        from goalevolve.config import PowerReclaimProfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            state_root = Path(temporary)
+            engine = SimpleNamespace(
+                state_root=state_root,
+                evaluator=SimpleNamespace(
+                    effective_power_reclaim_profile=lambda: {
+                        "phase": "early_forced_reclaim",
+                        "proportion_percent": 80.0,
+                        "max_moves": 0,
+                    }
+                ),
+                initialize=lambda **_: (_ for _ in ()).throw(RuntimeError("initialize sentinel")),
+            )
+            config = SimpleNamespace(
+                evaluator="contest_openroad",
+                campaign_ready=True,
+                baseline_metrics={"tns_abs_ns": 12.69},
+                declared_power_reclaim_profile=PowerReclaimProfile(
+                    "early_forced_reclaim", 80.0, 0
+                ),
+            )
+            with patch("goalevolve.cli._engine", return_value=(engine, config)):
+                with self.assertRaisesRegex(RuntimeError, "initialize sentinel"):
+                    cli.command_baseline(SimpleNamespace(config="ignored.json", output=None))
+            self.assertTrue((state_root / "execution_profile.json").is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

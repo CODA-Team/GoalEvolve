@@ -49,6 +49,37 @@ def _engine(
     return engine, config
 
 
+def _verify_execution_profile(*, config, evaluator, state_root: Path) -> dict[str, object]:
+    """Persist the exact repair-power command profile before state mutation.
+
+    The record is execution provenance only.  It prevents a ready campaign
+    from silently evaluating candidates with a smoke-profile command while
+    leaving QoR contracts and promotion decisions untouched.
+    """
+    declared_profile = getattr(config, "declared_power_reclaim_profile", None)
+    if declared_profile is None:
+        raise RuntimeError("ready campaign lacks declared power-reclaim profile")
+    profile_method = getattr(evaluator, "effective_power_reclaim_profile", None)
+    if not callable(profile_method):
+        raise RuntimeError("evaluator does not expose effective power-reclaim profile")
+    declared = dict(declared_profile.to_dict())
+    effective = dict(profile_method())
+    if effective != declared:
+        raise RuntimeError("effective power-reclaim profile differs from declared profile")
+    payload: dict[str, object] = {
+        "schema_version": "goalevolve.execution-profile.v1",
+        "decision_role": "execution_audit_only",
+        "declared": declared,
+        "effective": effective,
+    }
+    path = state_root / "execution_profile.json"
+    existing = load_json(path)
+    if isinstance(existing, dict) and existing and existing != payload:
+        raise RuntimeError("execution profile differs from existing campaign")
+    atomic_json(path, payload)
+    return payload
+
+
 def _attach_configured_baseline(*, engine: GoalEvolveEngine, config) -> None:
     """Attach the immutable, same-flow p0 artifact selected by configuration.
 
@@ -141,6 +172,12 @@ def command_run(args: argparse.Namespace) -> int:
             f"profile for {config.design!r} is not ready for evolution: measure the baseline, "
             "set absolute target_metrics, then set campaign_ready=true"
         )
+    if config.evaluator == "contest_openroad":
+        _verify_execution_profile(
+            config=config,
+            evaluator=engine.evaluator,
+            state_root=engine.state_root,
+        )
     # initialize is idempotent and rejects a resume with a different frozen contract.
     engine.initialize(baseline_metrics=config.baseline_metrics)
     _attach_configured_baseline(engine=engine, config=config)
@@ -201,6 +238,12 @@ def command_official_check(args: argparse.Namespace) -> int:
 
 def command_baseline(args: argparse.Namespace) -> int:
     engine, config = _engine(Path(args.config).resolve())
+    if config.evaluator == "contest_openroad" and config.campaign_ready is True:
+        _verify_execution_profile(
+            config=config,
+            evaluator=engine.evaluator,
+            state_root=engine.state_root,
+        )
     # A baseline command is allowed to initialize state, but never to create a
     # candidate or alter the source seed. It attaches real p0 evidence to EPD.
     parent = engine.initialize(baseline_metrics=config.baseline_metrics)
