@@ -45,6 +45,14 @@ RMP_AREA_EXECUTION_ENTRY_SYMBOLS = {
         "rmp::Restructure::runABC",
     }),
 }
+_EARLY_FORCED_RECLAIM_INACTIVE_SYMBOLS = frozenset({
+    "rsz::RepairPowerPolicy::iterateLateLeakageRecovery",
+    "rsz::RepairPowerPolicy::generateLateLeakageCandidates",
+    "rsz::RepairPowerPolicy::tryCommitLateCandidate",
+    "rsz::RepairPowerPolicy::tryCommitLateWindow",
+    "rsz::RepairPowerPolicy::withinLateLeakageBudget",
+    "rsz::RepairPowerPolicy::withinLateWeightedPowerTimingBudget",
+})
 
 
 @dataclass(frozen=True)
@@ -333,6 +341,7 @@ def materialize_teacher_assignments(
             evaluation_mode=template.evaluation_mode,
             recipe_id=executing_recipe_id,
             repository_graph=repository_graph,
+            power_reclaim_phase=str(context.get("power_reclaim_phase") or ""),
         )
         if execution_errors:
             errors.extend(f"{student_id}:{error}" for error in execution_errors)
@@ -550,11 +559,23 @@ def _power_only_execution_admission_errors(
     evaluation_mode: str,
     recipe_id: str,
     repository_graph: RepositoryGraph | None,
+    power_reclaim_phase: str = "",
 ) -> tuple[str, ...]:
     """Require generic power hooks to be called by the dispatched source graph."""
 
     if evaluation_mode != "power_only":
         return ()
+    phase = power_reclaim_phase.strip()
+    inactive_symbols = (
+        _EARLY_FORCED_RECLAIM_INACTIVE_SYMBOLS
+        if phase == "early_forced_reclaim"
+        else frozenset()
+    )
+    phase_errors = tuple(
+        f"inactive_power_phase_symbol:{phase}:{anchor}"
+        for anchor in source_evidence
+        if any(anchor.endswith(symbol) for symbol in inactive_symbols)
+    )
     direct_files = set(POWER_ONLY_EXECUTION_DIRECT_FILES)
     entry_symbols = dict(POWER_ONLY_EXECUTION_ENTRY_SYMBOLS)
     if recipe_id == "rmp_area_power":
@@ -562,9 +583,9 @@ def _power_only_execution_admission_errors(
         entry_symbols.update(RMP_AREA_EXECUTION_ENTRY_SYMBOLS)
     generic_hooks = tuple(hook for hook in hooks if hook not in direct_files)
     if not generic_hooks:
-        return ()
+        return phase_errors
     if repository_graph is None:
-        return tuple(f"unreachable_power_source_hook:{hook}" for hook in generic_hooks)
+        return (*phase_errors, *(f"unreachable_power_source_hook:{hook}" for hook in generic_hooks))
 
     root_ids = {
         symbol.symbol_id
@@ -578,7 +599,7 @@ def _power_only_execution_admission_errors(
         if separator:
             evidence_by_path.setdefault(path.strip(), []).append(anchor)
 
-    errors: list[str] = []
+    errors: list[str] = list(phase_errors)
     for hook in generic_hooks:
         resolutions = tuple(
             repository_graph.resolve_anchor(anchor)

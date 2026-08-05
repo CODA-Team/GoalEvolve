@@ -424,6 +424,9 @@ class GoalEvolveEngine:
             parent=parent,
             decision_context=decision_context,
         )
+        power_reclaim_phase = self._configured_power_reclaim_phase()
+        if power_reclaim_phase:
+            decision_context["power_reclaim_phase"] = power_reclaim_phase
         # A stage baseline is an immutable parent measurement, not a Student
         # result.  All candidates in this round must compare against it.
         parent_at_start = parent
@@ -506,6 +509,7 @@ class GoalEvolveEngine:
                 teacher_context={
                     "diagnosis_summary": parsed_plan.get("diagnosis_summary"),
                     "parent_policy": parsed_plan.get("parent_policy"),
+                    "power_reclaim_phase": decision_context.get("power_reclaim_phase"),
                 },
                 explorer_retrieval_audit=(
                     dict(teacher_plan_payload.get("retrieval_audit") or {})
@@ -535,7 +539,10 @@ class GoalEvolveEngine:
                     prior_markdown=recovered_markdown,
                     errors=recovery_blocking_errors,
                     role_templates=role_templates,
-                    execution_contracts=self._teacher_execution_contracts(role_templates),
+                    execution_contracts=self._teacher_execution_contracts(
+                        role_templates,
+                        power_reclaim_phase=power_reclaim_phase,
+                    ),
                     repair_index=len(recovery_repairs) + 1,
                 )
                 recovery_repairs.append(repair)
@@ -572,6 +579,7 @@ class GoalEvolveEngine:
                     teacher_context={
                         "diagnosis_summary": parsed_plan.get("diagnosis_summary"),
                         "parent_policy": parsed_plan.get("parent_policy"),
+                        "power_reclaim_phase": decision_context.get("power_reclaim_phase"),
                     },
                     explorer_retrieval_audit=(
                         dict(teacher_plan_payload.get("retrieval_audit") or {})
@@ -692,6 +700,10 @@ class GoalEvolveEngine:
                     source_root=parent_source,
                     paper_cards=paper_cards,
                     historical_seeds=historical_seeds,
+                    execution_contracts=self._teacher_execution_contracts(
+                        role_templates,
+                        power_reclaim_phase=power_reclaim_phase,
+                    ),
                 )
                 teacher_plan_payload = teacher_plan.plan
                 if not bool(teacher_plan_payload.get("format_valid")):
@@ -715,6 +727,7 @@ class GoalEvolveEngine:
                         teacher_context={
                             "diagnosis_summary": plan.get("diagnosis_summary"),
                             "parent_policy": plan.get("parent_policy"),
+                            "power_reclaim_phase": decision_context.get("power_reclaim_phase"),
                         },
                         explorer_retrieval_audit=(
                             dict(teacher_plan_payload.get("retrieval_audit") or {})
@@ -745,7 +758,10 @@ class GoalEvolveEngine:
                         prior_markdown=prior_markdown,
                         errors=controller_errors,
                         role_templates=role_templates,
-                        execution_contracts=self._teacher_execution_contracts(role_templates),
+                        execution_contracts=self._teacher_execution_contracts(
+                            role_templates,
+                            power_reclaim_phase=power_reclaim_phase,
+                        ),
                         repair_index=repair_index,
                     )
                     controller_repairs.append(repaired)
@@ -1315,19 +1331,33 @@ class GoalEvolveEngine:
         markdown = str(repair.get("teacher_markdown") or "").strip()
         return markdown
 
+    def _configured_power_reclaim_phase(self) -> str:
+        config = getattr(self.evaluator, "config", None)
+        return str(getattr(config, "power_reclaim_phase", "") or "").strip()
+
     @staticmethod
     def _teacher_execution_contracts(
         role_templates: Sequence[Hypothesis],
+        *,
+        power_reclaim_phase: str = "",
     ) -> dict[str, object]:
         """Describe only source boundaries the active Controller really runs."""
         contracts: dict[str, object] = {}
         for mode in sorted({str(item.evaluation_mode or "") for item in role_templates}):
             if mode == "power_only":
+                phase = power_reclaim_phase or "<configured power phase>"
                 contracts[mode] = {
                     "commands": [
-                        "repair_power -phase <configured power phase>",
+                        f"repair_power -phase {phase}",
                         "optional restructure -target area only for rmp_area_power",
                     ],
+                    "inactive_phase_rule": (
+                        "For early_forced_reclaim, late-only RepairPowerPolicy symbols "
+                        "are inadmissible unless an executed dispatch or phase-transition "
+                        "mechanism reaches them."
+                        if phase == "early_forced_reclaim"
+                        else "Use only symbols reached by the configured repair_power phase."
+                    ),
                     "executed_source_hooks": [
                         *(
                             f"{path}::{symbol}"
@@ -2607,10 +2637,23 @@ class GoalEvolveEngine:
             / "stage_baselines"
             / f"{parent.source_hash}_{mode}_{cache_suffix}"
         )
+        recovery_record = load_json(
+            self.state_root / "stage_parent_recovery.json", {}
+        ) or {}
+        recovered_parent = (
+            recovery_record.get("recovered_parent")
+            if isinstance(recovery_record, Mapping)
+            else None
+        )
+        recovered_from_invalid_stage = (
+            isinstance(recovered_parent, Mapping)
+            and dict(recovered_parent) == parent.to_dict()
+        )
         unstaged_p0_bootstrap = (
             mode == "power_only"
             and parent.parent_id == "baseline"
             and parent.evaluation_mode in {"", "unknown"}
+            and not recovered_from_invalid_stage
         )
         if unstaged_p0_bootstrap:
             atomic_json(

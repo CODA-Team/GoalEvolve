@@ -2430,6 +2430,48 @@ Keep the checked parent.
 
         self.assertEqual(result.errors, ())
 
+    def test_power_only_rejects_a_late_only_symbol_for_early_forced_reclaim(self) -> None:
+        from goalevolve.execution.teacher_assignment import (
+            _power_only_execution_admission_errors,
+        )
+        from goalevolve.planning.repository_graph import RepositoryGraphIndex
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            policy = source / "src/rsz/src/policy/RepairPowerPolicy.cc"
+            policy.parent.mkdir(parents=True)
+            policy.write_text(
+                "namespace rsz { class RepairPowerPolicy { public: void iterate(); "
+                "void iterateEarlyForcedReclaim(); void iterateLateLeakageRecovery(); }; "
+                "void RepairPowerPolicy::iterate() { iterateEarlyForcedReclaim(); } "
+                "void RepairPowerPolicy::iterateEarlyForcedReclaim() {} "
+                "void RepairPowerPolicy::iterateLateLeakageRecovery() {} }\n",
+                encoding="utf-8",
+            )
+            graph = RepositoryGraphIndex(
+                state_root=root / "state",
+                p0_source_root=source,
+                p0_artifact_root=root / "p0_graph",
+            ).build_p0(source_hash="p0", allowed_patch_roots=("src/rsz",))
+            anchor = (
+                "src/rsz/src/policy/RepairPowerPolicy.cc::"
+                "rsz::RepairPowerPolicy::iterateLateLeakageRecovery"
+            )
+            errors = _power_only_execution_admission_errors(
+                hooks=("src/rsz/src/policy/RepairPowerPolicy.cc",),
+                source_evidence=(anchor,),
+                evaluation_mode="power_only",
+                recipe_id="legacy_setup",
+                repository_graph=graph,
+                power_reclaim_phase="early_forced_reclaim",
+            )
+
+        self.assertEqual(
+            errors,
+            (f"inactive_power_phase_symbol:early_forced_reclaim:{anchor}",),
+        )
+
     def test_teacher_source_inspection_audit_requires_successful_source_reads(self) -> None:
         from goalevolve.agents.teacher import source_inspection_audit
 
@@ -2453,6 +2495,41 @@ Keep the checked parent.
             fallback=(replace(self.hypothesis, student_id="student_1"),),
         )
         self.assertLess(prompt.index("## Source Investigation"), prompt.index("## Evolution Ideas"))
+
+    def test_teacher_prompt_names_the_active_power_phase_as_a_hard_execution_boundary(self) -> None:
+        prompt = CodexTeacher._plan_prompt(
+            parent=self.parent,
+            diagnosis=SimpleNamespace(to_dict=lambda: {}),
+            epd={},
+            observations={},
+            previous_review={},
+            fallback=(replace(self.hypothesis, student_id="student_1"),),
+            decision_context={
+                "stage": "power_reclaim",
+                "evaluation_mode": "power_only",
+                "power_reclaim_phase": "early_forced_reclaim",
+            },
+        )
+
+        self.assertIn("## Active Power Execution Boundary", prompt)
+        self.assertIn("repair_power -phase early_forced_reclaim", prompt)
+        self.assertIn("late-only symbol is inadmissible", prompt)
+
+    def test_teacher_packet_distinguishes_source_cwd_from_absolute_epd_paths(self) -> None:
+        prompt = CodexTeacher._plan_prompt(
+            parent=self.parent,
+            diagnosis=SimpleNamespace(to_dict=lambda: {}),
+            epd={
+                "full_epd_artifact": "/tmp/campaign/knowledge/epd.json",
+            },
+            observations={},
+            previous_review={},
+            fallback=(replace(self.hypothesis, student_id="student_1"),),
+            source_root=Path("/tmp/parent-source"),
+        )
+
+        self.assertIn("Use supplied absolute EPD and graph paths verbatim", prompt)
+        self.assertIn("Do not run `python -m goalevolve.epd_search` from the source root", prompt)
 
     def test_teacher_repair_prompt_repeats_controller_execution_contract(self) -> None:
         prompt = CodexTeacher._plan_repair_prompt(

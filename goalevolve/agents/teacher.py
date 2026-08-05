@@ -125,6 +125,7 @@ class CodexTeacher:
         source_root: Path | None = None,
         paper_cards: Sequence[dict[str, object]] = (),
         historical_seeds: Sequence[dict[str, object]] = (),
+        execution_contracts: dict[str, object] | None = None,
     ) -> TeacherPlan:
         epd = EvolutionProgramDatabase(state_root).teacher_summary()
         observations = ObservationMemory(state_root).summary()
@@ -145,6 +146,7 @@ class CodexTeacher:
             source_root=source_root,
             paper_cards=paper_cards,
             historical_seeds=historical_seeds,
+            execution_contracts=execution_contracts,
         )
         validation_attempts: list[dict[str, object]] = []
         required_roles = tuple(item.student_role for item in fallback)
@@ -664,7 +666,7 @@ class CodexTeacher:
         )
 
     @staticmethod
-    def _plan_prompt(*, parent: Parent, diagnosis: Diagnosis, epd: dict[str, object], observations: dict[str, object], schedule_memory: dict[str, object] | None = None, previous_review: dict[str, object], fallback: Sequence[Hypothesis], contract=None, decision_context: dict[str, object] | None = None, source_index: dict[str, object] | None = None, repository_graph: dict[str, object] | None = None, search_policy: dict[str, object] | None = None, source_root: Path | None = None, paper_cards: Sequence[dict[str, object]] = (), historical_seeds: Sequence[dict[str, object]] = ()) -> str:
+    def _plan_prompt(*, parent: Parent, diagnosis: Diagnosis, epd: dict[str, object], observations: dict[str, object], schedule_memory: dict[str, object] | None = None, previous_review: dict[str, object], fallback: Sequence[Hypothesis], contract=None, decision_context: dict[str, object] | None = None, source_index: dict[str, object] | None = None, repository_graph: dict[str, object] | None = None, search_policy: dict[str, object] | None = None, source_root: Path | None = None, paper_cards: Sequence[dict[str, object]] = (), historical_seeds: Sequence[dict[str, object]] = (), execution_contracts: dict[str, object] | None = None) -> str:
         contract_view = contract.to_dict() if contract is not None and hasattr(contract, "to_dict") else {}
         # Put the decision semantics in the structured stage payload as well
         # as in controller code.  This prevents the model from interpreting
@@ -715,6 +717,19 @@ class CodexTeacher:
             paper_cards=paper_cards,
             historical_seeds=historical_seeds,
         )
+        active_power_boundary: list[str] = []
+        if (
+            decision_context.get("stage") == "power_reclaim"
+            and decision_context.get("evaluation_mode") == "power_only"
+        ):
+            phase = str(decision_context.get("power_reclaim_phase") or "<configured phase>")
+            active_power_boundary = [
+                "## Active Power Execution Boundary",
+                "This is a hard Controller execution boundary. Name only a source hook that the exact command below can execute; a dormant helper is not a hook.",
+                f"Exact command: repair_power -phase {phase}",
+                "For early_forced_reclaim, a late-only symbol is inadmissible. To use late behavior, make the dispatch or phase transition itself the explicit executed source mechanism.",
+                "",
+            ]
         return "\n".join(
             [
                 *packet.usage_guide(),
@@ -727,6 +742,11 @@ class CodexTeacher:
                 "Do not invent missing evidence, source symbols, execution paths, mechanism statuses, QoR results, or EPD records. Open path-routed evidence as needed before making an evidence claim.",
                 "",
                 *packet.sections(),
+                *active_power_boundary,
+                "## Controller Execution Contracts",
+                "These controller-owned facts constrain execution and are not mechanism suggestions.",
+                json.dumps(execution_contracts or {}, ensure_ascii=False, indent=2),
+                "",
                 "Return Markdown field blocks only. Do not return JSON or a code fence. Use exactly this structure:",
                 "",
                 "## Diagnosis Summary",

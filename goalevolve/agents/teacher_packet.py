@@ -251,6 +251,7 @@ class TeacherPacketBuilder:
         return [
             "## EPD (idea lifecycle and compact attempts)",
             "Use the EPD as a path-addressable idea, attempt, reflection, and mechanism database; do not paste or assume its full history. Explorer forms a draft signature before searching, Enhancer opens the selected dossier, and Integrator checks mechanism-card read/write boundaries.",
+            "Codex starts in the parent source root for source inspection. Use supplied absolute EPD and graph paths verbatim; do not make them relative to that source root. Do not run `python -m goalevolve.epd_search` from the source root.",
             "Explorer retrieval entry:",
             _json({**paths, "search_tool": "python -m goalevolve.epd_search", "search_scope": ["pending", "unactivated", "invalid", "promising", "validated"]}),
             "Object convention: `ideas/<IDEA_ID>/idea.json`; `attempts/<ATTEMPT_ID>/attempt.json`; `attempts/<ATTEMPT_ID>/student_reflection.md`; `attempts/<ATTEMPT_ID>/implementation.diff`; `mechanisms/<MECHANISM_ID>/mechanism_card.json`.",
