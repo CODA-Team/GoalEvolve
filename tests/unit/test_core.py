@@ -7952,6 +7952,9 @@ Keep the checked parent.
         config = load_config(
             project_root / "experiments/aes_cipher_top/p0_recovery_20260805.local.json"
         )
+        retry = load_config(
+            project_root / "experiments/aes_cipher_top/p0_recovery_20260805_r2.local.json"
+        )
 
         self.assertTrue(config.campaign_ready)
         self.assertTrue(config.enforce_declared_power_reclaim_profile)
@@ -7972,6 +7975,10 @@ Keep the checked parent.
         self.assertIsNone(config.initial_parent_id)
         self.assertIsNone(config.initial_parent_source_root)
         self.assertIsNone(config.initial_parent_metrics)
+        self.assertEqual(retry.baseline_evaluation_root, baseline.state_root)
+        self.assertNotEqual(retry.state_root, config.state_root)
+        self.assertEqual(retry.power_reclaim_proportion_percent, 80.0)
+        self.assertEqual(retry.power_reclaim_max_moves, 0)
         self.assertGreaterEqual(len(config.historical_seed_cards), 3)
         allowed = {
             "seed_id",
