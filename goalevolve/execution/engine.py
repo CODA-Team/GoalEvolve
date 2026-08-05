@@ -2607,16 +2607,25 @@ class GoalEvolveEngine:
             / "stage_baselines"
             / f"{parent.source_hash}_{mode}_{cache_suffix}"
         )
-        baseline_path = baseline_root / "baseline.json"
-        rejected_stage = load_json(
-            baseline_root / "parent_stage_baseline_rejected.json", {}
-        ) or {}
-        if (
+        unstaged_p0_bootstrap = (
             mode == "power_only"
-            and isinstance(rejected_stage, Mapping)
-            and rejected_stage.get("comparison_authority") == "unstaged_p0_parent"
-        ):
+            and parent.parent_id == "baseline"
+            and parent.evaluation_mode in {"", "unknown"}
+        )
+        if unstaged_p0_bootstrap:
+            atomic_json(
+                baseline_root / "parent_stage_baseline_bootstrap.json",
+                {
+                    "schema_version": "goalevolve.v2.stage-baseline-bootstrap.v1",
+                    "parent_before": parent.to_dict(),
+                    "evaluation_mode": mode,
+                    "reason": "bootstrap_unstaged_p0_parent",
+                    "comparison_authority": "unstaged_p0_parent",
+                    "promotion_authority": "none",
+                },
+            )
             return parent
+        baseline_path = baseline_root / "baseline.json"
         baseline_invalidated = self._is_invalidated_stage_baseline(baseline_root)
         if not baseline_path.is_file() or baseline_invalidated:
             compatible = self._compatible_cached_baseline(
@@ -2694,10 +2703,6 @@ class GoalEvolveEngine:
                 "reason": rejection_reason,
                 "promotion_authority": "none",
             }
-            if rejection_reason.startswith("stage_parent_baseline_tns_safety_ceiling:"):
-                rejection["comparison_authority"] = "unstaged_p0_parent"
-                atomic_json(baseline_root / "parent_stage_baseline_rejected.json", rejection)
-                return parent
             atomic_json(baseline_root / "parent_stage_baseline_rejected.json", rejection)
             raise RuntimeError(rejection_reason)
         distance, _, _ = self.contract.evaluate(metrics)
