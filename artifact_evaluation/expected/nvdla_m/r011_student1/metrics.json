@@ -1,0 +1,51 @@
+{
+  "contract": {
+    "baseline_metrics": {
+      "dynamic_power_pw": 41642300000.0,
+      "leakage_power_pw": 57700000.0,
+      "tns_abs_ns": 12.92
+    },
+    "contract_id": "GC_0d842f3585df723b",
+    "design": "nvdla_m",
+    "metrics": [
+      {
+        "baseline": 12.92,
+        "hard": true,
+        "minimize": true,
+        "name": "tns_abs_ns",
+        "target": 10.4,
+        "tolerance": 0.0,
+        "weight": 1.0
+      },
+      {
+        "baseline": 41642300000.0,
+        "hard": true,
+        "minimize": true,
+        "name": "dynamic_power_pw",
+        "target": 35300000000.0,
+        "tolerance": 0.0,
+        "weight": 1.0
+      },
+      {
+        "baseline": 57700000.0,
+        "hard": true,
+        "minimize": true,
+        "name": "leakage_power_pw",
+        "target": 31300000.0,
+        "tolerance": 0.0,
+        "weight": 1.0
+      }
+    ],
+    "schema_version": "goalevolve.v2.goal-contract.v1",
+    "source_fingerprint": {
+      "source_git_commit": "d231bd8f98d2a0adb8369002b2c1e7aa8e7877ed"
+    }
+  },
+  "decision_metrics": {
+    "drv_count": 0.0,
+    "dynamic_power_pw": 39361700000.0,
+    "leakage_power_pw": 38300000.0,
+    "runtime_s": 526.0,
+    "tns_abs_ns": 14.49
+  }
+}

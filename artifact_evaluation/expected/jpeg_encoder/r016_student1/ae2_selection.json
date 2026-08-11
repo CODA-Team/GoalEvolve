@@ -86,11 +86,11 @@
     "reference_evidence": "rounds/round_016/students/student_1/artifacts",
     "reference_source": "parents/1d76634cfe95582ddb6f43a429eaa1f6907136b33414fe586be2e95ad9adb1f0/source",
     "reference_source_manifest": {
-      "content_sha256": "56740ae63f945bce864842194d97d93cf49f24b9025629d862233bddcf522e73",
-      "directory_count": 682,
+      "content_sha256": "89b3568142a8f39e594ccb7c4c4bf03f3e2213e64745a3611a8fd4bf9f506f1c",
+      "directory_count": 673,
       "external_symlinks": [],
-      "regular_file_count": 11935,
-      "symlink_count": 372,
+      "regular_file_count": 11924,
+      "symlink_count": 370,
       "verified_no_external_symlinks": true
     },
     "reference_tcl": "rounds/round_016/students/student_1/artifacts/contest_output/evaluate.tcl"

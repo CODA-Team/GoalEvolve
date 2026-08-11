@@ -151,11 +151,11 @@ source outputs/toolchain/activate.sh
 export OPENROAD_EXE="$PWD/outputs/toolchain/openroad-p0/build/bin/openroad"
 
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2-preflight \
-  --artifact aes_r54_student1 --openroad "$OPENROAD_EXE" --verbose
+  --artifact aes_r58_student1 --openroad "$OPENROAD_EXE" --verbose
 
 # Build and replay this artifact's own immutable OpenROAD source snapshot.
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2 \
-  --artifact aes_r54_student1 --rebuild --jobs 8 --verbose
+  --artifact aes_r58_student1 --rebuild --jobs 8 --verbose
 ```
 
 `--verbose` streams configure, build, and flow logs to the terminal. Each
@@ -165,7 +165,7 @@ The selected modes include `power_then_timing`, NVDLA-A `power_only`, and
 NVDLA-C `timing_only`. See
 [AE2_SELECTIONS.md](artifact_evaluation/AE2_SELECTIONS.md) for all artifact
 IDs, source snapshots, Tcl schedules, QoR, and distances to target. Substitute
-any listed ID for `aes_r54_student1` to replay that design.
+any listed ID for `aes_r58_student1` to replay that design.
 
 `--openroad` is intentionally accepted only by `ae2-preflight`: it checks that
 the prepared host environment can launch OpenROAD. A formal AE-2 replay never

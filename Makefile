@@ -33,7 +33,7 @@ build-tools:
 
 ae2-preflight:
 	@test -f "$(PROJECT_ROOT)/outputs/toolchain/activate.sh" || { echo "Run: make setup" >&2; exit 2; }
-	@source "$(PROJECT_ROOT)/outputs/toolchain/activate.sh"; PYTHONPATH=. "$$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2-preflight --artifact aes_r54_student1 --verbose
+	@source "$(PROJECT_ROOT)/outputs/toolchain/activate.sh"; PYTHONPATH=. "$$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2-preflight --artifact aes_r58_student1 --verbose
 
 check:
 	@bash "$(HUMAN_SCRIPTS)/check.sh"

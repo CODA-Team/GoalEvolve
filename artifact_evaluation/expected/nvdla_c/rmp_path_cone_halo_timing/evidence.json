@@ -27,14 +27,13 @@
     "reference_evidence": "../campaign_r58_drv499_v2/stage_baselines/baseline_timing_only_rmp_path_cone_halo_timing_efaf3f024348efb7",
     "reference_source": "../campaign_r58_drv499_v2/parents/baseline/source",
     "reference_source_manifest": {
-      "content_sha256": "0aeb0e4c3a922290534c0cd2a46d79c6b2305aec88bf78ffc4f3b4e978afcf07",
-      "directory_count": 682,
+      "content_sha256": "97b7321cbe1f55057befde8ce2daa7b2ed51908faa49cea1f6b70692d5b09d99",
+      "directory_count": 673,
       "external_symlinks": [],
-      "regular_file_count": 11935,
-      "symlink_count": 372,
+      "regular_file_count": 11924,
+      "symlink_count": 370,
       "verified_no_external_symlinks": true
     },
     "reference_tcl": "../campaign_r58_drv499_v2/stage_baselines/baseline_timing_only_rmp_path_cone_halo_timing_efaf3f024348efb7/evaluate.tcl"
-  },
-  "recorded_evidence": "recorded_evidence.json"
+  }
 }

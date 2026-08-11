@@ -54,6 +54,8 @@ def snapshot_metadata(
                 _update_text(digest, "D")
                 _update_text(digest, relative)
         for name in sorted(file_names):
+            if name in excluded_names:
+                continue
             path = root_path / name
             relative = path.relative_to(source).as_posix()
             if path.is_symlink():

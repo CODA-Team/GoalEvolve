@@ -1,9 +1,16 @@
 {
-  "capture_excludes": ["__pycache__"],
-  "content_sha256": "118248e3a1cec3bc9fe0f1b35fdc26a4c41a2ab0f7ade310861dd9d8af2e644e",
-  "directory_count": 682,
+  "capture_excludes": [
+    "__pycache__",
+    ".agents",
+    ".claude",
+    ".gemini",
+    "AGENTS.md",
+    "CLAUDE.md"
+  ],
+  "content_sha256": "0a8b27ad9b6850fba27f71c67b05b1d3bc92eddf9a899585fb4848e877887f1b",
+  "directory_count": 673,
   "external_symlinks": [],
-  "regular_file_count": 11935,
-  "symlink_count": 372,
+  "regular_file_count": 11924,
+  "symlink_count": 370,
   "verified_no_external_symlinks": true
 }

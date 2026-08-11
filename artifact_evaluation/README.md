@@ -20,9 +20,9 @@ preflight record.
 ```bash
 export OPENROAD_EXE=/path/to/prepared/OpenROAD/bin/openroad
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2-preflight \
-  --artifact aes_r54_student1 --openroad "$OPENROAD_EXE" --verbose
+  --artifact aes_r58_student1 --openroad "$OPENROAD_EXE" --verbose
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2 \
-  --artifact aes_r54_student1 --rebuild --jobs 8 --verbose
+  --artifact aes_r58_student1 --rebuild --jobs 8 --verbose
 ```
 
 This command never starts Teacher, Student, retrieval, Codex, or an API call.
@@ -82,20 +82,3 @@ records, metrics, original and portable Tcl, and source manifest. The matching
 `lineage/<design>/<selection>/source/` directory contains that artifact's full
 immutable OpenROAD source. Generated ODBs, builds, flows, and API sessions
 belong under `outputs/`, not this release evidence.
-
-For the package-reorganization comparison, run
-`python3 artifact_evaluation/audit_migration.py --reference ../GoalEvolve_v2 --format markdown`.
-The resulting mapping and deliberate portable differences are documented in
-`artifact_evaluation/MIGRATION_AUDIT.md`.
-
-## Local validation snapshot
-
-The following generated evidence was produced on 2026-07-27 and remains under ignored `outputs/`:
-
-| Track | Evidence path | Result |
-|---|---|---|
-| AE-1 | command JSON stdout | passed; all shipped paths and Python interface present |
-| AE-2 | `outputs/ae2/aes_r54_student1/report/ae2_report.json` | passed with a version-matched OpenROAD executable; TNS `15.79 ns`, dynamic `335.9714B pW`, leakage `28.6M pW`, official 4/4 pass |
-| AE-3 | local historical smoke record | one real Teacher/Student round completed; candidate activated and passed 4/4, then was refuted for no QoR improvement |
-
-The historical smoke token total was `1,682,734`. Generated API homes and `auth.json` files are ignored and must not be copied into release evidence.

@@ -9,3 +9,33 @@ illustrate/
 experiments/**/*.local.json
 .env*
 config/credentials/*.env
+
+# Maintainer-local planning, audit, and private seed material.
+docs/superpowers/
+artifact_evaluation/MIGRATION_AUDIT.md
+artifact_evaluation/audit_migration.py
+artifact_evaluation/import_v2_ae2_records.py
+experiments/aes_cipher_top/aes_ast_recovery_seed_cards.json
+experiments/aes_cipher_top/aes_power_only_seed_cards.json
+experiments/aes_cipher_top/seeds/
+
+# Superseded AE-2 captures are retained locally only.
+artifact_evaluation/expected/aes_cipher_top/r054_student1/
+artifact_evaluation/lineage/aes_cipher_top/r054_student1/
+artifact_evaluation/expected/nvdla_m/r002_student1/
+artifact_evaluation/lineage/nvdla_m/r002_student1/
+artifact_evaluation/expected/nvdla_p/r001_student2/
+artifact_evaluation/lineage/nvdla_p/r001_student2/
+
+# Agent-specific configuration is not part of a reproducible OpenROAD source snapshot.
+artifact_evaluation/lineage/**/source/.agents/
+artifact_evaluation/lineage/**/source/.claude/
+artifact_evaluation/lineage/**/source/.gemini/
+artifact_evaluation/lineage/**/source/AGENTS.md
+artifact_evaluation/lineage/**/source/CLAUDE.md
+
+# Replay-generated logs and observer diagnostics remain local only.
+artifact_evaluation/expected/**/official_4of4.log
+artifact_evaluation/expected/**/checkpoint_metrics.json
+artifact_evaluation/expected/**/recorded_evidence.json
+artifact_evaluation/expected/**/sfinal_observation.json

@@ -10,13 +10,18 @@
     ".git",
     "build",
     "build_power",
-    "__pycache__"
+    "__pycache__",
+    ".agents",
+    ".claude",
+    ".gemini",
+    "AGENTS.md",
+    "CLAUDE.md"
   ],
   "content_digest_algorithm": "sha256 over sorted D:path, F:path:size:content, and L:path:target records; ownership, mode, and timestamps excluded",
-  "content_sha256": "32efd545fbebf4e487404f0661744fab7e41c0b3eda1f8b5762fe70857cc1d48",
-  "regular_file_count": 11935,
-  "symlink_count": 372,
-  "directory_count": 682,
+  "content_sha256": "357addea0e53ed786d7b37c8d763b711e4531789b0d93c87878c8d1d4cd91f69",
+  "regular_file_count": 11924,
+  "symlink_count": 370,
+  "directory_count": 673,
   "verified_no_external_symlinks": true,
   "allowed_patch_roots": [
     "src/rsz",

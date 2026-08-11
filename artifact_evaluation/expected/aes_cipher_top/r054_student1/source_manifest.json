@@ -1,9 +1,0 @@
-{
-  "capture_excludes": ["__pycache__"],
-  "content_sha256": "0c743f62ed043990f96a3e4934c9d8ac80fe48dad4759f12b8d91bc95f6c7335",
-  "directory_count": 682,
-  "external_symlinks": [],
-  "regular_file_count": 11935,
-  "symlink_count": 372,
-  "verified_no_external_symlinks": true
-}

@@ -1,0 +1,16 @@
+{
+  "capture_excludes": [
+    "__pycache__",
+    ".agents",
+    ".claude",
+    ".gemini",
+    "AGENTS.md",
+    "CLAUDE.md"
+  ],
+  "content_sha256": "704c006c7149d97ec97a3cbfd392f793831b2c4b455c75c4de69172af908b866",
+  "directory_count": 673,
+  "external_symlinks": [],
+  "regular_file_count": 11924,
+  "symlink_count": 370,
+  "verified_no_external_symlinks": true
+}

@@ -1,0 +1,208 @@
+{
+  "artifact_id": "nvdla_p_r4_student1",
+  "contract": {
+    "baseline_metrics": {
+      "dynamic_power_pw": 37726000000.0,
+      "leakage_power_pw": 274000000.0,
+      "tns_abs_ns": 166.51
+    },
+    "contract_id": "GC_71582402af3d39c0",
+    "design": "nvdla_p",
+    "metrics": [
+      {
+        "baseline": 166.51,
+        "hard": false,
+        "minimize": true,
+        "name": "tns_abs_ns",
+        "target": 246.0,
+        "tolerance": 0.0,
+        "weight": 1.0
+      },
+      {
+        "baseline": 37726000000.0,
+        "hard": false,
+        "minimize": true,
+        "name": "dynamic_power_pw",
+        "target": 36400000000.0,
+        "tolerance": 0.0,
+        "weight": 1.0
+      },
+      {
+        "baseline": 274000000.0,
+        "hard": false,
+        "minimize": true,
+        "name": "leakage_power_pw",
+        "target": 66600000.0,
+        "tolerance": 0.0,
+        "weight": 1.0
+      }
+    ],
+    "schema_version": "goalevolve.v2.goal-contract.v1",
+    "source_fingerprint": {
+      "source_git_commit": "d231bd8f98d2a0adb8369002b2c1e7aa8e7877ed"
+    }
+  },
+  "design": "nvdla_p",
+  "goal_distances": {
+    "dynamic_power_pw": {
+      "baseline": 37726000000.0,
+      "normalized_residual": 0.03562529820283094,
+      "target": 36400000000.0,
+      "unmet_target_percent": 3.6923076923076925,
+      "value": 37744000000.0
+    },
+    "leakage_power_pw": {
+      "baseline": 274000000.0,
+      "normalized_residual": 0.6912408759124088,
+      "target": 66600000.0,
+      "unmet_target_percent": 284.38438438438436,
+      "value": 256000000.0
+    },
+    "tns_abs_ns": {
+      "baseline": 166.51,
+      "normalized_residual": 0.0,
+      "target": 246.0,
+      "unmet_target_percent": 0.0,
+      "value": 165.79
+    }
+  },
+  "parent": {
+    "artifacts": {
+      "candidate_source": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/rounds/round_004/students/student_1/workspace/source",
+      "checkpoint_metrics": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/rounds/round_004/students/student_1/artifacts/contest_output/checkpoint_metrics.json",
+      "checkpoint_post_route_db": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/rounds/round_004/students/student_1/artifacts/contest_output/post_route.odb",
+      "codex": "{\"initial\": {\"artifacts\": {\"codex_events\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/rounds/round_004/students/student_1/artifacts/codex/events.jsonl\", \"codex_invocation\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/rounds/round_004/students/student_1/artifacts/codex/invocation.json\", \"codex_last_message\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/rounds/round_004/students/student_1/artifacts/codex/last_message.md\", \"codex_prompt\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/rounds/round_004/students/student_1/artifacts/codex/prompt.md\", \"codex_session\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/codex_sessions/student_1_r004.json\", \"codex_stderr\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/rounds/round_004/students/student_1/artifacts/codex/stderr.log\", \"codex_token_usage\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/rounds/round_004/students/student_1/artifacts/codex/token_usage_attempt_01.json\"}, \"detail\": \"codex_turn_completed\", \"ok\": true, \"operation_id\": \"r004_student_1\", \"thread_id\": \"019fa975-96e8-7a91-aeb2-441c442b2cf4\"}, \"repairs\": []}",
+      "codex_events": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/rounds/round_004/students/student_1/artifacts/codex/events.jsonl",
+      "codex_invocation": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/rounds/round_004/students/student_1/artifacts/codex/invocation.json",
+      "codex_last_message": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/rounds/round_004/students/student_1/artifacts/codex/last_message.md",
+      "codex_prompt": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/rounds/round_004/students/student_1/artifacts/codex/prompt.md",
+      "codex_session": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/codex_sessions/student_1_r004.json",
+      "codex_stderr": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/rounds/round_004/students/student_1/artifacts/codex/stderr.log",
+      "codex_token_usage": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/rounds/round_004/students/student_1/artifacts/codex/token_usage_attempt_01.json",
+      "evaluation_log": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/rounds/round_004/students/student_1/artifacts/contest_output/evaluation.log",
+      "matched_recipe_baseline": "skipped_no_lineage_improvement_potential",
+      "metrics_csv": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/rounds/round_004/students/student_1/artifacts/contest_output/metrics.csv",
+      "official_4of4_log": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/rounds/round_004/students/student_1/artifacts/contest_output/official_4of4.log",
+      "power_stage_key": "0.69124087591240879,0.72686617411523968,0.69124087591240879,0.035625298202830939",
+      "power_timing_cell_tradeoff": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/rounds/round_004/students/student_1/artifacts/contest_output/power_timing_cell_tradeoff.json",
+      "preflight": "{\"changed_files\": [\"src/rmp/src/Restructure.cpp\"], \"ok\": true, \"require_cpp_patch\": true, \"violations\": []}",
+      "sfinal_observation": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/rounds/round_004/students/student_1/artifacts/contest_output/sfinal_observation.json"
+    },
+    "checks": [
+      {
+        "detail": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_p_campaign/evolution_top1_restart/rounds/round_004/students/student_1/workspace/build_goalevolve/bin/openroad",
+        "name": "build",
+        "passed": true
+      },
+      {
+        "detail": "official_openroad_flow",
+        "name": "flow",
+        "passed": true
+      },
+      {
+        "detail": "official_parse_log",
+        "name": "metrics",
+        "passed": true
+      },
+      {
+        "detail": "post_detailed_placement",
+        "name": "placement",
+        "passed": true
+      },
+      {
+        "detail": "official_4of4_pass",
+        "name": "lec",
+        "passed": true
+      }
+    ],
+    "evaluation_mode": "power_then_timing",
+    "goal_distance": 0.2434964340778101,
+    "hypothesis": {
+      "activation_signals": [
+        "rmp_area_attempted"
+      ],
+      "allowed_patch_paths": [
+        "src/rmp/src/Restructure.cpp"
+      ],
+      "claim": "Execute the controller-owned rmp_area_power recipe as a fresh recipe-transition experiment: reconstruct and checkpoint the inherited low-power state, then run the single bounded area restructure pass. In Restructure.cpp, refine only the existing area-mode cloud admission and snapshot/restore path. Permit at most four legal combinational endpoint clouds with finite STA context to enter real ABC area trials; emit rmp_area_attempted only at that point. Evaluate the resulting cloud with the existing local area, liberty-cell leakage, wire, timing, electrical, legality, and HPWL checks. Retain at most one cloud only when measured local area or leakage proxy strictly improves and all global guards remain satisfied; otherwise restore the snapshot. Emit rmp_area_retained only after a non-restored acceptance. Preserve all controller budgets, ABC modes, generated Liberty handling, repair_power behavior, public commands, and ordinary repair_timing.",
+      "conclusive_nonactivation_patterns": [],
+      "evaluation_mode": "power_only",
+      "expected_signals": [
+        "rmp_area_attempted",
+        "rmp_area_retained"
+      ],
+      "hypothesis_id": "r4_student_1_repair_power_rmp_area_recipe_v1",
+      "mechanism_family": "repair_power_rmp_area_recipe",
+      "novelty_key": "repair_power_rmp_area_recipe:src/rmp/src/Restructure.cpp",
+      "power_tns_non_regression": false,
+      "power_tns_safety_ceiling_ns": null,
+      "requires_repair_power_command_provenance": false,
+      "retrieval_ids": [
+        "repair_power_rmp_area_recipe_v1"
+      ],
+      "scope_evidence": [
+        "scope_confidence:verified_hook",
+        "metric:rmp_post_timing_halo_examined",
+        "symbol:addLocalCost",
+        "symbol:addWireNetCost",
+        "symbol:cloudInstNames",
+        "symbol:envDouble",
+        "symbol:envIntList",
+        "symbol:envIsSet",
+        "symbol:envSlackNs",
+        "symbol:envStringSet",
+        "symbol:for",
+        "symbol:if",
+        "symbol:instCenter",
+        "symbol:isSequentialDbInst",
+        "symbol:libertyCellLeakage",
+        "symbol:localCostRejectReason",
+        "symbol:localWireRejectReason",
+        "symbol:masterCost"
+      ],
+      "source_hooks": [
+        "src/rmp/src/Restructure.cpp"
+      ],
+      "timing_recipe_id": "rmp_area_power"
+    },
+    "implementation_diff": "--- a/src/rmp/src/Restructure.cpp\n+++ b/src/rmp/src/Restructure.cpp\n@@ -834,6 +834,10 @@\n           && envDouble(\"RMP_ENDPOINT_PATH_COUNT\", 1.0) == 4.0\n           && envDouble(\"RMP_EXPAND_SIDE_FANIN_LEVELS\", 0.0) == 2.0\n           && envDouble(\"RMP_EXPAND_SIDE_FANIN_MAX_ADD\", 64.0) == 24.0;\n+    const bool area_power_recipe\n+        = is_area_mode_ && max_accepted_clouds == 1\n+          && max_tried_clouds == 4\n+          && envDouble(\"RMP_MAX_CLOUDS\", 1.0) == 4.0;\n     int post_timing_halo_examined = 0;\n \n     auto try_budget_exhausted = [&]() {\n@@ -1010,6 +1014,27 @@\n         logger_->report(\"METRIC|rmp_post_timing_halo_examined|{}\",\n                         post_timing_halo_examined);\n       }\n+      if (area_power_recipe) {\n+        const bool legal_cloud\n+            = std::all_of(path_insts_.begin(),\n+                          path_insts_.end(),\n+                          [this](odb::dbInst* inst) {\n+                            return safeRestructureInst(inst);\n+                          });\n+        estimate_parasitics_->estimateWireParasitics();\n+        const sta::Slack tns = open_sta_->totalNegativeSlack(sta::MinMax::max());\n+        const sta::Slack wns = open_sta_->worstSlack(sta::MinMax::max());\n+        if (!legal_cloud || !std::isfinite(tns) || !std::isfinite(wns)) {\n+          logger_->report(\n+              \"RMP_GUARD|skip_cloud|index={}|instances={}|reason=area_\"\n+              \"power_invalid_sta_or_logic\",\n+              tried_clouds,\n+              path_insts_.size());\n+          skipped_clouds++;\n+          tried_clouds++;\n+          return false;\n+        }\n+      }\n       logger_->report(\"RMP_GUARD|try_cloud|index={}|instances={}|target_net={}\",\n                       tried_clouds,\n                       path_insts_.size(),\n@@ -1321,6 +1346,10 @@\n {\n   const std::string prefix\n       = work_dir_name_ + std::string(block_->getConstName());\n+  const bool area_power_recipe\n+      = is_area_mode_ && envDouble(\"RMP_MAX_ACCEPTED_CLOUDS\", 1.0) == 1.0\n+        && envDouble(\"RMP_MAX_TRIED_CLOUDS\", 0.0) == 4.0\n+        && envDouble(\"RMP_MAX_CLOUDS\", 1.0) == 4.0;\n   input_blif_file_name_ = prefix + \"_crit_path.blif\";\n   std::vector<std::string> files_to_remove;\n   const auto cleanup_files = [&]() {\n@@ -1411,6 +1440,9 @@\n   debugPrint(\n       logger_, RMP, \"remap\", 1, \"Writing blif file {}\", input_blif_file_name_);\n   files_to_remove.emplace_back(input_blif_file_name_);\n+  if (area_power_recipe) {\n+    logger_->report(\"METRIC|rmp_area_attempted|1\");\n+  }\n \n   // abc optimization\n   std::vector<Mode> modes;\n@@ -1447,7 +1479,6 @@\n   }\n   const bool allow_invalid_abc_metric_fallback\n       = envIsSet(\"RMP_ALLOW_INVALID_ABC_METRIC_FALLBACK\");\n-\n   debugPrint(\n       logger_, RMP, \"remap\", 1, \"Running ABC with {} modes.\", modes.size());\n \n@@ -1813,6 +1844,11 @@\n       reject_reason += localWireRejectReason(block_,\n                                              before_wire_cost,\n                                              after_wire_cost);\n+      if (area_power_recipe\n+          && !(after_local_cost.area < before_local_cost.area\n+               || after_local_cost.leakage < before_local_cost.leakage)) {\n+        reject_reason += \"area_power_no_local_improvement;\";\n+      }\n       std::string seq_pin_diff_sample;\n       const int seq_pin_diff_count = sequentialPinNetDiffCount(\n           seq_pin_snapshot,\n@@ -1877,6 +1913,9 @@\n             after_wire_cost.max_net_hpwl_dbu,\n             before_wire_cost.net_count,\n             after_wire_cost.net_count);\n+        if (area_power_recipe) {\n+          logger_->report(\"METRIC|rmp_area_retained|1\");\n+        }\n         debugPrint(logger_,\n                    utl::RMP,\n                    \"remap\",\n@@ -1886,6 +1925,9 @@\n         cleanup_files();\n         return true;\n       }\n+    } else if (area_power_recipe) {\n+      restoreRmpState(block_, snapshot);\n+      estimate_parasitics_->estimateWireParasitics();\n     }\n   } else {\n     logger_->info(RMP,\n",
+    "legacy": false,
+    "metrics": {
+      "drv_count": 0.0,
+      "dynamic_power_pw": 37744000000.0,
+      "leakage_power_pw": 256000000.0,
+      "runtime_s": 1074.0,
+      "tns_abs_ns": 165.79
+    },
+    "parent_id": "round_004:student_1",
+    "phase_signals": {
+      "rmp_area_attempted": 1.0
+    },
+    "source_commit": "dd08f9bd8621ab5b3c1c62fb474c66f1f8be3fc16ecc20464fd0f052cf169967",
+    "source_hash": "704c006c7149d97ec97a3cbfd392f793831b2c4b455c75c4de69172af908b866",
+    "student_id": "student_1",
+    "timing_recipe_id": "legacy_setup"
+  },
+  "provenance": {
+    "reference_campaign": "runtime/nvdla_p_campaign/evolution_top1_restart",
+    "reference_evidence": "rounds/round_004/students/student_1/artifacts",
+    "reference_source": "rounds/round_004/students/student_1/workspace/source",
+    "reference_source_manifest": {
+      "content_sha256": "704c006c7149d97ec97a3cbfd392f793831b2c4b455c75c4de69172af908b866",
+      "directory_count": 673,
+      "external_symlinks": [],
+      "regular_file_count": 11924,
+      "symlink_count": 370,
+      "verified_no_external_symlinks": true
+    },
+    "reference_tcl": "rounds/round_004/students/student_1/artifacts/contest_output/evaluate.tcl"
+  },
+  "recorded_flow_metrics": {
+    "drv_count": 0.0,
+    "dynamic_power_pw": 37744000000.0,
+    "leakage_power_pw": 256000000.0,
+    "runtime_s": 1074.0,
+    "tns_abs_ns": 165.79
+  },
+  "schema": "goalevolve.ae2-selection.v1"
+}

@@ -66,12 +66,12 @@ PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner
 source outputs/toolchain/activate.sh
 export OPENROAD_EXE=/path/to/prepared/OpenROAD/build/bin/openroad
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2-preflight \
-  --artifact aes_r54_student1 --openroad "$OPENROAD_EXE"
+  --artifact aes_r58_student1 --openroad "$OPENROAD_EXE"
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2 \
-  --artifact aes_r54_student1 --openroad "$OPENROAD_EXE"
+  --artifact aes_r58_student1 --openroad "$OPENROAD_EXE"
 ```
 
-AE-2 使用版本匹配、且在当前 shell 已激活的 OpenROAD 执行可移植的已捕获 Tcl、官方 parser 与 4/4 checker，然后与 `artifact_evaluation/expected/aes_cipher_top/r054_student1/metrics.json` 对比 TNS、dynamic power、leakage。该结果的阶段是 `global_route + estimate_parasitics`，不是 detailed routing。
+AE-2 使用版本匹配、且在当前 shell 已激活的 OpenROAD 执行可移植的已捕获 Tcl、官方 parser 与 4/4 checker，然后与 `artifact_evaluation/expected/aes_cipher_top/r058_student1/metrics.json` 对比 TNS、dynamic power、leakage。该结果的阶段是 `global_route + estimate_parasitics`，不是 detailed routing。
 
 ## 环境安装
 
@@ -262,24 +262,13 @@ PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli run \
 所有 `evolve.json` 都不显式设置 `state_root`，因此自动写入
 `outputs/ae3/<design>/`。同一命令再次执行会从最后一个已完成 round 续跑，并新增
 指定的 `--rounds` 数量。AES、JPEG 已可启动；其他 design 在完成自己的 p0 baseline
-前由 `campaign_ready: false` 阻止启动。完整流程见 [experiments/README.md](experiments/README.md)。新鲜 campaign 只写入 `outputs/`；不得要求它精确复现 R54 数值。
+前由 `campaign_ready: false` 阻止启动。完整流程见 [experiments/README.md](experiments/README.md)。新鲜 campaign 只写入 `outputs/`；不得要求它精确复现固定 artifact 数值。
 
 ## 当前固定 AES artifact
 
-`aes_r54_student1` 是 `round_054:student_1`，source hash 为 `d826c042…f3bc`。已验证 post-route 指标：TNS `15.79 ns`、dynamic power `335.9714B pW`、leakage `28.6M pW`、zero DRV、官方 4/4 pass。SPPA `38.1775441168` 与 Sfinal `14.0356761445` 仅为 observer，绝不参与检索或晋升。
-
-## 本地验证快照
-
-2026-07-27，本独立 artifact 目录已在记录的本机 toolchain 上完成验证：
-
-| 检查 | 结果 |
-|---|---|
-| Unit/artifact tests | `101 passed` |
-| AE-1 预检 | passed；所有发布输入与 Python 接口存在 |
-| AE-2 固定复验 | passed；使用版本匹配的 OpenROAD，TNS `15.79 ns`、dynamic `335.9714B pW`、leakage `28.6M pW`、官方 4/4 pass |
-| AE-3 smoke campaign | 完成一轮真实 `gpt-5.6-terra` Teacher/Student，包括同一 Student telemetry repair、rebuild、flow、metrics、官方 4/4 与 Teacher review |
-
-AE-3 smoke 候选被正确 refute，而不是 promote：它激活了目标机制（`rmp_path_cone_examined=6`、`rmp_timing_examined=8`）并通过完整性检查，但结果为 TNS `15.80 ns`、dynamic `340.9712B pW`、leakage `28.8M pW`，normalized goal distance 略差。这是流程通过，不是固定 QoR 声明。
+`aes_r58_student1` 是 `round_058:student_1`；其冻结记录的 TNS 为
+`15.68 ns`、dynamic power 为 `340.9709B pW`、leakage 为 `29.1M pW`。
+复现实验应使用本文档的 AE-2 命令，以本机兼容工具链重新生成结果。
 
 ## Further documentation
 

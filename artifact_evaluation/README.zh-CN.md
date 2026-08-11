@@ -20,9 +20,9 @@ OpenROAD；JSON 输出是权威预检记录。
 # 先按宿主 OpenROAD/ORFS 工作区自身的说明激活环境。
 export OPENROAD_EXE=/path/to/prepared/OpenROAD/build/bin/openroad
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2-preflight \
-  --artifact aes_r54_student1 --openroad "$OPENROAD_EXE" --verbose
+  --artifact aes_r58_student1 --openroad "$OPENROAD_EXE" --verbose
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2 \
-  --artifact aes_r54_student1 --rebuild --jobs 8 --verbose
+  --artifact aes_r58_student1 --rebuild --jobs 8 --verbose
 ```
 
 该命令绝不启动 Teacher、Student、retrieval、Codex 或 API 调用。它将所选
@@ -74,19 +74,3 @@ AE-3 通过指 key、Codex 调用、源码编辑、build、flow、官方检查�
 可移植 Tcl 及 source manifest。匹配的 `lineage/<design>/<selection>/source/` 保存
 该 artifact 的完整不可变 OpenROAD 源码；新生成的 ODB、build、flow 和 API session
 必须写在 `outputs/`，不属于 release evidence。
-
-重组前后的包级审计可运行：
-`python3 artifact_evaluation/audit_migration.py --reference ../GoalEvolve_v2 --format markdown`。
-模块映射和有意保留的可移植性差异见 `artifact_evaluation/MIGRATION_AUDIT.md`。
-
-## 本地验证快照
-
-以下生成证据产生于 2026-07-27，并保留在被忽略的 `outputs/` 下：
-
-| 类型 | 证据路径 | 结果 |
-|---|---|---|
-| AE-1 | 命令 JSON stdout | passed；所有发布路径和 Python 接口存在 |
-| AE-2 | `outputs/ae2/aes_r54_student1/report/ae2_report.json` | passed；使用版本匹配的 OpenROAD，TNS `15.79 ns`、dynamic `335.9714B pW`、leakage `28.6M pW`、官方 4/4 pass |
-| AE-3 | 本地历史 smoke 记录 | 完成一轮真实 Teacher/Student；候选激活并通过 4/4，随后因 QoR 未改善被 refute |
-
-该历史 smoke 的 total tokens 为 `1,682,734`。生成的 API home 和 `auth.json` 文件已被忽略，绝不能复制到 release evidence 中。
