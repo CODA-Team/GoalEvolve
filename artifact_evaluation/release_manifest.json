@@ -64,16 +64,16 @@
         "tns_abs_ns": 0.05
       }
     },
-    "nvdla_a_r19_student1": {
-      "artifact_id": "nvdla_a_r19_student1",
+    "nvdla_a_r16_student1": {
+      "artifact_id": "nvdla_a_r16_student1",
       "benchmark_root": "third_party/benchmarks/benchmarks/nvdla_a",
       "design": "nvdla_a",
-      "evaluation_mode": "power_only",
-      "expected_root": "artifact_evaluation/expected/nvdla_a/r019_student1",
-      "parent_id": "round_019:student_1",
-      "source_commit": "bf31199e07edba9b4ba6f99fbc7541342c49315b00e375db723b961ab65ac095",
-      "source_hash": "b3e0c7eb4ba379cc444ee664c89a2da870b8310dd7608b52249dfd97da88ccfb",
-      "source_root": "artifact_evaluation/lineage/nvdla_a/r019_student1/source",
+      "evaluation_mode": "power_then_timing",
+      "expected_root": "artifact_evaluation/expected/nvdla_a/r016_student1",
+      "parent_id": "round_016:student_1",
+      "source_commit": "2f9f7b20aa9cd31d60abcabb27dfae325b2412382978a20d4d5ee0a2087aaec9",
+      "source_hash": "f197af5d713bb2c40577e8450114cd34b1d635c60e203f3c6e84b0f495d985c6",
+      "source_root": "artifact_evaluation/lineage/nvdla_a/r016_student1/source",
       "tolerances": {
         "dynamic_power_pw": 1000000000.0,
         "leakage_power_pw": 1000000.0,

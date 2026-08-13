@@ -43,27 +43,31 @@ puts "GOALEVOLVE_CHECKPOINT_BEGIN pre_repair"
 puts [format "GOALEVOLVE_CHECKPOINT_METRIC pre_repair tns_abs_ns %.12g" [total_negative_slack -max]]
 puts [format "GOALEVOLVE_CHECKPOINT_METRIC pre_repair wns_abs_ns %.12g" [worst_slack -max]]
 report_power
-write_verilog {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_019/students/student_1/artifacts/contest_output/pre_repair.v}
-write_db {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_019/students/student_1/artifacts/contest_output/pre_repair.odb}
+write_verilog {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_016/students/student_1/artifacts/contest_output/pre_repair.v}
+write_db {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_016/students/student_1/artifacts/contest_output/pre_repair.odb}
 puts "GOALEVOLVE_CHECKPOINT_END pre_repair"
 set rsz_start [clock seconds]
 puts "GOALEVOLVE_INITIAL_REPAIR_DESIGN_SKIPPED explicit_campaign_config=true"
 set ::env(RSZ_POWER_STAGE_TNS_CEILING_S) 2.94e-07
-set ::env(RSZ_TIMING_RECIPE_ID) {legacy_setup}
-set ::env(RSZ_REPAIR_POWER_MAX_TNS_EXPAND_RATIO) 1.2
-set ::env(RSZ_REPAIR_POWER_MAX_WNS_DROP) 2e-09
-set ::env(RSZ_REPAIR_POWER_MIN_TARGET_SLACK) -1e-06
-set ::env(RSZ_REPAIR_POWER_MAX_TARGETS) 50000
-set ::env(RSZ_REPAIR_POWER_TRIAL_LIMIT) 120000
-set ::env(RSZ_REPAIR_POWER_BATCH_SIZE) 512
-repair_power -phase early_forced_reclaim -proportion 100 -max_moves 12000 -max_tns_expand_ratio 1.2 -max_wns_drop 2
+set ::env(RSZ_TIMING_RECIPE_ID) {mt1_deep}
+set ::env(RSZ_REPAIR_POWER_MAX_TNS_EXPAND_RATIO) 0.4
+repair_power -phase early_forced_reclaim -proportion 80 -max_moves 600 -max_tns_expand_ratio 0.4
 puts "GOALEVOLVE_CHECKPOINT_BEGIN post_repair_power"
 puts [format "GOALEVOLVE_CHECKPOINT_METRIC post_repair_power tns_abs_ns %.12g" [total_negative_slack -max]]
 puts [format "GOALEVOLVE_CHECKPOINT_METRIC post_repair_power wns_abs_ns %.12g" [worst_slack -max]]
 report_power
-write_verilog {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_019/students/student_1/artifacts/contest_output/post_repair_power.v}
-write_db {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_019/students/student_1/artifacts/contest_output/post_repair_power.odb}
+write_verilog {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_016/students/student_1/artifacts/contest_output/post_repair_power.v}
+write_db {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_016/students/student_1/artifacts/contest_output/post_repair_power.odb}
 puts "GOALEVOLVE_CHECKPOINT_END post_repair_power"
+set ::env(RSZ_GOAL_TNS_ABS_S) 2.94e-07
+repair_timing -setup -phases {MT1 TNS LAST_GASP CRIT_VT_SWAP} -sequence {vt_swap sizeup swap sizeup_match buffer} -repair_tns 40 -max_repairs_per_pass 2 -max_passes 2 -max_iterations 2
+puts "GOALEVOLVE_CHECKPOINT_BEGIN post_repair_timing"
+puts [format "GOALEVOLVE_CHECKPOINT_METRIC post_repair_timing tns_abs_ns %.12g" [total_negative_slack -max]]
+puts [format "GOALEVOLVE_CHECKPOINT_METRIC post_repair_timing wns_abs_ns %.12g" [worst_slack -max]]
+report_power
+write_verilog {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_016/students/student_1/artifacts/contest_output/post_repair_timing.v}
+write_db {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_016/students/student_1/artifacts/contest_output/post_repair_timing.odb}
+puts "GOALEVOLVE_CHECKPOINT_END post_repair_timing"
 set rsz_end [clock seconds]
 puts "\[INFO\] OR RSZ running time:   [expr {$rsz_end - $rsz_start}] seconds"
 detailed_placement
@@ -72,11 +76,11 @@ puts "GOALEVOLVE_CHECKPOINT_BEGIN post_placement"
 puts [format "GOALEVOLVE_CHECKPOINT_METRIC post_placement tns_abs_ns %.12g" [total_negative_slack -max]]
 puts [format "GOALEVOLVE_CHECKPOINT_METRIC post_placement wns_abs_ns %.12g" [worst_slack -max]]
 report_power
-write_verilog {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_019/students/student_1/artifacts/contest_output/post_placement.v}
-write_db {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_019/students/student_1/artifacts/contest_output/post_placement.odb}
+write_verilog {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_016/students/student_1/artifacts/contest_output/post_placement.v}
+write_db {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_016/students/student_1/artifacts/contest_output/post_placement.odb}
 puts "GOALEVOLVE_CHECKPOINT_END post_placement"
-write_def {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_019/students/student_1/artifacts/contest_output/nvdla_a.def}
-write_verilog {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_019/students/student_1/artifacts/contest_output/nvdla_a.v}
+write_def {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_016/students/student_1/artifacts/contest_output/nvdla_a.def}
+write_verilog {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_016/students/student_1/artifacts/contest_output/nvdla_a.v}
 if {[info exists route_signal_layers]} { set signal_layers $route_signal_layers } else { set signal_layers M2-M9 }
 if {[info exists route_clock_layers]} { set clock_layers $route_clock_layers } else { set clock_layers M2-M9 }
 set_routing_layers -signal $signal_layers -clock $clock_layers
@@ -86,8 +90,8 @@ puts "GOALEVOLVE_CHECKPOINT_BEGIN post_route"
 puts [format "GOALEVOLVE_CHECKPOINT_METRIC post_route tns_abs_ns %.12g" [total_negative_slack -max]]
 puts [format "GOALEVOLVE_CHECKPOINT_METRIC post_route wns_abs_ns %.12g" [worst_slack -max]]
 report_power
-write_verilog {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_019/students/student_1/artifacts/contest_output/post_route.v}
-write_db {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_019/students/student_1/artifacts/contest_output/post_route.odb}
+write_verilog {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_016/students/student_1/artifacts/contest_output/post_route.v}
+write_db {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_016/students/student_1/artifacts/contest_output/post_route.odb}
 puts "GOALEVOLVE_CHECKPOINT_END post_route"
 puts "===== METRICS ====="
 puts "design:                 nvdla_a"
@@ -102,5 +106,5 @@ report_check_types -max_capacitance -violators
 report_check_types -max_fanout -violators
 puts "\[INFO\] Flow running time:   [expr {[clock seconds] - $start}] seconds"
 source {/home/haixuliu/MLCAD26/GoalEvolve_v2/vendor/mlcad2026_official/validity_check/OpenROAD_utils.tcl}
-write_node_and_net_files {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_019/students/student_1/artifacts/contest_output/node.csv} {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_019/students/student_1/artifacts/contest_output/nets.csv}
+write_node_and_net_files {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_016/students/student_1/artifacts/contest_output/node.csv} {/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_a_evolution/campaign_aes_r58_power_target/rounds/round_016/students/student_1/artifacts/contest_output/nets.csv}
 exit

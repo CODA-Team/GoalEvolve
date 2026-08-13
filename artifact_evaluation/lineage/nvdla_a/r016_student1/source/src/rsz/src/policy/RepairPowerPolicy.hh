@@ -175,19 +175,22 @@ private:
   bool usefulCandidate(sta::LibertyCell *current, sta::LibertyCell *candidate,
                        MoveKind kind) const;
   void captureCriticalTimingCone();
+  bool passesCriticalPathPersistenceAdmission(const Candidate &candidate) const;
   bool excludeCriticalConeReversion(const Candidate &candidate) const;
   bool excludeCompoundVtCriticalHalo(const Candidate &candidate) const;
   bool excludeCompoundVtCriticalFaninHalo(const Candidate &candidate) const;
   bool excludePureVtCriticalHalo(const Candidate &candidate) const;
-  bool reconsiderIntegratedHalo(const Candidate &candidate);
   void reportPersistentRetained(int count) const;
   bool withinCompoundVtQuota(const Candidate &candidate,
                              int pending_count = 1) const;
   bool candidateNeedsImmediateTimingGuard(const Candidate &candidate) const;
   std::vector<ElectricalState> captureElectricalState(
       const std::vector<Candidate> &candidates) const;
+  void refreshElectricalTiming(
+      const std::vector<ElectricalState> &states) const;
   bool introducesElectricalViolation(
-      const std::vector<ElectricalState> &before) const;
+      const std::vector<ElectricalState> &before,
+      const std::vector<ElectricalState> &after) const;
   void accountAcceptedCandidate(const Candidate &candidate);
   void noteAdaptiveWindowSuccess(int accepted_count);
   void noteAdaptiveWindowFailure(const char *reason);
@@ -208,7 +211,6 @@ private:
   int accepted_power_vt_swap_{0};
   int accepted_size_down_vt_{0};
   int accepted_remove_buffer_{0};
-  int integrated_halo_examined_{0};
   int adaptive_window_size_{16};
   int consecutive_window_successes_{0};
   std::unordered_set<sta::Instance *> critical_timing_cone_;

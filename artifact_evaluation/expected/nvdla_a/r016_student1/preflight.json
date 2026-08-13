@@ -1,0 +1,9 @@
+{
+  "changed_files": [
+    "src/rsz/src/policy/RepairPowerPolicy.cc",
+    "src/rsz/src/policy/RepairPowerPolicy.hh"
+  ],
+  "ok": true,
+  "require_cpp_patch": true,
+  "violations": []
+}

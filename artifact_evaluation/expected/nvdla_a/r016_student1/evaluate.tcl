@@ -64,14 +64,9 @@ puts "GOALEVOLVE_CHECKPOINT_END pre_repair"
 set rsz_start [clock seconds]
 puts "GOALEVOLVE_INITIAL_REPAIR_DESIGN_SKIPPED explicit_campaign_config=true"
 set ::env(RSZ_POWER_STAGE_TNS_CEILING_S) 2.94e-07
-set ::env(RSZ_TIMING_RECIPE_ID) {legacy_setup}
-set ::env(RSZ_REPAIR_POWER_MAX_TNS_EXPAND_RATIO) 1.2
-set ::env(RSZ_REPAIR_POWER_MAX_WNS_DROP) 2e-09
-set ::env(RSZ_REPAIR_POWER_MIN_TARGET_SLACK) -1e-06
-set ::env(RSZ_REPAIR_POWER_MAX_TARGETS) 50000
-set ::env(RSZ_REPAIR_POWER_TRIAL_LIMIT) 120000
-set ::env(RSZ_REPAIR_POWER_BATCH_SIZE) 512
-repair_power -phase early_forced_reclaim -proportion 100 -max_moves 12000 -max_tns_expand_ratio 1.2 -max_wns_drop 2
+set ::env(RSZ_TIMING_RECIPE_ID) {mt1_deep}
+set ::env(RSZ_REPAIR_POWER_MAX_TNS_EXPAND_RATIO) 0.4
+repair_power -phase early_forced_reclaim -proportion 80 -max_moves 600 -max_tns_expand_ratio 0.4
 puts "GOALEVOLVE_CHECKPOINT_BEGIN post_repair_power"
 puts [format "GOALEVOLVE_CHECKPOINT_METRIC post_repair_power tns_abs_ns %.12g" [total_negative_slack -max]]
 puts [format "GOALEVOLVE_CHECKPOINT_METRIC post_repair_power wns_abs_ns %.12g" [worst_slack -max]]
@@ -79,6 +74,15 @@ report_power
 write_verilog [goalevolve_path {__OUTPUT_ROOT__/post_repair_power.v}]
 write_db [goalevolve_path {__OUTPUT_ROOT__/post_repair_power.odb}]
 puts "GOALEVOLVE_CHECKPOINT_END post_repair_power"
+set ::env(RSZ_GOAL_TNS_ABS_S) 2.94e-07
+repair_timing -setup -phases {MT1 TNS LAST_GASP CRIT_VT_SWAP} -sequence {vt_swap sizeup swap sizeup_match buffer} -repair_tns 40 -max_repairs_per_pass 2 -max_passes 2 -max_iterations 2
+puts "GOALEVOLVE_CHECKPOINT_BEGIN post_repair_timing"
+puts [format "GOALEVOLVE_CHECKPOINT_METRIC post_repair_timing tns_abs_ns %.12g" [total_negative_slack -max]]
+puts [format "GOALEVOLVE_CHECKPOINT_METRIC post_repair_timing wns_abs_ns %.12g" [worst_slack -max]]
+report_power
+write_verilog [goalevolve_path {__OUTPUT_ROOT__/post_repair_timing.v}]
+write_db [goalevolve_path {__OUTPUT_ROOT__/post_repair_timing.odb}]
+puts "GOALEVOLVE_CHECKPOINT_END post_repair_timing"
 set rsz_end [clock seconds]
 puts "\[INFO\] OR RSZ running time:   [expr {$rsz_end - $rsz_start}] seconds"
 detailed_placement

@@ -1,5 +1,5 @@
 {
-  "artifact_id": "nvdla_a_r19_student1",
+  "artifact_id": "nvdla_a_r16_student1",
   "contract": {
     "baseline_metrics": {
       "dynamic_power_pw": 140725000000.0,
@@ -46,61 +46,61 @@
   "goal_distances": {
     "dynamic_power_pw": {
       "baseline": 140725000000.0,
-      "normalized_residual": 0.0,
+      "normalized_residual": 0.11167170012435601,
       "target": 126000000000.0,
-      "unmet_target_percent": 0.0,
-      "value": 121751000000.0
+      "unmet_target_percent": 12.472222222222221,
+      "value": 141715000000.0
     },
     "leakage_power_pw": {
       "baseline": 275000000.0,
-      "normalized_residual": 0.737090909090909,
+      "normalized_residual": 0.868,
       "target": 46300000.0,
-      "unmet_target_percent": 437.79697624190055,
-      "value": 248999999.99999997
+      "unmet_target_percent": 515.5507559395248,
+      "value": 285000000.0
     },
     "tns_abs_ns": {
       "baseline": 110.12,
       "normalized_residual": 0.0,
       "target": 294.0,
       "unmet_target_percent": 0.0,
-      "value": 202.37
+      "value": 91.62
     }
   },
   "parent": {
-    "evaluation_mode": "power_only",
-    "goal_distance": 0.24569696969696966,
+    "evaluation_mode": "power_then_timing",
+    "goal_distance": 0.3265572333747853,
     "metrics": {
-      "drv_count": 1828.0,
-      "dynamic_power_pw": 121751000000.0,
-      "leakage_power_pw": 248999999.99999997,
-      "runtime_s": 773.0,
-      "tns_abs_ns": 202.37
+      "drv_count": 1844.0,
+      "dynamic_power_pw": 141715000000.0,
+      "leakage_power_pw": 285000000.0,
+      "runtime_s": 828.0,
+      "tns_abs_ns": 91.62
     },
-    "parent_id": "round_019:student_1",
-    "source_commit": "bf31199e07edba9b4ba6f99fbc7541342c49315b00e375db723b961ab65ac095",
-    "source_hash": "b3e0c7eb4ba379cc444ee664c89a2da870b8310dd7608b52249dfd97da88ccfb",
-    "timing_recipe_id": "legacy_setup"
+    "parent_id": "round_016:student_1",
+    "source_commit": "2f9f7b20aa9cd31d60abcabb27dfae325b2412382978a20d4d5ee0a2087aaec9",
+    "source_hash": "f197af5d713bb2c40577e8450114cd34b1d635c60e203f3c6e84b0f495d985c6",
+    "timing_recipe_id": "mt1_deep"
   },
   "provenance": {
     "reference_campaign": "runtime/nvdla_a_evolution/campaign_aes_r58_power_target",
-    "reference_evidence": "rounds/round_019/students/student_1/artifacts",
-    "reference_source": "parents/b3e0c7eb4ba379cc444ee664c89a2da870b8310dd7608b52249dfd97da88ccfb/source",
+    "reference_evidence": "rounds/round_016/students/student_1/artifacts",
+    "reference_source": "rounds/round_016/students/student_1/workspace/source",
     "reference_source_manifest": {
-      "content_sha256": "a6385caf4f74433ee102fbaff1274ebdc7fa174957204b061ca43e6ca2f15c80",
+      "content_sha256": "f197af5d713bb2c40577e8450114cd34b1d635c60e203f3c6e84b0f495d985c6",
       "directory_count": 673,
       "external_symlinks": [],
       "regular_file_count": 11924,
       "symlink_count": 370,
       "verified_no_external_symlinks": true
     },
-    "reference_tcl": "rounds/round_019/students/student_1/artifacts/contest_output/evaluate.tcl"
+    "reference_tcl": "rounds/round_016/students/student_1/artifacts/contest_output/evaluate.tcl"
   },
   "recorded_flow_metrics": {
-    "drv_count": 1828.0,
-    "dynamic_power_pw": 121751000000.0,
-    "leakage_power_pw": 248999999.99999997,
-    "runtime_s": 773.0,
-    "tns_abs_ns": 202.37
+    "drv_count": 1844.0,
+    "dynamic_power_pw": 141715000000.0,
+    "leakage_power_pw": 285000000.0,
+    "runtime_s": 828.0,
+    "tns_abs_ns": 91.62
   },
   "schema": "goalevolve.ae2-selection.v1"
 }

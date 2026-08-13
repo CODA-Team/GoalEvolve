@@ -158,7 +158,11 @@ class ReleaseArtifactTests(unittest.TestCase):
                         "source_hash": "selected-hash",
                         "source_commit": "selected-commit",
                         "metrics": {"tns_abs_ns": 1.0},
-                        "evaluation_mode": "power_only",
+                        "artifacts": {"candidate_source": "/private/runtime/source"},
+                        "hypothesis": {
+                            "evaluation_mode": "power_then_timing",
+                            "timing_recipe_id": "mt1_deep",
+                        },
                     }
                 ),
                 encoding="utf-8",
@@ -212,6 +216,9 @@ class ReleaseArtifactTests(unittest.TestCase):
             )
             self.assertEqual(selected["parent"]["parent_id"], "round_058:student_1")
             self.assertEqual(selected["parent"]["source_commit"], "selected-commit")
+            self.assertEqual(selected["parent"]["evaluation_mode"], "power_then_timing")
+            self.assertEqual(selected["parent"]["timing_recipe_id"], "mt1_deep")
+            self.assertNotIn("artifacts", selected["parent"])
             self.assertEqual(candidate["metrics"], {"tns_abs_ns": 1.0})
 
     def test_ae2_stages_a_private_source_copy(self) -> None:

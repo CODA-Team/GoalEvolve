@@ -1,0 +1,190 @@
+--- a/src/rsz/src/policy/RepairPowerPolicy.cc
++++ b/src/rsz/src/policy/RepairPowerPolicy.cc
+@@ -1478,8 +1478,10 @@
+     }
+   }
+   const std::string inst_name = instName(candidate.target.inst);
+-  const std::vector<ElectricalState> electrical_before =
++  std::vector<ElectricalState> electrical_before =
+       captureElectricalState({candidate});
++  refreshElectricalTiming(electrical_before);
++  electrical_before = captureElectricalState({candidate});
+   resizer_.journalBegin();
+   bool applied = false;
+   if (candidate.kind == MoveKind::kRemoveBuffer) {
+@@ -1523,7 +1525,11 @@
+   }
+ 
+   resizer_.updateParasiticsAndTiming();
+-  if (introducesElectricalViolation(electrical_before)) {
++  std::vector<ElectricalState> electrical_after =
++      captureElectricalState({candidate});
++  refreshElectricalTiming(electrical_after);
++  electrical_after = captureElectricalState({candidate});
++  if (introducesElectricalViolation(electrical_before, electrical_after)) {
+     resizer_.journalRestore();
+     recordReject("electrical_guard");
+     logger_->report("METRIC|repair_power_electrical_rejected|1");
+@@ -1565,7 +1571,9 @@
+ 
+   resizer_.journalEndNoTimingUpdate();
+   logger_->report("METRIC|repair_power_electrical_retained|1");
+-  reportPersistentRetained(1);
++  if (passesCriticalPathPersistenceAdmission(candidate)) {
++    reportPersistentRetained(1);
++  }
+   current = after;
+   accountAcceptedCandidate(candidate);
+   logger_->info(RSZ, 2322,
+@@ -1596,8 +1604,10 @@
+     }
+   }
+ 
+-  const std::vector<ElectricalState> electrical_before =
++  std::vector<ElectricalState> electrical_before =
+       captureElectricalState(window);
++  refreshElectricalTiming(electrical_before);
++  electrical_before = captureElectricalState(window);
+   int pure_vt_swaps = 0;
+   int compound_vt_swaps = 0;
+   for (const Candidate &candidate : window) {
+@@ -1655,7 +1665,11 @@
+   }
+ 
+   resizer_.updateParasiticsAndTiming();
+-  if (introducesElectricalViolation(electrical_before)) {
++  std::vector<ElectricalState> electrical_after =
++      captureElectricalState(window);
++  refreshElectricalTiming(electrical_after);
++  electrical_after = captureElectricalState(window);
++  if (introducesElectricalViolation(electrical_before, electrical_after)) {
+     resizer_.journalRestore();
+     recordReject("window_electrical_guard");
+     logger_->report("METRIC|repair_power_electrical_rejected|{}",
+@@ -1683,11 +1697,15 @@
+   resizer_.journalEndNoTimingUpdate();
+   logger_->report("METRIC|repair_power_electrical_retained|{}",
+                   window.size());
+-  reportPersistentRetained(window.size());
+   current = after;
++  int persistent_retained = 0;
+   for (const Candidate &candidate : window) {
++    if (passesCriticalPathPersistenceAdmission(candidate)) {
++      ++persistent_retained;
++    }
+     accountAcceptedCandidate(candidate);
+   }
++  reportPersistentRetained(persistent_retained);
+   logger_->info(RSZ, 2329,
+                 "REPAIR_POWER|accept_window|phase={}|count={}|"
+                 "leak_gain={:.6g}|area_gain={:.6g}|cap_gain={:.6g}|"
+@@ -2461,6 +2479,21 @@
+   return leakage_gain > 0.0 || area_gain > 0.0 || cap_gain > 0.0;
+ }
+ 
++bool RepairPowerPolicy::passesCriticalPathPersistenceAdmission(
++    const Candidate &candidate) const {
++  const bool positive_power_gain = candidate.leakage_gain > 0.0 ||
++                                   candidate.area_gain > 0.0 ||
++                                   candidate.input_cap_gain > 0.0;
++  const bool admission_eligible =
++      candidate.kind == MoveKind::kRemoveBuffer ||
++      (candidate.replacement != nullptr &&
++       resizer_.replacementPreservesMaxCap(candidate.target.inst,
++                                           candidate.replacement));
++  return cfg_.phase == "early_forced_reclaim" && positive_power_gain &&
++         admission_eligible &&
++         !critical_timing_cone_.contains(candidate.target.inst);
++}
++
+ bool RepairPowerPolicy::excludeCriticalConeReversion(
+     const Candidate &candidate) const {
+   const bool positive_power_gain = candidate.leakage_gain > 0.0 ||
+@@ -2670,32 +2703,41 @@
+   return states;
+ }
+ 
++void RepairPowerPolicy::refreshElectricalTiming(
++    const std::vector<ElectricalState> &states) const {
++  sta::Vertex *last_vertex = nullptr;
++  for (const ElectricalState &state : states) {
++    sta::Vertex *vertex = state.driver ? graph_->pinDrvrVertex(state.pin)
++                                       : graph_->pinLoadVertex(state.pin);
++    if (vertex != nullptr &&
++        (last_vertex == nullptr || vertex->level() > last_vertex->level())) {
++      last_vertex = vertex;
++    }
++  }
++  if (last_vertex != nullptr) {
++    sta_->findDelays(last_vertex);
++  }
++}
++
+ bool RepairPowerPolicy::introducesElectricalViolation(
+-    const std::vector<ElectricalState> &before) const {
++    const std::vector<ElectricalState> &before,
++    const std::vector<ElectricalState> &after) const {
++  std::unordered_map<const sta::Pin *, const ElectricalState *> before_state;
+   for (const ElectricalState &state : before) {
+-    float value = 0.0f;
+-    float limit = 0.0f;
+-    float slack = 0.0f;
+-    const sta::RiseFall *rise_fall = nullptr;
+-    const sta::Scene *scene = nullptr;
+-    if (state.driver) {
+-      sta_->checkCapacitance(state.pin, sta_->scenes(), max_, value, limit,
+-                             slack, rise_fall, scene);
+-      if (!state.capacitance_violation && scene != nullptr && slack < 0.0f) {
+-        return true;
+-      }
+-    }
+-    sta::Slew slew = 0.0f;
+-    sta_->checkSlew(state.pin, sta_->scenes(), max_, false, slew, limit,
+-                    slack, rise_fall, scene);
+-    if (!state.slew_violation && scene != nullptr && slack < 0.0f) {
++    before_state.emplace(state.pin, &state);
++  }
++  for (const ElectricalState &state : after) {
++    const auto it = before_state.find(state.pin);
++    const bool slew_before =
++        it != before_state.end() && it->second->slew_violation;
++    const bool capacitance_before =
++        it != before_state.end() && it->second->capacitance_violation;
++    const bool fanout_before =
++        it != before_state.end() && it->second->fanout_violation;
++    if ((state.slew_violation && !slew_before) ||
++        (state.capacitance_violation && !capacitance_before) ||
++        (state.fanout_violation && !fanout_before)) {
+       return true;
+-    }
+-    if (state.driver) {
+-      sta_->checkFanout(state.pin, sta_->cmdMode(), max_, value, limit, slack);
+-      if (!state.fanout_violation && limit > 0.0f && slack < 0.0f) {
+-        return true;
+-      }
+     }
+   }
+   return false;
+--- a/src/rsz/src/policy/RepairPowerPolicy.hh
++++ b/src/rsz/src/policy/RepairPowerPolicy.hh
+@@ -175,6 +175,7 @@
+   bool usefulCandidate(sta::LibertyCell *current, sta::LibertyCell *candidate,
+                        MoveKind kind) const;
+   void captureCriticalTimingCone();
++  bool passesCriticalPathPersistenceAdmission(const Candidate &candidate) const;
+   bool excludeCriticalConeReversion(const Candidate &candidate) const;
+   bool excludeCompoundVtCriticalHalo(const Candidate &candidate) const;
+   bool excludeCompoundVtCriticalFaninHalo(const Candidate &candidate) const;
+@@ -185,8 +186,11 @@
+   bool candidateNeedsImmediateTimingGuard(const Candidate &candidate) const;
+   std::vector<ElectricalState> captureElectricalState(
+       const std::vector<Candidate> &candidates) const;
++  void refreshElectricalTiming(
++      const std::vector<ElectricalState> &states) const;
+   bool introducesElectricalViolation(
+-      const std::vector<ElectricalState> &before) const;
++      const std::vector<ElectricalState> &before,
++      const std::vector<ElectricalState> &after) const;
+   void accountAcceptedCandidate(const Candidate &candidate);
+   void noteAdaptiveWindowSuccess(int accepted_count);
+   void noteAdaptiveWindowFailure(const char *reason);
