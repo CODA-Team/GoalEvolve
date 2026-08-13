@@ -261,6 +261,27 @@ def _build_openroad(*, source: Path, build: Path, jobs: int, report: Path, verbo
     return binary
 
 
+def _materialize_rmp_liberty(*, tcl: Path, benchmark_root: Path, output: Path) -> Path | None:
+    """Create RMP's ABC library when a portable Tcl declares that dependency.
+
+    The recorded RMP candidates refer to an evaluation-local
+    ``rmp_standard_cells.lib``.  Campaign evaluation creates that combined
+    standard-cell Liberty before starting OpenROAD, whereas a standalone
+    replay starts with an empty output directory.  Keep this runner-side
+    preparation explicit: it is support data for the fixed Tcl, not a change
+    to the candidate's optimization schedule.
+    """
+    if "rmp_standard_cells.lib" not in tcl.read_text(encoding="utf-8"):
+        return None
+    liberty_root = benchmark_root.parents[1] / "asap7" / "lib"
+    lib_files = tuple(sorted(liberty_root.glob("*.lib")))
+    if not lib_files:
+        raise RuntimeError(f"RMP replay requires Liberty files under {liberty_root}")
+    from goalevolve.evaluation.contest2026 import _write_rmp_combined_liberty
+
+    return _write_rmp_combined_liberty(lib_files, output)
+
+
 def ae2(*, artifact: dict[str, Any], openroad: Path | None, jobs: int, rebuild: bool, verbose: bool) -> dict[str, Any]:
     """Build/replay one fixed source artifact and compare its official evidence."""
     source = _path(str(artifact["source_root"]))
@@ -289,6 +310,11 @@ def ae2(*, artifact: dict[str, Any], openroad: Path | None, jobs: int, rebuild: 
         "GOALEVOLVE_AE_OUTPUT": str(output),
     })
     tcl = expected_root / "evaluate.tcl"
+    rmp_liberty = _materialize_rmp_liberty(
+        tcl=tcl,
+        benchmark_root=benchmark_root,
+        output=output,
+    )
     print(f"[AE-2] Running post-route flow. Log: {output / 'evaluation.log'}", flush=True)
     flow_rc = _run([str(openroad), "-exit", str(tcl)], cwd=output, env=environment, log=output / "evaluation.log", live=verbose)
     metrics_csv = output / "metrics.csv"
@@ -339,6 +365,7 @@ def ae2(*, artifact: dict[str, Any], openroad: Path | None, jobs: int, rebuild: 
         "source_hash": artifact["source_hash"],
         "openroad": str(openroad),
         "portable_tcl_sha256": _sha256(tcl),
+        "rmp_standard_cells_lib": str(rmp_liberty) if rmp_liberty is not None else None,
         "flow_returncode": flow_rc,
         "parser_returncode": parser_rc,
         "official_check_returncode": official_rc,

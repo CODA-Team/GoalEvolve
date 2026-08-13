@@ -123,12 +123,18 @@ write_db [goalevolve_path {__OUTPUT_ROOT__/post_optimization_repair_design.odb}]
 puts "GOALEVOLVE_CHECKPOINT_END post_optimization_repair_design"
 set rsz_end [clock seconds]
 puts "\[INFO\] OR RSZ running time:   [expr {$rsz_end - $rsz_start}] seconds"
-detailed_placement
-check_placement -verbose
+	set_placement_padding -global -left 0 -right 0
+	detailed_placement
+	improve_placement -max_displacement {5 1}
+	optimize_mirroring
+	check_placement -verbose
+	estimate_parasitics -placement
+	set_power_activity -global -activity 0.1 -duty 0.5
+	unset_power_activity -global
 puts "GOALEVOLVE_CHECKPOINT_BEGIN post_placement"
 puts [format "GOALEVOLVE_CHECKPOINT_METRIC post_placement tns_abs_ns %.12g" [total_negative_slack -max]]
 puts [format "GOALEVOLVE_CHECKPOINT_METRIC post_placement wns_abs_ns %.12g" [worst_slack -max]]
-report_power
+	report_power -digits 12
 write_verilog [goalevolve_path {__OUTPUT_ROOT__/post_placement.v}]
 write_db [goalevolve_path {__OUTPUT_ROOT__/post_placement.odb}]
 puts "GOALEVOLVE_CHECKPOINT_END post_placement"
@@ -137,12 +143,14 @@ write_verilog [goalevolve_path {__OUTPUT_ROOT__/nvdla_m.v}]
 if {[info exists route_signal_layers]} { set signal_layers $route_signal_layers } else { set signal_layers M2-M9 }
 if {[info exists route_clock_layers]} { set clock_layers $route_clock_layers } else { set clock_layers M2-M9 }
 set_routing_layers -signal $signal_layers -clock $clock_layers
-global_route -skip_large_fanout_nets 300 -allow_congestion -congestion_iterations 50
-estimate_parasitics -global_routing
+	global_route -skip_large_fanout_nets 300 -allow_congestion -congestion_iterations 50
+	estimate_parasitics -global_routing
+	set_power_activity -global -activity 0.1 -duty 0.5
+	unset_power_activity -global
 puts "GOALEVOLVE_CHECKPOINT_BEGIN post_route"
 puts [format "GOALEVOLVE_CHECKPOINT_METRIC post_route tns_abs_ns %.12g" [total_negative_slack -max]]
 puts [format "GOALEVOLVE_CHECKPOINT_METRIC post_route wns_abs_ns %.12g" [worst_slack -max]]
-report_power
+	report_power -digits 12
 write_verilog [goalevolve_path {__OUTPUT_ROOT__/post_route.v}]
 write_db [goalevolve_path {__OUTPUT_ROOT__/post_route.odb}]
 puts "GOALEVOLVE_CHECKPOINT_END post_route"
@@ -153,7 +161,7 @@ puts "Placement legalized."
 report_units
 report_tns
 report_wns -digits 4
-report_power
+	report_power -digits 12
 report_check_types -max_slew -violators
 report_check_types -max_capacitance -violators
 report_check_types -max_fanout -violators

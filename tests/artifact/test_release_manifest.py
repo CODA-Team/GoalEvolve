@@ -271,6 +271,69 @@ class ReleaseArtifactTests(unittest.TestCase):
             self.assertTrue(runner._snapshot_matches(source=source, manifest_path=expected / "source_manifest.json"), artifact_id)
             self.assertTrue((benchmark / f"{artifact['design']}.v").is_file(), artifact_id)
 
+    def test_every_released_artifact_refreshes_stage_power_after_fresh_parasitics(self) -> None:
+        """Post-place/route reports must not reuse OpenSTA's prior power cache."""
+        for artifact_id, artifact in _artifacts().items():
+            expected = runner._path(str(artifact["expected_root"]))
+            tcl = (expected / "evaluate.tcl").read_text(encoding="utf-8")
+            refresh_set = "set_power_activity -global -activity 0.1 -duty 0.5"
+            refresh_unset = "unset_power_activity -global"
+            placement_padding = tcl.index("set_placement_padding -global -left 0 -right 0")
+            placement = tcl.index("detailed_placement", placement_padding)
+            improve = tcl.index("improve_placement -max_displacement {5 1}", placement)
+            mirror = tcl.index("optimize_mirroring", improve)
+            placement_check = tcl.index("check_placement -verbose", mirror)
+            placement_rc = tcl.index("estimate_parasitics -placement", placement_check)
+            placement_refresh_set = tcl.index(refresh_set, placement_rc)
+            placement_refresh_unset = tcl.index(refresh_unset, placement_refresh_set)
+            placement_report = tcl.index("GOALEVOLVE_CHECKPOINT_BEGIN post_placement", placement_refresh_unset)
+            route = tcl.index("global_route", placement_report)
+            route_rc = tcl.index("estimate_parasitics -global_routing", route)
+            route_refresh_set = tcl.index(refresh_set, route_rc)
+            route_refresh_unset = tcl.index(refresh_unset, route_refresh_set)
+            route_report = tcl.index("GOALEVOLVE_CHECKPOINT_BEGIN post_route", route_refresh_unset)
+
+            self.assertLess(placement_padding, placement, artifact_id)
+            self.assertLess(placement, improve, artifact_id)
+            self.assertLess(improve, mirror, artifact_id)
+            self.assertLess(mirror, placement_check, artifact_id)
+            self.assertLess(placement_check, placement_rc, artifact_id)
+            self.assertLess(placement_rc, placement_refresh_set, artifact_id)
+            self.assertLess(placement_refresh_set, placement_refresh_unset, artifact_id)
+            self.assertLess(placement_refresh_unset, placement_report, artifact_id)
+            self.assertLess(route, route_rc, artifact_id)
+            self.assertLess(route_rc, route_refresh_set, artifact_id)
+            self.assertLess(route_refresh_set, route_refresh_unset, artifact_id)
+            self.assertLess(route_refresh_unset, route_report, artifact_id)
+            self.assertEqual(tcl.count(refresh_set), 2, artifact_id)
+            self.assertEqual(tcl.count(refresh_unset), 2, artifact_id)
+            self.assertGreaterEqual(tcl.count("report_power -digits 12"), 3, artifact_id)
+
+    def test_ae2_materializes_rmp_liberty_only_for_rmp_recipes(self) -> None:
+        benchmark = runner.PROJECT_ROOT / "third_party/benchmarks/benchmarks/aes_cipher_top"
+        rmp_tcl = runner.PROJECT_ROOT / "artifact_evaluation/expected/aes_cipher_top/r058_student1/evaluate.tcl"
+        plain_tcl = runner.PROJECT_ROOT / "artifact_evaluation/expected/ariane/r011_student3/evaluate.tcl"
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "out"
+            combined = runner._materialize_rmp_liberty(
+                tcl=rmp_tcl,
+                benchmark_root=benchmark,
+                output=output,
+            )
+            self.assertIsNotNone(combined)
+            assert combined is not None
+            self.assertTrue(combined.is_file())
+            manifest = json.loads((output / "rmp_standard_cells.manifest.json").read_text(encoding="utf-8"))
+            self.assertGreater(manifest["cell_group_count"], 0)
+            self.assertEqual(
+                runner._materialize_rmp_liberty(
+                    tcl=plain_tcl,
+                    benchmark_root=benchmark,
+                    output=output,
+                ),
+                None,
+            )
+
     def test_git_index_contains_every_frozen_regular_source_file(self) -> None:
         for artifact_id, artifact in _artifacts().items():
             source = runner._path(str(artifact["source_root"]))
