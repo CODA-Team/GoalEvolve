@@ -309,11 +309,109 @@ def materialize_teacher_assignments(
             or (linked_idea or {}).get("internal_cpp_scheduling_suggestion")
             or ""
         ).strip()
+        scheduled_seed_option = _seed_revalidation_option(template)
+        # A Controller-scheduled seed is not an open-ended Explorer choice.
+        # Check its identity before any later recipe compatibility diagnostics
+        # so a Teacher cannot obscure a substituted card behind an unrelated
+        # malformed recipe.  The remaining card-shape checks stay below,
+        # after the normal source/idea validation has established the input
+        # is well formed.
+        if scheduled_seed_option is not None:
+            expected_seed_id = str(
+                scheduled_seed_option.get("candidate_id") or ""
+            ).strip()
+            selected_seed_id = str(row.get("candidate_id") or "").strip()
+            if selected_seed_id != expected_seed_id:
+                errors.append(
+                    f"seed_revalidation_candidate_mismatch:{student_id}:{expected_seed_id}"
+                )
+                continue
+            missing_seed_hooks = tuple(
+                hook
+                for hook in _items(scheduled_seed_option.get("source_hooks"))
+                if hook not in set(hooks)
+            )
+            if missing_seed_hooks:
+                errors.extend(
+                    f"seed_revalidation_missing_source_hook:{student_id}:"
+                    f"{expected_seed_id}:{hook}"
+                    for hook in missing_seed_hooks
+                )
+                continue
+            if set(hooks) != set(
+                _source_hook_items(scheduled_seed_option.get("source_hooks"))
+            ):
+                errors.append(
+                    f"seed_revalidation_source_hooks_do_not_match_card:{student_id}:"
+                    f"{expected_seed_id}"
+                )
+                continue
+            missing_seed_anchors = tuple(
+                anchor
+                for anchor in _items(scheduled_seed_option.get("source_anchors"))
+                if anchor not in set(evidence)
+            )
+            if missing_seed_anchors:
+                errors.extend(
+                    f"seed_revalidation_missing_source_anchor:{student_id}:"
+                    f"{expected_seed_id}:{anchor}"
+                    for anchor in missing_seed_anchors
+                )
+                continue
+            if set(evidence) != set(
+                _source_evidence_items(scheduled_seed_option.get("source_anchors"))
+            ):
+                errors.append(
+                    f"seed_revalidation_source_anchors_do_not_match_card:{student_id}:"
+                    f"{expected_seed_id}"
+                )
+                continue
+            required_activation = (
+                _items(scheduled_seed_option.get("activation_signals"))
+                or _items(scheduled_seed_option.get("expected_signals"))
+            )
+            required_expected = _items(scheduled_seed_option.get("expected_signals"))
+            missing_activation = tuple(
+                signal
+                for signal in required_activation
+                if signal not in set(declared_activation)
+            )
+            if missing_activation:
+                errors.extend(
+                    f"seed_revalidation_missing_activation_signal:{student_id}:"
+                    f"{expected_seed_id}:{signal}"
+                    for signal in missing_activation
+                )
+                continue
+            # Preserve the complete observation contract (including outcome
+            # counters that may legitimately be zero) separately from the
+            # smaller non-empty activation subset.
+            if set(signals) != set(required_expected):
+                errors.append(
+                    f"seed_revalidation_expected_signals_do_not_match_card:{student_id}:"
+                    f"{expected_seed_id}"
+                )
+                continue
+            if set(declared_activation) != set(required_activation):
+                errors.append(
+                    f"seed_revalidation_activation_signals_do_not_match_card:{student_id}:"
+                    f"{expected_seed_id}"
+                )
+                continue
         declared_recipe_value = (
             row.get("evaluation_recipe")
             or (linked_idea or {}).get("evaluation_recipe")
         )
         declared_recipe_id = str(declared_recipe_value or "").strip()
+        # A scheduled seed has exactly one Controller-owned executable
+        # recipe.  Its idea/assignment prose may still carry a stale or
+        # illustrative recipe token, so do not let that token supersede the
+        # envelope after the card identity was accepted above.
+        if scheduled_seed_option is not None:
+            seed_recipe_id = str(
+                scheduled_seed_option.get("timing_recipe_id") or ""
+            ).strip()
+            declared_recipe_id = seed_recipe_id or template.timing_recipe_id
         if declared_recipe_id:
             if declared_recipe_id not in teacher_selectable_recipe_ids(template.evaluation_mode):
                 errors.append(f"invalid_evaluation_recipe:{student_id}:{declared_recipe_id}")
@@ -322,6 +420,11 @@ def materialize_teacher_assignments(
                 declared_recipe_id,
                 hooks,
                 evaluation_mode=template.evaluation_mode,
+            ) and not _scheduled_seed_dispatch_is_reachable(
+                seed_option=scheduled_seed_option,
+                source_hooks=hooks,
+                evaluation_mode=template.evaluation_mode,
+                declared_recipe_id=declared_recipe_id,
             ):
                 errors.append(f"incompatible_evaluation_recipe:{student_id}:{declared_recipe_id}")
                 continue
@@ -346,7 +449,7 @@ def materialize_teacher_assignments(
         if execution_errors:
             errors.extend(f"{student_id}:{error}" for error in execution_errors)
             continue
-        if linked_idea is not None and declared_recipe_id:
+        if linked_idea is not None and declared_recipe_id and scheduled_seed_option is None:
             idea_recipe_id = str(linked_idea.get("evaluation_recipe") or "").strip()
             if idea_recipe_id and idea_recipe_id != declared_recipe_id:
                 errors.append(f"explorer_evaluation_recipe_mismatch:{student_id}")
@@ -360,6 +463,12 @@ def materialize_teacher_assignments(
             if linked_idea is None:
                 errors.append(f"unknown_explorer_idea:{student_id}:{idea_reference or 'none'}")
                 continue
+            seed_option = scheduled_seed_option
+            if seed_option is not None:
+                # Card identity, hooks, anchors, and the split
+                # expected/activation telemetry contract were checked before
+                # recipe validation so their diagnostics remain authoritative.
+                pass
             idea_signals = _items(linked_idea.get("expected_signals"))
             idea_activation = _items(linked_idea.get("activation_signals")) or idea_signals
             if not set(idea_activation).issubset(idea_signals):
@@ -381,13 +490,14 @@ def materialize_teacher_assignments(
             if _duplicate_explorer_idea(claim=claim, hooks=hooks, historical_ideas=normalized_history):
                 errors.append(f"duplicate_explorer_idea:{student_id}")
                 continue
-            retrieval_errors = _explorer_retrieval_errors(
-                idea=linked_idea,
-                audit=explorer_retrieval_audit,
-            )
-            if retrieval_errors:
-                errors.extend(f"{error}:{student_id}" for error in retrieval_errors)
-                continue
+            if seed_option is None:
+                retrieval_errors = _explorer_retrieval_errors(
+                    idea=linked_idea,
+                    audit=explorer_retrieval_audit,
+                )
+                if retrieval_errors:
+                    errors.extend(f"{error}:{student_id}" for error in retrieval_errors)
+                    continue
             novelty_key = _novelty_key(claim, hooks)
             if novelty_key in used_explorer_keys:
                 errors.append(f"duplicate_explorer_assignment:{student_id}")
@@ -395,7 +505,11 @@ def materialize_teacher_assignments(
             used_explorer_keys.add(novelty_key)
             role_records: tuple[str, ...] = ()
             predicted_effect = str(linked_idea.get("predicted_stage_effect") or "").strip()
-            retrieval_ids = (f"teacher_idea:{idea_reference}",)
+            retrieval_ids = (
+                f"historical_seed:{str(seed_option.get('candidate_id') or '').strip()}"
+                if seed_option is not None
+                else f"teacher_idea:{idea_reference}"
+            ,)
         else:
             activation_signals = declared_activation or signals
             role_records = _items(row.get("epd_record_ids"))
@@ -438,9 +552,54 @@ def materialize_teacher_assignments(
                 teacher_evolution_ideas=all_teacher_ideas,
                 teacher_predicted_stage_effect=predicted_effect,
                 teacher_internal_cpp_scheduling_suggestion=internal_cpp_scheduling_suggestion,
+                candidate_options=template.candidate_options,
             )
         )
     return AssignmentMaterialization(tuple(result), tuple(dict.fromkeys(errors)))
+
+
+def _seed_revalidation_option(template: Hypothesis) -> Mapping[str, object] | None:
+    """Return the one controller-assigned historical seed for a fresh slot."""
+    if template.student_role != "explorer" or template.role_mode != "seed_revalidation":
+        return None
+    options = tuple(
+        option
+        for option in template.candidate_options
+        if str(option.get("candidate_id") or "").strip()
+    )
+    return options[0] if len(options) == 1 else None
+
+
+def _scheduled_seed_dispatch_is_reachable(
+    *,
+    seed_option: Mapping[str, object] | None,
+    source_hooks: Sequence[str],
+    evaluation_mode: str,
+    declared_recipe_id: str,
+) -> bool:
+    """Admit the one controller-scheduled PRP dispatch transform.
+
+    The generic source graph correctly treats ``PowerRecoveryPlusPolicy`` as
+    unreachable before this source transform exists.  R26's exact, parent
+    hashed seed changes the adjacent Optimizer dispatch that makes it live;
+    this narrow admission never applies to ordinary Teacher proposals.
+    """
+    if not isinstance(seed_option, Mapping):
+        return False
+    if str(seed_option.get("materialization_mode") or "").strip() != "exact_reference_patch":
+        return False
+    if str(seed_option.get("candidate_id") or "").strip() != "power_recovery_plus_late_profile":
+        return False
+    if evaluation_mode != "power_then_timing":
+        return False
+    if str(seed_option.get("timing_recipe_id") or "").strip() != "implicit_power_recovery_plus":
+        return False
+    if declared_recipe_id != "implicit_power_recovery_plus":
+        return False
+    return set(source_hooks) == {
+        "src/rsz/src/Optimizer.cc",
+        "src/rsz/src/policy/PowerRecoveryPlusPolicy.cc",
+    }
 
 
 def _items(value: object) -> tuple[str, ...]:
@@ -534,8 +693,21 @@ def _source_admission_errors(
             except OSError:
                 errors.append(f"unreadable_source_hook:{hook}")
                 continue
-            token = symbol.split("(", 1)[0].strip()
-            if not token or token not in contents:
+            # Card-only mode intentionally has no AST symbol database.  A
+            # live C++ definition may spell a member as ``Class::method``
+            # inside a namespace rather than with its fully-qualified
+            # ``ns::Class::method`` declarator, so accept only equivalent
+            # suffix spellings while still requiring the declared source
+            # path.  This is source presence validation, not reachability or
+            # patch admission authority.
+            declarator = symbol.split("(", 1)[0].strip()
+            parts = tuple(part for part in declarator.split("::") if part)
+            spellings = (
+                declarator,
+                "::".join(parts[-2:]),
+                parts[-1] if parts else "",
+            )
+            if not any(spelling and spelling in contents for spelling in spellings):
                 errors.append(f"unverified_source_symbol:{evidence_anchor}")
     return tuple(errors)
 
@@ -581,6 +753,26 @@ def _power_only_execution_admission_errors(
     if recipe_id == "rmp_area_power":
         direct_files.update(RMP_AREA_EXECUTION_DIRECT_FILES)
         entry_symbols.update(RMP_AREA_EXECUTION_ENTRY_SYMBOLS)
+    # A card-only campaign deliberately has no AST call graph.  The
+    # Controller's own execution contract nevertheless names the top-level
+    # source entry files that the scheduled command invokes (for example
+    # ``Resizer::repairPower`` and its Optimizer dispatch).  Those files are
+    # not generic helpers and remain independently checked for a real live
+    # anchor above.  Keep every other helper behind the AST reachability gate.
+    direct_files.update(entry_symbols)
+    # This admission is meaningful only when the Teacher actually grounded
+    # its proposal in the repair_power/RMP dispatched subsystem.  Generic
+    # unit and compatibility callers can use a power_only evaluation envelope
+    # for a standalone timing hook; treating every such hook as a hidden
+    # repair_power helper would reject source-valid assignments before their
+    # own novelty/retrieval diagnostics are reached.
+    has_declared_execution_entry = any(hook in direct_files for hook in hooks)
+    has_indexed_execution_entry = repository_graph is not None and any(
+        symbol.qualified_name in entry_symbols.get(symbol.path, ())
+        for symbol in repository_graph.symbols.values()
+    )
+    if not has_declared_execution_entry and not has_indexed_execution_entry:
+        return phase_errors
     generic_hooks = tuple(hook for hook in hooks if hook not in direct_files)
     if not generic_hooks:
         return phase_errors
@@ -612,7 +804,6 @@ def _power_only_execution_admission_errors(
         ):
             errors.append(f"unreachable_power_source_hook:{hook}")
     return tuple(errors)
-
 
 def _reachable_call_symbols(
     repository_graph: RepositoryGraph,

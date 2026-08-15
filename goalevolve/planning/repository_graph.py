@@ -9,9 +9,11 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 import re
+import shutil
 from typing import Any, Iterable, Mapping, Sequence
 
 from goalevolve.core.io import atomic_json, load_json, sha256_file, sha256_json
+from goalevolve.runtime_preflight import require_ast_graph_runtime
 
 try:  # Import lazily enough to give a useful error on an unprepared host.
     from tree_sitter import Language, Parser
@@ -396,15 +398,92 @@ class RepositoryGraphIndex:
             p0_source_root
             or project_root / "artifact_evaluation" / "lineage" / "openroad_power" / "p0" / "source"
         ).resolve()
-        self.p0_artifact_root = Path(
-            p0_artifact_root
-            or self.p0_source_root.parent / "repository_graph"
+        self._project_p0_artifact_root = (self.p0_source_root.parent / "repository_graph").resolve()
+        self._campaign_p0_artifact_root = (
+            self.state_root / "knowledge" / "repository_graph" / "p0"
         ).resolve()
+        if p0_artifact_root is not None:
+            self.p0_artifact_root = Path(p0_artifact_root).resolve()
+        elif self._load_graph(self._campaign_p0_artifact_root) is not None:
+            # A P0 campaign owns this copy.  A later project-level cache
+            # regeneration must not silently change a running campaign.
+            self.p0_artifact_root = self._campaign_p0_artifact_root
+        else:
+            self.p0_artifact_root = self._project_p0_artifact_root
         self._parser: Parser | None = None
 
     @property
     def parent_artifact_root(self) -> Path:
         return self.state_root / "knowledge" / "repository_graph"
+
+    def ensure_campaign_p0_cache(self) -> RepositoryGraph:
+        """Copy the frozen P0 graph into this campaign before AST evolution.
+
+        The checked-in graph remains the immutable project artifact.  Each
+        campaign receives a byte-for-byte checked copy under its own state
+        root, so incremental parent graphs remain reproducible even when a
+        later checkout refreshes the project cache.
+        """
+
+        if not self.p0_source_root.is_dir():
+            raise FileNotFoundError(
+                f"GoalEvolve P0 source snapshot is missing: {self.p0_source_root}"
+            )
+        p0_hash = self._p0_content_hash()
+        roots = _editable_roots(self.p0_source_root, _EDITABLE_SUBTREES)
+        local = self._load_graph(self._campaign_p0_artifact_root)
+        if self._compatible(
+            local,
+            source_hash=p0_hash,
+            base_source_hash=p0_hash,
+            roots=roots,
+        ):
+            self.p0_artifact_root = self._campaign_p0_artifact_root
+            return local  # type: ignore[return-value]
+        if self._campaign_p0_artifact_root.exists():
+            raise RuntimeError(
+                "campaign-local P0 repository graph is incomplete or incompatible: "
+                f"{self._campaign_p0_artifact_root}; create a new campaign or repair this cache"
+            )
+
+        source = self._load_graph(self._project_p0_artifact_root)
+        if not self._compatible(
+            source,
+            source_hash=p0_hash,
+            base_source_hash=p0_hash,
+            roots=roots,
+        ):
+            raise RuntimeError(
+                "checked-in P0 repository graph is missing or incompatible with the frozen P0 source: "
+                f"{self._project_p0_artifact_root}"
+            )
+        self._campaign_p0_artifact_root.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(self._project_p0_artifact_root, self._campaign_p0_artifact_root)
+        copied = self._load_graph(self._campaign_p0_artifact_root)
+        if not self._compatible(
+            copied,
+            source_hash=p0_hash,
+            base_source_hash=p0_hash,
+            roots=roots,
+        ):
+            raise RuntimeError(
+                "copied campaign-local P0 repository graph failed compatibility validation: "
+                f"{self._campaign_p0_artifact_root}"
+            )
+        self.p0_artifact_root = self._campaign_p0_artifact_root
+        atomic_json(
+            self.parent_artifact_root / "p0_cache_provenance.json",
+            {
+                "schema_version": "goalevolve.repository_graph.p0-cache.v1",
+                "source_artifact_root": str(self._project_p0_artifact_root),
+                "campaign_artifact_root": str(self._campaign_p0_artifact_root),
+                "source_hash": p0_hash,
+                "base_source_hash": p0_hash,
+                "allowed_patch_roots": list(roots),
+                "copy_mode": "checked_in_p0_graph_copy",
+            },
+        )
+        return copied  # type: ignore[return-value]
 
     def build_p0(
         self,
@@ -552,6 +631,7 @@ class RepositoryGraphIndex:
     def _get_parser(self) -> Parser:
         if self._parser is not None:
             return self._parser
+        require_ast_graph_runtime(operation="repository-graph construction")
         if Language is None or Parser is None or tree_sitter_cpp is None:
             raise RepositoryGraphUnavailable(
                 "Repository graphing requires tree-sitter and tree-sitter-cpp. "

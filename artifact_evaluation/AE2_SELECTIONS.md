@@ -30,20 +30,21 @@ contract, and raw parent record are preserved in the corresponding
 
 ## QoR and distance to target
 
-Each cell below is `normalized residual / unmet target percentage`.  A zero
-means that metric meets its target.  Parent QoR is the recorded decision QoR,
-not a later replay measurement.
+Each cell below is `normalized residual / unmet target percentage`. A zero
+means that metric meets its target. Parent QoR is the cache-safe post-route
+replay measurement used by the released AE-2 checker: it is collected after
+global-route parasitics and an explicit OpenSTA power-cache refresh.
 
 | Design | Parent QoR: TNS / dynamic / leakage | TNS residual / unmet | Dynamic residual / unmet | Leakage residual / unmet | Total distance |
 |---|---:|---:|---:|---:|---:|
-| AES | `15.68 / 340.9709 / 29.1` | `0.414061 / 30.68%` | `0 / 0%` | `0 / 0%` | `0.138020` |
-| JPEG | `52.45 / 263.885 / 115` | `0 / 0%` | `0.047256 / 5.55%` | `0.201149 / 43.75%` | `0.082802` |
-| Ariane | `689.13 / 594.1 / 17900` | `0 / 0%` | `0 / 0%` | `0.016760 / 1.70%` | `0.005587` |
-| MemPool | `2746.05 / 249.94 / 3060` | `0.243470 / 48.44%` | `0.235350 / 35.10%` | `0.602606 / 152.89%` | `0.360475` |
-| NVDLA-A | `91.62 / 141.715 / 285` | `0 / 0%` | `0.111672 / 12.47%` | `0.868000 / 515.55%` | `0.326557` |
-| NVDLA-C | `8.93 / 583.7 / 17300` | `0 / 0%` | `0.001199 / 0.12%` | `0.046243 / 4.85%` | `0.015814` |
-| NVDLA-M | `14.49 / 39.3617 / 38.3` | `0.316563 / 39.33%` | `0.097538 / 11.51%` | `0.121317 / 22.36%` | `0.178473` |
-| NVDLA-P | `165.79 / 37.744 / 256` | `0 / 0%` | `0.035625 / 3.69%` | `0.691241 / 284.38%` | `0.242289` |
+| AES | `15.5726 / 335.6071 / 29.093` | `0.401979 / 29.78%` | `0 / 0%` | `0 / 0%` | `0.133993` |
+| JPEG | `51.1753 / 270.4277 / 114.525` | `0 / 0%` | `0.069523 / 8.17%` | `0.198420 / 43.16%` | `0.089314` |
+| Ariane | `688.5370 / 588.0586 / 17935.077` | `0 / 0%` | `0 / 0%` | `0.018719 / 1.90%` | `0.006240` |
+| MemPool | `2714.6869 / 249.5864 / 3059.457` | `0.234948 / 46.74%` | `0.234068 / 34.91%` | `0.602429 / 152.85%` | `0.357148` |
+| NVDLA-A | `90.6404 / 144.2286 / 285.284` | `0 / 0%` | `0.129533 / 14.47%` | `0.869033 / 516.16%` | `0.332855` |
+| NVDLA-C | `7.2477 / 584.0860 / 17259.404` | `0 / 0%` | `0.001861 / 0.19%` | `0.043896 / 4.60%` | `0.015252` |
+| NVDLA-M | `14.2097 / 39.4733 / 38.326` | `0.294866 / 36.63%` | `0.100218 / 11.82%` | `0.121768 / 22.45%` | `0.172284` |
+| NVDLA-P | `163.4940 / 38.2315 / 256.406` | `0 / 0%` | `0.048547 / 5.03%` | `0.692723 / 284.99%` | `0.247090` |
 
 Run an individual artifact with:
 

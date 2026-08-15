@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 from ..core.models import Parent
+from ..planning.cross_design_experience import cross_design_experience_packet
 
 
 def _json(value: object) -> str:
@@ -89,10 +90,15 @@ class TeacherPacketBuilder:
             "- **Diagnosis** — Use checkpoint effects to locate where a gain appears or disappears. Distinguish stage-local improvement from final post-route retention. Delegate unresolved causal questions to a bounded Student investigation. Do not repeat the parent facts already shown above.",
             "- **EPD (idea lifecycle and compact attempts)** — First form a draft mechanism signature, then query the catalog and open the nearest idea, attempt, reflection, and diff paths. Use the inline states and summaries to select what merits reading. Record novelty evidence in every Explorer idea. Do not copy historical patches blindly.",
             "- **Observation Memory** — Treat these ten-or-fewer lessons as compressed empirical feedback. Avoid a disproven family or explain a materially different boundary. Prefer mechanisms with measured activation and retained benefit. Open full records only if this compact view is insufficient.",
+            "- **Cross-Design Iteration Experience** — Treat the checked-in, stage-relevant lessons as process constraints distilled from completed official-flow campaigns. They never supply a patch or override the local EPD, source boundary, frozen QoR contract, or Controller promotion rule.",
             "- **Timing Schedule / Cell-Reversal Memory** — Use this only to understand measured schedule interactions and to select from Controller recipes. Never edit Tcl or create a new recipe. Keep a source mechanism separate from a schedule recommendation. Follow the stated reversal and retention evidence.",
             "- **Student Reflection Digest** — Read this as implementation-level feedback from completed attempts. Reuse an actionable lesson only after checking its reflection and diff path in EPD. Turn a limitation into a bounded enhancer hypothesis rather than an ungrounded rewrite. The Controller still owns verdicts.",
             "- **Controller Role Envelopes** — Fill every supplied role and keep its source/evaluation boundary. Explorer creates a novel mechanism, Enhancer reinforces supported evidence, and Integrator checks compatibility. Choose only a listed recipe. Do not invent Students, parents, or EPD records.",
-            "- **Live Source Access / P0-rooted Source Graph** — Use the focused graph to localize code, then run at least two successful read-only rg/sed inspections of the live parent. Quote real path::symbol anchors. A live graph-resolvable off-slice hook is allowed only with explicit causality, a distinct boundary, and falsification condition. The graph never authorizes a patch by itself.",
+            (
+                "- **Live Source Access / P0-rooted Source Graph** — Use the focused graph to localize code, then run at least two successful read-only rg/sed inspections of the live parent. Quote real path::symbol anchors. A live graph-resolvable off-slice hook is allowed only with explicit causality, a distinct boundary, and falsification condition. The graph never authorizes a patch by itself."
+                if self.repository_graph is not None
+                else "- **Live Source Access / OpenROAD Cards** — Start from the supplied OpenROAD mechanism cards and run at least two successful read-only rg/sed inspections of the live parent before naming a hook. Quote real path::symbol anchors and a distinct falsification condition. No AST graph is available or implied in this mode."
+            ),
             "- **Evidence-only Search Policy / Paper Cards** — Use the compact stagnation facts to diversify and paper cards for concepts, not patch recipes. The listed parent is the only parent. The Controller alone validates evidence and promotion. Full policy and literature details remain path-routed.",
             "",
         ]
@@ -104,6 +110,7 @@ class TeacherPacketBuilder:
         sections.extend(self._diagnosis())
         sections.extend(self._epd())
         sections.extend(self._observations())
+        sections.extend(self._cross_design_experience())
         sections.extend(self._schedule_memory())
         sections.extend(self._student_reflection_digest())
         sections.extend(self._role_envelopes())
@@ -112,6 +119,17 @@ class TeacherPacketBuilder:
         sections.extend(self._historical_seeds())
         sections.extend(self._search_policy())
         sections.extend(self._paper_cards())
+        return sections
+
+    def draft_sections(self) -> list[str]:
+        """Return the source-local decision facts needed before EPD retrieval."""
+        sections: list[str] = []
+        sections.extend(self._goal_contract())
+        sections.extend(self._active_stage())
+        sections.extend(self._diagnosis())
+        sections.extend(self._cross_design_experience())
+        sections.extend(self._live_source())
+        sections.extend(self._source_graph())
         return sections
 
     def _goal_contract(self) -> list[str]:
@@ -218,6 +236,8 @@ class TeacherPacketBuilder:
 
     def _epd(self) -> list[str]:
         paths = self._epd_paths()
+        project_root = Path(__file__).resolve().parents[2]
+        search_tool = f"PYTHONPATH={project_root} python -m goalevolve.epd_search"
         records = _rows(self.epd.get("decision_records"))[: self.epd_record_limit]
         compact_records = [
             {
@@ -251,9 +271,9 @@ class TeacherPacketBuilder:
         return [
             "## EPD (idea lifecycle and compact attempts)",
             "Use the EPD as a path-addressable idea, attempt, reflection, and mechanism database; do not paste or assume its full history. Explorer forms a draft signature before searching, Enhancer opens the selected dossier, and Integrator checks mechanism-card read/write boundaries.",
-            "Codex starts in the parent source root for source inspection. Use supplied absolute EPD and graph paths verbatim; do not make them relative to that source root. Do not run `python -m goalevolve.epd_search` from the source root.",
+            "Workers may use a dedicated round directory while source inspection resolves through the supplied live-source root. Use supplied absolute EPD and graph paths verbatim; do not make them relative to the working directory. Invoke the displayed search_tool exactly so the GoalEvolve package is importable.",
             "Explorer retrieval entry:",
-            _json({**paths, "search_tool": "python -m goalevolve.epd_search", "search_scope": ["pending", "unactivated", "invalid", "promising", "validated"]}),
+            _json({**paths, "search_tool": search_tool, "search_scope": ["pending", "unactivated", "invalid", "promising", "validated"]}),
             "Object convention: `ideas/<IDEA_ID>/idea.json`; `attempts/<ATTEMPT_ID>/attempt.json`; `attempts/<ATTEMPT_ID>/student_reflection.md`; `attempts/<ATTEMPT_ID>/implementation.diff`; `mechanisms/<MECHANISM_ID>/mechanism_card.json`.",
             "Inline lifecycle facts (read the referenced object before relying on a detail):",
             _json({"status_counts": self.epd.get("status_counts") or {}, "pending_ideas": pending, "recent_decision_records": compact_records}),
@@ -314,6 +334,17 @@ class TeacherPacketBuilder:
             "",
         ]
 
+    def _cross_design_experience(self) -> list[str]:
+        packet = cross_design_experience_packet(
+            decision_context=self.decision_context,
+        )
+        return [
+            "## Cross-Design Iteration Experience",
+            "These are compact, checked-in lessons from completed official-flow campaigns. Apply a relevant lesson as a planning and implementation constraint, then validate it against the live parent and local EPD. It is never a patch recipe or promotion authority.",
+            _json(packet),
+            "",
+        ]
+
     def _role_envelopes(self) -> list[str]:
         return [
             "## Controller Role Envelopes",
@@ -335,8 +366,8 @@ class TeacherPacketBuilder:
     def _source_graph(self) -> list[str]:
         if self.repository_graph is None:
             return [
-                "## Source Localization",
-                "Repository graph is disabled for this ablation. Use live rg/sed inspection only; the Controller validates every path::symbol anchor against the current parent source.",
+            "## Source Localization",
+            "OpenROAD-card mode is active: use the supplied mechanism cards and live rg/sed inspection only; the Controller validates every path::symbol anchor against the current parent source. No AST graph is built or injected into this run.",
                 "",
             ]
         graph = self.repository_graph
@@ -344,14 +375,51 @@ class TeacherPacketBuilder:
         focus = _mapping(graph.get("focus"))
         graph_data = focus or graph
         cards = _rows(graph_data.get("cards"))
+        symbol_cards = sorted(
+            (card for card in cards if str(card.get("node_kind") or "") != "file"),
+            key=lambda card: (
+                str(card.get("qualified_name") or ""),
+                str(card.get("path") or ""),
+            ),
+        )
+        file_cards = sorted(
+            (card for card in cards if str(card.get("node_kind") or "") == "file"),
+            key=lambda card: str(card.get("path") or ""),
+        )
+        # A file card is useful context, but cannot explain a control path.
+        # Reserve most of the compact budget for symbols before adding a few
+        # files as location aids.
+        selected_cards = [
+            *symbol_cards[:12],
+            *file_cards[: min(4, max(0, 16 - min(12, len(symbol_cards))))],
+        ]
         card_summary = [
             {
                 key: card[key]
                 for key in ("path", "qualified_name", "declarator", "metric_signals")
                 if key in card
             }
-            for card in cards[:16]
+            for card in selected_cards
         ]
+        selected_by_id = {
+            str(card.get("card_id") or ""): card
+            for card in selected_cards
+            if str(card.get("card_id") or "")
+        }
+        relationships: list[str] = []
+        for edge in _rows(graph_data.get("edges")):
+            if str(edge.get("kind") or "") not in {"calls", "includes"}:
+                continue
+            source = selected_by_id.get(str(edge.get("source") or ""))
+            target = selected_by_id.get(str(edge.get("target") or ""))
+            if source is None or target is None:
+                continue
+            source_name = str(source.get("qualified_name") or source.get("path") or "")
+            target_name = str(target.get("qualified_name") or target.get("path") or "")
+            if source_name and target_name:
+                arrow = "→" if edge.get("kind") == "calls" else "includes"
+                relationships.append(f"{source_name} {arrow} {target_name}")
+        relationships = list(dict.fromkeys(relationships))[:8]
         paths = {
             "focused_graph_path": graph.get("focused_graph_path") or (str(Path(root) / "focus.json") if root else "rounds/<round>/repository_graph_focus.json"),
             "full_index_path": graph.get("full_index_path") or (str(Path(root) / "doc_cards.json") if root else "knowledge/repository_graph/<parent>/doc_cards.json"),
@@ -361,7 +429,7 @@ class TeacherPacketBuilder:
         return [
             "## P0-rooted Source Graph and Doc Cards",
             "This compact graph localizes likely execution paths; it is rooted in the frozen P0 snapshot and refreshed for the current parent. Read the focused graph, then verify live source with rg/sed before using a symbol; a Doc Card is evidence of location, not a patch prescription or a restriction to the focus slice.",
-            _json({"source_hash": graph_data.get("source_hash") or graph.get("source_hash"), "base_source_hash": graph_data.get("base_source_hash") or graph.get("base_source_hash"), "entry_chain": graph.get("entry_chain") or [], "focused_files": focused_files, "paths": paths, "cards": card_summary}),
+            _json({"source_hash": graph_data.get("source_hash") or graph.get("source_hash"), "base_source_hash": graph_data.get("base_source_hash") or graph.get("base_source_hash"), "entry_chain": graph.get("entry_chain") or [], "focused_files": focused_files, "paths": paths, "cards": card_summary, "relationships": relationships}),
             "Use a Doc Card's full `declarator` verbatim when a function name is overloaded. Separate multiple Source Evidence anchors with semicolons, never commas, because a C++ declarator may contain commas.",
             "",
         ]
@@ -378,6 +446,8 @@ class TeacherPacketBuilder:
                     "decision_boundary",
                     "summary",
                     "expected_signals",
+                    "activation_signals",
+                    "reference_diff_paths",
                 )
                 if key in seed
             }
@@ -409,7 +479,7 @@ class TeacherPacketBuilder:
             f"no_promotion_streak: {compact['no_promotion_streak']}",
             f"promotion_authority: {compact['promotion_authority']}",
             _json(compact),
-            "This policy is advisory. The listed incumbent is the only current parent; only the deterministic Controller can promote a candidate or alter roles. When exact reuse is forbidden, use a different AST-grounded hook or explain the materially distinct boundary and falsification condition.",
+            "This policy is advisory. The listed incumbent is the only current parent; only the deterministic Controller can promote a candidate or alter roles. When exact reuse is forbidden, use a different source-grounded hook or explain the materially distinct boundary and falsification condition.",
             "",
         ]
 

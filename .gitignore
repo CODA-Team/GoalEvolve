@@ -2,9 +2,12 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .venv/
+.venv-goalevolve/
 state/
 runtime/
 outputs/
+logs/
+AE4/results/
 illustrate/
 experiments/**/*.local.json
 .env*
@@ -12,6 +15,13 @@ config/credentials/*.env
 
 # Maintainer-local planning, audit, and private seed material.
 docs/superpowers/
+# The cross-design lesson library is runtime input, not maintainer-local
+# planning material. Keep just its machine-readable library and companion
+# contribution guide versioned for every campaign user.
+!docs/superpowers/
+!docs/superpowers/knowledge/
+!docs/superpowers/knowledge/cross_design_iteration_experience.json
+!docs/superpowers/knowledge/cross_design_iteration_experience.md
 artifact_evaluation/MIGRATION_AUDIT.md
 artifact_evaluation/audit_migration.py
 artifact_evaluation/import_v2_ae2_records.py

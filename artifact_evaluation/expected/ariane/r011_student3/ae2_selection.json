@@ -1,5 +1,12 @@
 {
   "artifact_id": "ariane_r11_student3",
+  "cache_safe_replay_metrics": {
+    "dynamic_power_pw": 588058613000.0,
+    "leakage_power_pw": 17935077000.0,
+    "measurement_boundary": "post_route_global_route_estimate_parasitics_cache_refreshed",
+    "tns_abs_ns": 688.53696249,
+    "total_power_pw": 605993690000.0
+  },
   "contract": {
     "baseline_metrics": {
       "dynamic_power_pw": 593100000000.0,
@@ -49,32 +56,32 @@
       "normalized_residual": 0.0,
       "target": 622999999999.9999,
       "unmet_target_percent": 0.0,
-      "value": 594100000000.0
+      "value": 588058613000.0
     },
     "leakage_power_pw": {
       "baseline": 17900000000.0,
-      "normalized_residual": 0.01675977653631285,
+      "normalized_residual": 0.018719385474860337,
       "target": 17600000000.0,
-      "unmet_target_percent": 1.7045454545454546,
-      "value": 17900000000.0
+      "unmet_target_percent": 1.903846590909091,
+      "value": 17935077000.0
     },
     "tns_abs_ns": {
       "baseline": 721.34,
       "normalized_residual": 0.0,
       "target": 1850.0,
       "unmet_target_percent": 0.0,
-      "value": 689.13
+      "value": 688.53696249
     }
   },
   "parent": {
     "evaluation_mode": "power_then_timing",
-    "goal_distance": 0.00558659217877095,
+    "goal_distance": 0.006239795158286779,
     "metrics": {
       "drv_count": 146.0,
-      "dynamic_power_pw": 594100000000.0,
-      "leakage_power_pw": 17900000000.0,
+      "dynamic_power_pw": 588058613000.0,
+      "leakage_power_pw": 17935077000.0,
       "runtime_s": 378.0,
-      "tns_abs_ns": 689.13
+      "tns_abs_ns": 688.53696249
     },
     "parent_id": "round_011:student_3:electric_normalization",
     "source_commit": "f37b1be0b97ff6c9714fe8fac394673e3fef4f6fc064b60fd4501e700fb06f21",
@@ -97,10 +104,10 @@
   },
   "recorded_flow_metrics": {
     "drv_count": 146.0,
-    "dynamic_power_pw": 594100000000.0,
-    "leakage_power_pw": 17900000000.0,
+    "dynamic_power_pw": 588058613000.0,
+    "leakage_power_pw": 17935077000.0,
     "runtime_s": 378.0,
-    "tns_abs_ns": 689.13
+    "tns_abs_ns": 688.53696249
   },
   "schema": "goalevolve.ae2-selection.v1"
 }

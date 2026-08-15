@@ -34,8 +34,7 @@ artifact 的冻结源码构建为 OpenROAD，在 `outputs/ae2/` 运行其路径�
 宿主环境诊断。正式 AE-2 不会用该外部二进制替代所选 artifact 的 OpenROAD；完整
 AE-2 使用 `--verbose` 时会持续输出 flow 日志，日志仍会保存在 `outputs/ae2/`。
 
-选定模式包括 `power_then_timing`、NVDLA-A 的 `power_only` 与 NVDLA-C 的
-`timing_only`，均不是 detailed routing。AE-2 通过证明发布的源码 artifact、
+选定模式包括 `power_then_timing` 与 NVDLA-C 的 `timing_only`，均不是 detailed routing。AE-2 通过证明发布的源码 artifact、
 benchmark、checker 和 flow 可以产生报告结果；它不证明新鲜 LLM 进化一定会再次找到
 同一个 patch。八套 source/Tcl/QoR/目标距离记录见
 [AE2_SELECTIONS.md](AE2_SELECTIONS.md)。

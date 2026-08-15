@@ -3,10 +3,10 @@
   "design": "nvdla_p",
   "metrics": {
     "drv_count": 0.0,
-    "dynamic_power_pw": 37744000000.0,
-    "leakage_power_pw": 256000000.0,
+    "dynamic_power_pw": 38231478000.0,
+    "leakage_power_pw": 256406000.0,
     "runtime_s": 1074.0,
-    "tns_abs_ns": 165.79
+    "tns_abs_ns": 163.493983868
   },
   "parent_id": "round_004:student_1",
   "source_commit": "dd08f9bd8621ab5b3c1c62fb474c66f1f8be3fc16ecc20464fd0f052cf169967",

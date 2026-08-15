@@ -287,7 +287,8 @@ class ReleaseArtifactTests(unittest.TestCase):
             placement_refresh_set = tcl.index(refresh_set, placement_rc)
             placement_refresh_unset = tcl.index(refresh_unset, placement_refresh_set)
             placement_report = tcl.index("GOALEVOLVE_CHECKPOINT_BEGIN post_placement", placement_refresh_unset)
-            route = tcl.index("global_route", placement_report)
+            routing_layers = tcl.index("set_routing_layers -signal $signal_layers -clock $clock_layers", placement_report)
+            route = tcl.index("global_route", routing_layers)
             route_rc = tcl.index("estimate_parasitics -global_routing", route)
             route_refresh_set = tcl.index(refresh_set, route_rc)
             route_refresh_unset = tcl.index(refresh_unset, route_refresh_set)
@@ -301,6 +302,8 @@ class ReleaseArtifactTests(unittest.TestCase):
             self.assertLess(placement_rc, placement_refresh_set, artifact_id)
             self.assertLess(placement_refresh_set, placement_refresh_unset, artifact_id)
             self.assertLess(placement_refresh_unset, placement_report, artifact_id)
+            self.assertLess(placement_report, routing_layers, artifact_id)
+            self.assertLess(routing_layers, route, artifact_id)
             self.assertLess(route, route_rc, artifact_id)
             self.assertLess(route_rc, route_refresh_set, artifact_id)
             self.assertLess(route_refresh_set, route_refresh_unset, artifact_id)
@@ -308,6 +311,41 @@ class ReleaseArtifactTests(unittest.TestCase):
             self.assertEqual(tcl.count(refresh_set), 2, artifact_id)
             self.assertEqual(tcl.count(refresh_unset), 2, artifact_id)
             self.assertGreaterEqual(tcl.count("report_power -digits 12"), 3, artifact_id)
+
+    def test_release_import_normalizes_historical_stage_qor_tail(self) -> None:
+        historical = """set rsz_end [clock seconds]
+detailed_placement
+check_placement -verbose
+puts "GOALEVOLVE_CHECKPOINT_BEGIN post_placement"
+report_power
+write_db {post_placement.odb}
+puts "GOALEVOLVE_CHECKPOINT_END post_placement"
+set_routing_layers -signal M2-M9 -clock M2-M9
+global_route -skip_large_fanout_nets 300 -allow_congestion
+estimate_parasitics -global_routing
+puts "GOALEVOLVE_CHECKPOINT_BEGIN post_route"
+report_power
+write_db {post_route.odb}
+puts "GOALEVOLVE_CHECKPOINT_END post_route"
+puts "===== METRICS ====="
+report_power
+"""
+        rendered = release_import._refresh_stage_qor_reports(historical)
+        refresh = (
+            "set_power_activity -global -activity 0.1 -duty 0.5\n"
+            "unset_power_activity -global"
+        )
+        self.assertIn("set_placement_padding -global -left 0 -right 0", rendered)
+        self.assertIn("improve_placement -max_displacement {5 1}", rendered)
+        self.assertIn("optimize_mirroring", rendered)
+        self.assertLess(
+            rendered.index("estimate_parasitics -placement"),
+            rendered.index("set_routing_layers -signal M2-M9 -clock M2-M9"),
+        )
+        self.assertIn("estimate_parasitics -placement", rendered)
+        self.assertEqual(rendered.count(refresh), 2)
+        self.assertEqual(rendered.count("report_power -digits 12"), 3)
+        self.assertNotIn("\nreport_power\n", rendered)
 
     def test_ae2_materializes_rmp_liberty_only_for_rmp_recipes(self) -> None:
         benchmark = runner.PROJECT_ROOT / "third_party/benchmarks/benchmarks/aes_cipher_top"

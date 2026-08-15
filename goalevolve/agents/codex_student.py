@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import re
+import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -88,6 +90,29 @@ class CodexStudentEditor:
 
     def apply(self, *, state_root: Path, round_index: int, student_id: str, workspace: Path, parent: Parent, hypothesis: Hypothesis, prompt_path: Path) -> StudentEditReport:
         source = workspace / "source"
+        recovered = self._recover_exact_seed_reference_patch(
+            workspace=workspace,
+            parent=parent,
+            hypothesis=hypothesis,
+        )
+        if recovered is not None:
+            return recovered
+        materialized = self._materialize_exact_seed_reference_patch(
+            workspace=workspace,
+            parent=parent,
+            hypothesis=hypothesis,
+        )
+        if materialized is not None:
+            return materialized
+        exact_seed_id = self._exact_seed_materialization_id(hypothesis)
+        if exact_seed_id:
+            return StudentEditReport(
+                False,
+                f"exact_seed_reference_patch_not_applicable:{exact_seed_id}",
+                f"seed_reference_patch_materialization:{exact_seed_id}",
+                None,
+                {},
+            )
         prompt = self._execution_prompt(prompt_path=prompt_path, source=source, parent=parent, hypothesis=hypothesis)
         # A source edit is fully specified by its round packet.  Starting a
         # fresh remote thread for the next packet prevents old source/tool
@@ -95,7 +120,227 @@ class CodexStudentEditor:
         # this identity and therefore resume this exact edit conversation.
         identity = self._round_identity(student_id, round_index)
         turn = self.runner.run(state_root=state_root, identity=identity, operation_id=f"r{round_index:03d}_{student_id}", cwd=source, artifact_root=workspace.parent / "artifacts" / "codex", prompt=prompt)
-        return self._report_after_turn(turn, workspace)
+        report = self._report_after_turn(turn, workspace)
+        if report.ok:
+            return report
+        replay = self._replay_exact_seed_reference_patch(
+            workspace=workspace,
+            parent=parent,
+            hypothesis=hypothesis,
+            failed_report=report,
+        )
+        return replay or report
+
+    def _recover_exact_seed_reference_patch(
+        self,
+        *,
+        workspace: Path,
+        parent: Parent,
+        hypothesis: Hypothesis,
+    ) -> StudentEditReport | None:
+        """Reuse one fully audited seed replay after an interrupted round."""
+        if (
+            hypothesis.student_role != "explorer"
+            or hypothesis.role_mode != "seed_revalidation"
+            or len(hypothesis.candidate_options) != 1
+        ):
+            return None
+        option = dict(hypothesis.candidate_options[0])
+        seed_id = str(option.get("candidate_id") or option.get("seed_id") or "").strip()
+        references = tuple(
+            Path(str(path)).resolve()
+            for path in list(option.get("reference_diff_paths") or ())
+            if str(path).strip()
+        )
+        materialization_mode = str(option.get("materialization_mode") or "").strip()
+        artifact_name = (
+            "seed_reference_patch_materialization.json"
+            if materialization_mode == "exact_reference_patch"
+            else "seed_reference_patch_replay.json"
+        )
+        replay_artifact = workspace.parent / "artifacts" / artifact_name
+        try:
+            replay = json.loads(replay_artifact.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            return None
+        if not isinstance(replay, dict) or len(references) != 1:
+            return None
+        reference = references[0]
+        patch_paths = self._reference_patch_paths(reference)
+        reference_parent_hashes = self._reference_parent_file_hashes(
+            option, patch_paths
+        )
+        if (
+            not seed_id
+            or not (workspace / "source").is_dir()
+            or not patch_paths
+            or not self._paths_within_allowed_roots(patch_paths)
+            or (
+                materialization_mode == "exact_reference_patch"
+                and reference_parent_hashes is None
+            )
+            or str(replay.get("schema_version") or "")
+            != (
+                "goalevolve.v2.seed-reference-patch-materialization.v1"
+                if materialization_mode == "exact_reference_patch"
+                else "goalevolve.v2.seed-reference-patch-replay.v1"
+            )
+            or str(replay.get("authority") or "")
+            != (
+                "controller_authorized_single_exact_seed_materialization"
+                if materialization_mode == "exact_reference_patch"
+                else "external_codex_failure_single_exact_seed_revalidation"
+            )
+            or str(replay.get("seed_id") or "") != seed_id
+            or str(replay.get("parent_id") or "") != parent.parent_id
+            or str(replay.get("parent_source_hash") or "") != parent.source_hash
+            or Path(str(replay.get("reference_diff") or "")).resolve() != reference
+            or tuple(str(path) for path in list(replay.get("patch_paths") or ()))
+            != patch_paths
+            or (
+                materialization_mode == "exact_reference_patch"
+                and dict(replay.get("reference_parent_file_hashes") or {})
+                != reference_parent_hashes
+            )
+            or dict(replay.get("post_apply_hashes") or {})
+            != self._source_file_hashes(workspace / "source", patch_paths)
+        ):
+            return None
+        return StudentEditReport(
+            True,
+            f"seed_reference_patch_recovered:{seed_id}",
+            f"seed_reference_patch_recovery:{seed_id}",
+            None,
+            {
+                "seed_reference_patch_materialization": str(replay_artifact)
+                if materialization_mode == "exact_reference_patch"
+                else "",
+                "seed_reference_patch_fallback": str(replay_artifact)
+                if materialization_mode != "exact_reference_patch"
+                else "",
+                "seed_reference_patch_diff": str(reference),
+            },
+        )
+
+    @staticmethod
+    def _exact_seed_materialization_id(hypothesis: Hypothesis) -> str:
+        """Return the seed ID only for the Controller's explicit opt-in mode."""
+        if (
+            hypothesis.student_role != "explorer"
+            or hypothesis.role_mode != "seed_revalidation"
+            or len(hypothesis.candidate_options) != 1
+        ):
+            return ""
+        option = dict(hypothesis.candidate_options[0])
+        if str(option.get("materialization_mode") or "").strip() != "exact_reference_patch":
+            return ""
+        return str(option.get("candidate_id") or option.get("seed_id") or "").strip()
+
+    def _materialize_exact_seed_reference_patch(
+        self,
+        *,
+        workspace: Path,
+        parent: Parent,
+        hypothesis: Hypothesis,
+    ) -> StudentEditReport | None:
+        """Apply a Controller-authorized historical source transform exactly once.
+
+        This is deliberately separate from transport-failure replay: opting in
+        proves that the Controller selected a complete source transform, never
+        that its historical QoR is valid.  The normal evaluator must still
+        produce new build, official-flow, LEC, and activation evidence.
+        """
+        seed_id = self._exact_seed_materialization_id(hypothesis)
+        if not seed_id:
+            return None
+        option = dict(hypothesis.candidate_options[0])
+        references = tuple(
+            Path(str(path)).resolve()
+            for path in list(option.get("reference_diff_paths") or ())
+            if str(path).strip()
+        )
+        if len(references) != 1:
+            return None
+        reference = references[0]
+        if reference.suffix != ".diff" or not reference.is_file():
+            return None
+        source = workspace / "source"
+        manifest_path = workspace.parent / "workspace_manifest.json"
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            return None
+        parent_source = Path(str(manifest.get("parent_source") or ""))
+        if (
+            not source.is_dir()
+            or str(manifest.get("parent_id") or "") != parent.parent_id
+            or str(manifest.get("parent_source_hash") or "") != parent.source_hash
+            or not parent_source.is_dir()
+        ):
+            return None
+        patch_paths = self._reference_patch_paths(reference)
+        reference_parent_hashes = self._reference_parent_file_hashes(
+            option, patch_paths
+        )
+        if (
+            not patch_paths
+            or reference_parent_hashes is None
+            or not self._paths_within_allowed_roots(patch_paths)
+            or self._source_file_hashes(source, patch_paths) != reference_parent_hashes
+            or self._source_file_hashes(parent_source, patch_paths)
+            != reference_parent_hashes
+        ):
+            return None
+        dry_run = subprocess.run(
+            ["patch", "--batch", "--forward", "--fuzz=0", "--dry-run", "-p1", "-d", str(source), "-i", str(reference)],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if dry_run.returncode != 0:
+            return None
+        applied = subprocess.run(
+            ["patch", "--batch", "--forward", "--fuzz=0", "-p1", "-d", str(source), "-i", str(reference)],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if applied.returncode != 0:
+            return None
+        post_apply_hashes = self._source_file_hashes(source, patch_paths)
+        if len(post_apply_hashes) != len(patch_paths):
+            return None
+        artifact_root = workspace.parent / "artifacts"
+        artifact_root.mkdir(parents=True, exist_ok=True)
+        artifact = artifact_root / "seed_reference_patch_materialization.json"
+        atomic_json(
+            artifact,
+            {
+                "schema_version": "goalevolve.v2.seed-reference-patch-materialization.v1",
+                "seed_id": seed_id,
+                "parent_id": parent.parent_id,
+                "parent_source_hash": parent.source_hash,
+                "reference_diff": str(reference),
+                "patch_paths": list(patch_paths),
+                "reference_parent_file_hashes": reference_parent_hashes,
+                "post_apply_hashes": post_apply_hashes,
+                "authority": "controller_authorized_single_exact_seed_materialization",
+                "dry_run_stdout": dry_run.stdout,
+                "dry_run_stderr": dry_run.stderr,
+                "apply_stdout": applied.stdout,
+                "apply_stderr": applied.stderr,
+            },
+        )
+        return StudentEditReport(
+            True,
+            f"seed_reference_patch_materialized:{seed_id}",
+            f"seed_reference_patch_materialization:{seed_id}",
+            None,
+            {
+                "seed_reference_patch_materialization": str(artifact),
+                "seed_reference_patch_diff": str(reference),
+            },
+        )
 
     def repair(
         self,
@@ -111,12 +356,14 @@ class CodexStudentEditor:
         repair_attempt: int,
         repair_kind: str = "engineering",
     ) -> StudentEditReport:
-        """Repair a bounded evaluation/evidence gap in the same Student thread.
+        """Repair a bounded evaluation/evidence gap for the same Student role.
 
         This deliberately does not create a new Student or a new hypothesis: a
         compile/flow failure is evidence about an implementation, not a reason
         to discard the mechanism before that Student has had a bounded chance
-        to make it executable.
+        to make it executable.  The repair receives a complete current-source
+        and failure-evidence packet, so it starts a fresh remote session rather
+        than resuming unbounded source/tool transcripts from the edit turn.
         """
         source = workspace / "source"
         prompt = self._repair_prompt(
@@ -130,7 +377,9 @@ class CodexStudentEditor:
         )
         turn = self.runner.run(
             state_root=state_root,
-            identity=self._round_identity(student_id, round_index),
+            identity=self._repair_identity(
+                student_id, round_index, repair_kind, repair_attempt
+            ),
             operation_id=f"r{round_index:03d}_{student_id}_{repair_kind}_repair_{repair_attempt:02d}",
             cwd=source,
             artifact_root=workspace.parent / "artifacts" / "codex" / f"{repair_kind}_repair_{repair_attempt:02d}",
@@ -181,8 +430,19 @@ class CodexStudentEditor:
 
     @staticmethod
     def _round_identity(student_id: str, round_index: int) -> str:
-        """Isolate remote context per evolutionary round, not per repair."""
+        """Isolate initial editing context per evolutionary round."""
         return f"{student_id}_r{round_index:03d}"
+
+    @staticmethod
+    def _repair_identity(
+        student_id: str, round_index: int, repair_kind: str, repair_attempt: int
+    ) -> str:
+        """Bound one repair to its current source and Controller evidence."""
+        normalized_kind = re.sub(r"[^a-z0-9]+", "_", repair_kind.lower()).strip("_")
+        return (
+            f"{CodexStudentEditor._round_identity(student_id, round_index)}_"
+            f"{normalized_kind or 'engineering'}_repair_{repair_attempt:02d}"
+        )
 
     @staticmethod
     def _report_after_turn(turn, workspace: Path) -> StudentEditReport:
@@ -212,6 +472,169 @@ class CodexStudentEditor:
                 path.unlink()
             removed.append(path.name if path.parent == workspace else "source/.git")
         return tuple(removed)
+
+    def _replay_exact_seed_reference_patch(
+        self,
+        *,
+        workspace: Path,
+        parent: Parent,
+        hypothesis: Hypothesis,
+        failed_report: StudentEditReport,
+    ) -> StudentEditReport | None:
+        """Revalidate one controller-scheduled seed after a transport failure.
+
+        Reference patches remain source patterns, not QoR evidence.  This
+        intentionally narrow path is available only when Codex produced no
+        edit because its transport failed, and then only for one scheduled
+        seed whose patch applies to the current private parent with zero fuzz.
+        The normal evaluator still builds and runs the fresh candidate.
+        """
+        if not str(failed_report.detail or "").lower().startswith("codex_failed:"):
+            return None
+        if (
+            hypothesis.student_role != "explorer"
+            or hypothesis.role_mode != "seed_revalidation"
+            or len(hypothesis.candidate_options) != 1
+        ):
+            return None
+        option = dict(hypothesis.candidate_options[0])
+        seed_id = str(option.get("candidate_id") or option.get("seed_id") or "").strip()
+        references = tuple(
+            Path(str(path)).resolve()
+            for path in list(option.get("reference_diff_paths") or ())
+            if str(path).strip()
+        )
+        if not seed_id or len(references) != 1:
+            return None
+        reference = references[0]
+        if reference.suffix != ".diff" or not reference.is_file():
+            return None
+        source = workspace / "source"
+        manifest_path = workspace.parent / "workspace_manifest.json"
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            return None
+        if (
+            not source.is_dir()
+            or str(manifest.get("parent_id") or "") != parent.parent_id
+            or str(manifest.get("parent_source_hash") or "") != parent.source_hash
+            or not Path(str(manifest.get("parent_source") or "")).is_dir()
+        ):
+            return None
+        patch_paths = self._reference_patch_paths(reference)
+        if not patch_paths or not self._paths_within_allowed_roots(patch_paths):
+            return None
+        dry_run = subprocess.run(
+            ["patch", "--batch", "--forward", "--fuzz=0", "--dry-run", "-p1", "-d", str(source), "-i", str(reference)],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if dry_run.returncode != 0:
+            return None
+        applied = subprocess.run(
+            ["patch", "--batch", "--forward", "--fuzz=0", "-p1", "-d", str(source), "-i", str(reference)],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if applied.returncode != 0:
+            return None
+        artifact_root = workspace.parent / "artifacts"
+        artifact_root.mkdir(parents=True, exist_ok=True)
+        replay_artifact = artifact_root / "seed_reference_patch_replay.json"
+        post_apply_hashes = self._source_file_hashes(source, patch_paths)
+        if len(post_apply_hashes) != len(patch_paths):
+            return None
+        atomic_json(
+            replay_artifact,
+            {
+                "schema_version": "goalevolve.v2.seed-reference-patch-replay.v1",
+                "seed_id": seed_id,
+                "parent_id": parent.parent_id,
+                "parent_source_hash": parent.source_hash,
+                "reference_diff": str(reference),
+                "patch_paths": list(patch_paths),
+                "post_apply_hashes": post_apply_hashes,
+                "authority": "external_codex_failure_single_exact_seed_revalidation",
+                "dry_run_stdout": dry_run.stdout,
+                "dry_run_stderr": dry_run.stderr,
+                "apply_stdout": applied.stdout,
+                "apply_stderr": applied.stderr,
+            },
+        )
+        return StudentEditReport(
+            True,
+            f"seed_reference_patch_applied:{seed_id}",
+            failed_report.operation_id,
+            failed_report.thread_id,
+            {
+                **failed_report.artifacts,
+                "seed_reference_patch_fallback": str(replay_artifact),
+                "seed_reference_patch_diff": str(reference),
+            },
+        )
+
+    @staticmethod
+    def _reference_patch_paths(reference: Path) -> tuple[str, ...]:
+        """Read relative targets before handing a historical diff to patch."""
+        paths: list[str] = []
+        try:
+            lines = reference.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return ()
+        for line in lines:
+            if not (line.startswith("--- ") or line.startswith("+++ ")):
+                continue
+            raw = line[4:].split("\t", 1)[0].strip()
+            if raw == "/dev/null":
+                return ()
+            normalized = raw[2:] if raw.startswith(("a/", "b/")) else raw
+            path = Path(normalized)
+            if not normalized or path.is_absolute() or ".." in path.parts:
+                return ()
+            paths.append(path.as_posix())
+        return tuple(dict.fromkeys(paths))
+
+    @staticmethod
+    def _reference_parent_file_hashes(
+        option: dict[str, object], patch_paths: tuple[str, ...]
+    ) -> dict[str, str] | None:
+        """Accept only a complete SHA-256 map for an exact reference base."""
+        raw = option.get("reference_parent_file_hashes")
+        if not isinstance(raw, dict) or set(raw) != set(patch_paths):
+            return None
+        hashes = {str(path): str(value) for path, value in raw.items()}
+        if any(
+            not re.fullmatch(r"[0-9a-f]{64}", digest)
+            for digest in hashes.values()
+        ):
+            return None
+        return hashes
+
+    def _paths_within_allowed_roots(self, paths: tuple[str, ...]) -> bool:
+        roots = tuple(Path(root) for root in self.config.allowed_patch_roots if root)
+        if not roots:
+            return False
+        return all(
+            any(path == root or root in Path(path).parents for root in roots)
+            for path in map(Path, paths)
+        )
+
+    @staticmethod
+    def _source_file_hashes(source: Path, paths: tuple[str, ...]) -> dict[str, str]:
+        """Hash each replay target to make an interrupted replay resumable."""
+        hashes: dict[str, str] = {}
+        for relative_path in paths:
+            target = source / relative_path
+            try:
+                if not target.is_file():
+                    return {}
+                hashes[relative_path] = hashlib.sha256(target.read_bytes()).hexdigest()
+            except OSError:
+                return {}
+        return hashes
 
     @staticmethod
     def _write_internal_cpp_scheduling_decision(
@@ -302,20 +725,11 @@ class CodexStudentEditor:
         hypothesis: Hypothesis,
         candidate: CandidateResult,
     ) -> str:
-        checks = {item.name: item.passed for item in candidate.checks}
-        evidence = {
-            "parent_id": parent.parent_id,
-            "hypothesis_id": hypothesis.hypothesis_id,
-            "metrics": candidate.metrics,
-            "phase_signals": candidate.phase_signals,
-            "official_checks": checks,
-            "evaluation_error": candidate.evaluation_error,
-            "evidence_artifacts": {
-                key: value
-                for key, value in candidate.artifacts.items()
-                if key in {"evaluation_log", "checkpoint_metrics", "official_4of4_log", "implementation_diff"}
-            },
-        }
+        evidence = self._reflection_controller_evidence(
+            candidate=candidate,
+            parent=parent,
+            hypothesis=hypothesis,
+        )
         return "\n".join(
             [
                 prompt_path.read_text(encoding="utf-8"),
@@ -328,3 +742,53 @@ class CodexStudentEditor:
                 json.dumps(evidence, ensure_ascii=False, sort_keys=True),
             ]
         )
+
+    @staticmethod
+    def _reflection_controller_evidence(
+        *,
+        candidate: CandidateResult,
+        parent: Parent,
+        hypothesis: Hypothesis,
+    ) -> dict[str, object]:
+        """Load the immutable post-verdict packet for observer-only review.
+
+        Direct unit callers may not have reached Controller classification yet;
+        retain a compact explicit fallback for them rather than silently
+        claiming a matched comparison or final verdict exists.
+        """
+        path = Path(
+            str(candidate.artifacts.get("student_reflection_controller_evidence") or "")
+        )
+        if path.is_file():
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError, TypeError):
+                payload = None
+            if isinstance(payload, dict):
+                return payload
+        checks = {item.name: item.passed for item in candidate.checks}
+        return {
+            "schema_version": "goalevolve.v2.student-reflection-evidence.v1",
+            "authority": "controller_observation_only",
+            "lineage_parent": parent.to_dict(),
+            "comparison_parent": {"status": "not_available_before_controller_classification"},
+            "decision_context": {},
+            "candidate": {
+                "hypothesis_id": hypothesis.hypothesis_id,
+                "metrics": candidate.metrics,
+                "phase_signals": candidate.phase_signals,
+                "official_checks": checks,
+                "evaluation_error": candidate.evaluation_error,
+                "evidence_artifacts": {
+                    key: value
+                    for key, value in candidate.artifacts.items()
+                    if key in {
+                        "evaluation_log",
+                        "checkpoint_metrics",
+                        "official_4of4_log",
+                        "implementation_diff",
+                    }
+                },
+            },
+            "final_verdict": {"status": "not_available_before_controller_classification"},
+        }

@@ -1134,6 +1134,18 @@ class DiverseRetriever:
             # next experiment before unrelated generic cards.  This uses only
             # round.json-backed signal evidence, never an incomplete run.
             refinement_bonus = 4 if card.refinement_signals and set(card.refinement_signals).issubset(activated) else 0
+            # When a completed run emitted the outcome counters named by one
+            # bounded refinement, prefer that exact repair over a different
+            # card that happens to share its generic activation telemetry.
+            # This is still a new experiment because refinement cards bypass
+            # the one-shot activation suppression below.
+            outcome_bonus = (
+                5
+                if card.refinement_signals
+                and card.expected_signals
+                and set(card.expected_signals).issubset(activated)
+                else 0
+            )
             schedule_probe_penalty = (
                 10
                 if prefer_established_direct
@@ -1143,7 +1155,7 @@ class DiverseRetriever:
                 else 0
             )
             return (
-                relevance + refinement_bonus - repeat_penalty - family_penalty - feedback_penalty - schedule_probe_penalty,
+                relevance + refinement_bonus + outcome_bonus - repeat_penalty - family_penalty - feedback_penalty - schedule_probe_penalty,
                 refinement_bonus,
                 relevance,
                 card.card_id,
@@ -1164,9 +1176,6 @@ class DiverseRetriever:
                 card for card in flow_reachable if card.mechanism_family != "runtime_guard"
             ]
         if "power_reclaim" in symptom_set:
-            # Stage 1 must exercise the public repair_power command and its
-            # dedicated implementation chain.  A similarly named policy
-            # reached only from repair_timing is a different experiment.
             flow_reachable = [
                 card
                 for card in flow_reachable
@@ -1497,7 +1506,12 @@ class DiversePlanner:
                 if card not in cards:
                     cards.append(card)
         else:
-            cards = self.retriever.retrieve(parent=parent, symptoms=symptoms, state_root=state_root, count=len(self.retriever.cards))
+            cards = self.retriever.retrieve(
+                parent=parent,
+                symptoms=symptoms,
+                state_root=state_root,
+                count=len(self.retriever.cards),
+            )
         resolved: list[tuple[MechanismCard, object | None]] = []
         for card in cards:
             decision = self.scope_resolver.resolve(card) if self.scope_resolver else None

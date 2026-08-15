@@ -91,6 +91,10 @@ TIMING_RECOVERY_RECIPES = {
     "legacy_setup": TimingRecoveryRecipe(
         "legacy_setup", "Existing repair_timing -setup control; compatibility baseline."
     ),
+    "implicit_power_recovery_plus": TimingRecoveryRecipe(
+        "implicit_power_recovery_plus",
+        "Default repair_timing phases, preserving the empty phase list that dispatches the controller-owned implicit power-recovery-plus experiment.",
+    ),
     "rmp_area_power": TimingRecoveryRecipe(
         "rmp_area_power",
         "Bounded controller-owned RMP target=area after repair_power; no repair_timing pass.",

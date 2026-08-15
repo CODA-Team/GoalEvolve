@@ -3,10 +3,10 @@
   "design": "aes_cipher_top",
   "metrics": {
     "drv_count": 0.0,
-    "dynamic_power_pw": 340970900000.0,
-    "leakage_power_pw": 29100000.0,
+    "dynamic_power_pw": 335607141000.0,
+    "leakage_power_pw": 29093000.0,
     "runtime_s": 203.0,
-    "tns_abs_ns": 15.68
+    "tns_abs_ns": 15.572590769
   },
   "parent_id": "round_058:student_1",
   "source_commit": "ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d",

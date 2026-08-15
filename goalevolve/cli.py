@@ -15,8 +15,18 @@ from .evaluation.contest2026 import official_four_check
 from .evaluation.sfinal import observe_sfinal
 from .execution.execution import ExecutionPolicy
 from .planning.epd import EvolutionProgramDatabase
+from .runtime_preflight import require_ast_graph_runtime
 from .evaluation.leaderboard import update_unified_leaderboard
 from .dashboard import main as dashboard_main
+from .p0_campaign import (
+    campaign_paths,
+    campaign_status,
+    create_p0_campaign,
+    ensure_p0_campaign_repository_graph,
+    extend_campaign_round_limit,
+    freeze_measured_baseline,
+    p0_template_report,
+)
 
 
 def _engine(
@@ -25,6 +35,11 @@ def _engine(
     repository_graph_override: str | None = None,
 ) -> tuple[GoalEvolveEngine, object]:
     config = load_config(config_path)
+    planning_mode = (
+        ("ast_graph" if repository_graph_override == "on" else "openroad_cards")
+        if repository_graph_override is not None
+        else config.planning_mode
+    )
     contract, registry = build_runtime(config)
     engine = GoalEvolveEngine(
         contract=contract,
@@ -35,17 +50,17 @@ def _engine(
         promotion_policy=registry.promotion(config.promotion),
         student_editor=registry.student_editor(config.student_editor),
         teacher=registry.teacher(config.teacher),
+        narrator=registry.narrator("codex_narrator"),
         student_ids=config.students,
         max_campaign_rounds=config.max_campaign_rounds,
         max_consecutive_no_promotion_rounds=config.max_consecutive_no_promotion_rounds,
         prefer_execution_champion=config.prefer_execution_champion,
         epd_max_reinforcement_attempts=config.epd_max_reinforcement_attempts,
         historical_seed_cards=config.historical_seed_cards,
-        repository_graph_enabled=(
-            config.repository_graph_enabled
-            if repository_graph_override is None
-            else repository_graph_override == "on"
-        ),
+        historical_seed_revalidation_schedule=config.historical_seed_revalidation_schedule,
+        planning_mode=planning_mode,
+        repository_graph_enabled=planning_mode == "ast_graph",
+        parent_selection=config.parent_selection,
     )
     return engine, config
 
@@ -92,7 +107,7 @@ def _attach_configured_baseline(*, engine: GoalEvolveEngine, config) -> None:
     if root is None:
         return
     result = load_json(Path(root) / "baseline.json")
-    if not bool(result.get("ok")):
+    if not isinstance(result, dict) or not bool(result.get("ok")):
         raise RuntimeError(f"configured baseline is incomplete: {Path(root) / 'baseline.json'}")
     metrics = {str(name): float(value) for name, value in dict(result.get("metrics") or {}).items() if isinstance(value, (int, float))}
     required = {spec.name for spec in engine.contract.metrics}
@@ -154,6 +169,7 @@ def _attach_initial_parent(*, engine: GoalEvolveEngine, config) -> None:
         candidate_source=source,
         candidate_artifacts=initial_artifacts,
     )
+    engine._refresh_promoted_parent_repository_graph(parent=parent)
     atomic_json(engine.state_root / "parent.json", parent.to_dict())
     atomic_json(marker, {
         "parent": parent.to_dict(),
@@ -168,6 +184,8 @@ def command_run(args: argparse.Namespace) -> int:
         Path(args.config).resolve(),
         repository_graph_override=getattr(args, "repository_graph", None),
     )
+    if engine.effective_planning_mode == "ast_graph":
+        require_ast_graph_runtime(operation=f"AST-planned run for {config.design!r}")
     if config.evaluator == "contest_openroad" and config.campaign_ready is not True:
         raise RuntimeError(
             f"profile for {config.design!r} is not ready for evolution: measure the baseline, "
@@ -190,6 +208,7 @@ def command_run(args: argparse.Namespace) -> int:
     atomic_json(engine.state_root / "toolchain.json", toolchain_fingerprint(source_root=config.source_root))
     print(json.dumps({
         "state_root": str(engine.state_root),
+        "planning_mode": engine.effective_planning_mode,
         "repository_graph_enabled": engine.repository_graph_enabled,
         "final_parent": parent.to_dict(),
     }, ensure_ascii=False, indent=2))
@@ -314,6 +333,101 @@ def command_dashboard(args: argparse.Namespace) -> int:
     return dashboard_main(dashboard_args)
 
 
+def command_p0_list(_args: argparse.Namespace) -> int:
+    """List the reviewed P0 policies available to local campaign users."""
+    print(json.dumps(p0_template_report(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def command_p0_init(args: argparse.Namespace) -> int:
+    """Materialise a design-selected P0 policy in a fresh run directory."""
+    report = create_p0_campaign(
+        design=args.design,
+        output_root=Path(args.output_root),
+        run_id=args.run_id,
+        planning_mode=args.planning_mode,
+        campaign_round_limit=args.max_rounds,
+    )
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0
+
+
+def command_p0_baseline(args: argparse.Namespace) -> int:
+    """Measure P0 then freeze precisely those metrics into its copied contract."""
+    campaign_root = Path(args.campaign)
+    paths = campaign_paths(campaign_root)
+    measured = load_json(paths["baseline_root"] / "baseline.json")
+    if not isinstance(measured, dict) or not bool(measured.get("ok")):
+        # A failed attempt is not a frozen baseline and may be rerun.  A
+        # successful file is instead consumed below, which makes the
+        # measurement-to-freeze transition restart-safe.
+        result = command_baseline(
+            argparse.Namespace(config=str(paths["baseline_config"]), output=None)
+        )
+        if result != 0:
+            return result
+        measured = load_json(paths["baseline_root"] / "baseline.json")
+    if not isinstance(measured, dict):
+        raise RuntimeError("successful P0 baseline did not create baseline.json")
+    report = freeze_measured_baseline(campaign_root, baseline_result=measured)
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0
+
+
+def command_p0_run(args: argparse.Namespace) -> int:
+    """Run or resume only a P0 campaign whose measured contract was frozen."""
+    if args.rounds <= 0:
+        raise ValueError("P0 run rounds must be a positive integer")
+    status = campaign_status(Path(args.campaign))
+    if status.get("status") != "baseline_frozen_ready":
+        raise RuntimeError(
+            "P0 campaign is not evolution-ready; run `p0 baseline --campaign ...` first "
+            "(or review its target-policy status)"
+        )
+    paths = campaign_paths(Path(args.campaign))
+    ensure_p0_campaign_repository_graph(Path(args.campaign))
+    return command_run(
+        argparse.Namespace(
+            config=str(paths["evolve_config"]),
+            rounds=args.rounds,
+            repository_graph=None,
+        )
+    )
+
+
+def command_p0_start(args: argparse.Namespace) -> int:
+    """Create, measure, freeze and start a brand-new selected P0 campaign."""
+    created = create_p0_campaign(
+        design=args.design,
+        output_root=Path(args.output_root),
+        run_id=args.run_id,
+        planning_mode=args.planning_mode,
+        campaign_round_limit=args.rounds,
+    )
+    campaign_root = str(created["campaign_root"])
+    baseline_status = command_p0_baseline(argparse.Namespace(campaign=campaign_root))
+    if baseline_status != 0:
+        return baseline_status
+    return command_p0_run(
+        argparse.Namespace(campaign=campaign_root, rounds=args.rounds)
+    )
+
+
+def command_p0_status(args: argparse.Namespace) -> int:
+    """Show the copied policy, P0 provenance and lifecycle state."""
+    print(json.dumps(campaign_status(Path(args.campaign)), ensure_ascii=False, indent=2))
+    return 0
+
+
+def command_p0_extend(args: argparse.Namespace) -> int:
+    """Increase only the copied campaign's local execution horizon."""
+    report = extend_campaign_round_limit(
+        Path(args.campaign), round_limit=args.max_rounds
+    )
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="goalevolve-v2")
     subs = parser.add_subparsers(dest="command", required=True)
@@ -364,6 +478,67 @@ def build_parser() -> argparse.ArgumentParser:
     dashboard.add_argument("--port", type=int, default=8080)
     dashboard.add_argument("--once", action="store_true", help="print one dashboard snapshot and exit")
     dashboard.set_defaults(func=command_dashboard)
+    p0 = subs.add_parser(
+        "p0",
+        help="create isolated, design-selected P0 campaigns from reviewed templates",
+    )
+    p0_subs = p0.add_subparsers(dest="p0_command", required=True)
+    p0_list = p0_subs.add_parser("list", help="list P0 templates and readiness")
+    p0_list.set_defaults(func=command_p0_list)
+    p0_init = p0_subs.add_parser(
+        "init",
+        help="copy one selected P0 template into a fresh, isolated campaign directory",
+    )
+    p0_init.add_argument("--design", required=True, help="design shown by `p0 list`")
+    p0_init.add_argument("--run-id", required=True, help="unique local run identifier")
+    p0_init.add_argument("--output-root", default="outputs/p0_campaigns")
+    p0_init.add_argument(
+        "--max-rounds",
+        type=int,
+        default=None,
+        help="local maximum round horizon; preserves the template's stall-stop threshold",
+    )
+    p0_init.add_argument(
+        "--planning-mode",
+        choices=("ast_graph", "openroad_cards"),
+        default="ast_graph",
+        help="AST graph is the P0 default; card-only is an explicit ablation",
+    )
+    p0_init.set_defaults(func=command_p0_init)
+    p0_baseline = p0_subs.add_parser(
+        "baseline",
+        help="measure and freeze the selected P0 campaign's official baseline",
+    )
+    p0_baseline.add_argument("--campaign", required=True, help="directory printed by `p0 init`")
+    p0_baseline.set_defaults(func=command_p0_baseline)
+    p0_run = p0_subs.add_parser("run", help="run or resume a frozen P0 campaign")
+    p0_run.add_argument("--campaign", required=True, help="directory printed by `p0 init`")
+    p0_run.add_argument("--rounds", type=int, default=1)
+    p0_run.set_defaults(func=command_p0_run)
+    p0_extend = p0_subs.add_parser(
+        "extend",
+        help="increase a copied P0 campaign's maximum round horizon only",
+    )
+    p0_extend.add_argument("--campaign", required=True)
+    p0_extend.add_argument("--max-rounds", required=True, type=int)
+    p0_extend.set_defaults(func=command_p0_extend)
+    p0_status = p0_subs.add_parser("status", help="print P0 campaign provenance and state")
+    p0_status.add_argument("--campaign", required=True)
+    p0_status.set_defaults(func=command_p0_status)
+    p0_start = p0_subs.add_parser(
+        "start",
+        help="create, baseline, freeze, and run a new selected P0 campaign",
+    )
+    p0_start.add_argument("--design", required=True, help="design shown by `p0 list`")
+    p0_start.add_argument("--run-id", required=True, help="unique local run identifier")
+    p0_start.add_argument("--output-root", default="outputs/p0_campaigns")
+    p0_start.add_argument(
+        "--planning-mode",
+        choices=("ast_graph", "openroad_cards"),
+        default="ast_graph",
+    )
+    p0_start.add_argument("--rounds", type=int, default=1)
+    p0_start.set_defaults(func=command_p0_start)
     return parser
 
 

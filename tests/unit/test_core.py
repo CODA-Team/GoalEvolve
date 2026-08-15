@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import hashlib
 import json
 import os
 import tempfile
@@ -272,6 +273,53 @@ class GoalEvolveV2Tests(unittest.TestCase):
         )
         self.assertIn('"preflight": "{\\"ok\\": true}"', review)
 
+    def test_teacher_review_prompt_is_evidence_routed_and_bounded(self) -> None:
+        diagnosis = SimpleNamespace(to_dict=lambda: {"checkpoint_effects": {"post_route": {"tns_abs_ns": -1.0}}})
+        hypothesis = replace(
+            self.hypothesis,
+            candidate_options=({"candidate_id": "peer", "unselected_payload": "DO_NOT_INLINE_UNSELECTED_SOURCE"},),
+        )
+        candidate = CandidateResult(
+            "student_1",
+            hypothesis,
+            {"tns_abs_ns": 55.0, "leakage_power_pw": 150.0},
+            {"guard_retained": 8.0},
+            [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+            "FULL_CANDIDATE_SOURCE_DIFF_SHOULD_NOT_REACH_REVIEW_PROMPT",
+            "candidate-commit",
+            artifacts={
+                "preflight": '{"ok": true}',
+                "checkpoint_metrics": "/round/student_1/checkpoint_metrics.json",
+                "official_4of4_log": "/round/student_1/official_4of4.log",
+            },
+        )
+        verdict = EvidenceVerdict("validated", 0.1, 0.2, True, True, ("accepted",))
+
+        review = CodexTeacher._review_prompt(
+            parent=self.parent,
+            diagnosis=diagnosis,
+            epd={
+                "status_counts": {"promising": 1},
+                "full_epd_artifact": "/state/knowledge/epd.json",
+                "attempts": [{"raw": "FULL_EPD_ATTEMPT_SHOULD_NOT_REACH_REVIEW_PROMPT"}],
+            },
+            observations={
+                "full_observation_memory": "/state/knowledge/observations.json",
+                "family_hook_summary": [{"mechanism_family": "guard", "last_failure_signature": "bounded"}],
+                "raw": "FULL_OBSERVATION_SHOULD_NOT_REACH_REVIEW_PROMPT",
+            },
+            rows=((candidate, verdict),),
+        )
+
+        self.assertIn('"student_id": "student_1"', review)
+        self.assertIn('"tns_abs_ns": 55.0', review)
+        self.assertIn('"checkpoint_metrics": "/round/student_1/checkpoint_metrics.json"', review)
+        self.assertIn('"full_epd_artifact": "/state/knowledge/epd.json"', review)
+        self.assertNotIn("DO_NOT_INLINE_UNSELECTED_SOURCE", review)
+        self.assertNotIn("FULL_CANDIDATE_SOURCE_DIFF_SHOULD_NOT_REACH_REVIEW_PROMPT", review)
+        self.assertNotIn("FULL_EPD_ATTEMPT_SHOULD_NOT_REACH_REVIEW_PROMPT", review)
+        self.assertNotIn("FULL_OBSERVATION_SHOULD_NOT_REACH_REVIEW_PROMPT", review)
+
     def test_teacher_markdown_protocol_parses_fixed_assignment_and_review_blocks(self) -> None:
         from goalevolve.agents.markdown_protocol import parse_teacher_plan, parse_teacher_review
 
@@ -460,6 +508,26 @@ Keep parent.
         self.assertEqual(idea["nearest_historical_idea"], "IDEA_A")
         self.assertIn("post-route debt", idea["material_difference"])
 
+    def test_teacher_plan_normalizes_embedded_draft_signature_id(self) -> None:
+        from goalevolve.agents.markdown_protocol import parse_teacher_plan
+
+        parsed = parse_teacher_plan(
+            """## Evolution Ideas
+### idea_1
+- Idea: Bound a late candidate by measured post-route debt.
+- Draft Signature: Pass-A `draft_1` for an Explorer
+- EPD Search Query: `draft_1`
+- Nearest Historical Idea: `IDEA_A`
+
+## Student Assignments
+"""
+        )
+
+        idea = parsed["evolution_idea_records"][0]
+        self.assertEqual(idea["draft_signature_id"], "draft_1")
+        self.assertEqual(idea["epd_search_query"], "draft_1")
+        self.assertEqual(idea["nearest_historical_idea"], "IDEA_A")
+
     def test_codex_teacher_uses_draft_retrieval_then_novelty_review(self) -> None:
         from goalevolve.agents.teacher import CodexTeacher, CodexTeacherConfig
 
@@ -550,8 +618,8 @@ Keep parent.
             def __init__(self) -> None:
                 self.calls = []
 
-            def run(self, *, operation_id, artifact_root, prompt, **_):
-                self.calls.append((operation_id, prompt))
+            def run(self, *, identity, operation_id, artifact_root, prompt, **_):
+                self.calls.append((operation_id, prompt, identity))
                 artifact_root.mkdir(parents=True, exist_ok=True)
                 last = artifact_root / "last_message.md"
                 last.write_text(
@@ -591,9 +659,148 @@ Keep parent.
             )
 
         self.assertEqual([call[0] for call in runner.calls], ["r001_teacher_draft_signatures", "r001_teacher_plan_novelty_review"])
+        self.assertEqual(
+            [call[2] for call in runner.calls],
+            ["teacher_r001_draft", "teacher_r001_plan"],
+        )
         self.assertTrue(plan.plan["retrieval_audit"]["accepted"])
         self.assertEqual(len(plan.plan["draft_signatures"]), 5)
         self.assertIn("teacher_epd_retrieval_packet.json", runner.calls[1][1])
+
+    def test_codex_teacher_seed_revalidation_skips_fresh_explorer_work(self) -> None:
+        """A fully controller-bound seed round needs one plan turn, not Pass A/B."""
+        from goalevolve.agents.teacher import CodexTeacher, CodexTeacherConfig
+        from goalevolve.execution.engine import GoalEvolveEngine
+
+        seed = {
+            "seed_id": "early_frontier",
+            "source_anchors": (
+                "src/rsz/src/RecoverPower.cc::rsz::RecoverPower::recoverPower",
+            ),
+            "decision_boundary": "early candidate frontier admission",
+            "summary": "Revalidate the bounded early candidate frontier.",
+            "expected_signals": (
+                "repair_power_early_examined",
+                "repair_power_early_retained",
+            ),
+        }
+        templates, _ = GoalEvolveEngine._seed_revalidation_templates(
+            templates=(replace(self.hypothesis, student_id="student_1"),),
+            round_index=1,
+            historical_seeds=(seed,),
+        )
+        markdown = """## Diagnosis Summary
+Revalidate the controller-bound early frontier.
+
+## Evolution Ideas
+### idea_1
+- Idea: Revalidate the bounded early candidate frontier in the live parent.
+- Predicted Stage Effect: Retain a real early power candidate decision.
+- Source Hooks: src/rsz/src/RecoverPower.cc
+- Source Evidence: src/rsz/src/RecoverPower.cc::rsz::RecoverPower::recoverPower
+- Evaluation Recipe: legacy_setup
+- Expected Signals: repair_power_early_examined; repair_power_early_retained
+- Activation Signals: repair_power_early_examined; repair_power_early_retained
+- Falsification Condition: No retained post-route power benefit.
+
+## Parent Policy
+Keep the checked parent.
+
+## Student Assignments
+### student_1
+- Role: explorer
+- Candidate: early_frontier
+- EPD Idea: idea_1
+- Claim: Revalidate the bounded early candidate frontier in the live parent.
+- Selection Rationale: It is the controller-bound first-round power experiment.
+- Source Hooks: src/rsz/src/RecoverPower.cc
+- Source Evidence: src/rsz/src/RecoverPower.cc::rsz::RecoverPower::recoverPower
+- Evaluation Recipe: legacy_setup
+- Expected Signals: repair_power_early_examined; repair_power_early_retained
+- Activation Signals: repair_power_early_examined; repair_power_early_retained
+- Falsification Condition: No retained post-route power benefit.
+- EPD References: none
+"""
+
+        class FakeRunner:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, str]] = []
+
+            def run(self, *, identity, operation_id, artifact_root, **_):
+                self.calls.append((identity, operation_id))
+                artifact_root.mkdir(parents=True, exist_ok=True)
+                message = artifact_root / "last_message.md"
+                message.write_text(markdown, encoding="utf-8")
+                events = artifact_root / "events.jsonl"
+                events.write_text("", encoding="utf-8")
+                return SimpleNamespace(
+                    ok=True,
+                    operation_id=operation_id,
+                    detail="ok",
+                    artifacts={
+                        "codex_last_message": str(message),
+                        "codex_events": str(events),
+                    },
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            teacher = CodexTeacher(CodexTeacherConfig())
+            runner = FakeRunner()
+            teacher.runner = runner
+            plan = teacher.plan(
+                state_root=root,
+                round_root=root / "rounds" / "round_001",
+                round_index=1,
+                parent=self.parent,
+                contract=self.contract,
+                diagnosis=SimpleNamespace(to_dict=lambda: {}),
+                fallback=templates,
+                previous_review={},
+                decision_context={"stage": "power_reclaim", "evaluation_mode": "power_only"},
+            )
+
+        self.assertEqual(runner.calls, [("teacher_r001_plan", "r001_teacher_plan")])
+        self.assertTrue(plan.plan["format_valid"])
+        self.assertEqual(plan.plan["draft_signatures"], [])
+        self.assertEqual(plan.plan["retrieval_audit"], {})
+
+    def test_seed_only_teacher_prompt_requires_an_idea_for_each_assigned_card(self) -> None:
+        """Seed revalidation is executable Explorer work, never a suspended slot."""
+        from goalevolve.agents.teacher import CodexTeacher
+        from goalevolve.execution.engine import GoalEvolveEngine
+
+        seed = {
+            "seed_id": "early_frontier",
+            "source_anchors": (
+                "src/rsz/src/RecoverPower.cc::rsz::RecoverPower::recoverPower",
+            ),
+            "decision_boundary": "early candidate frontier admission",
+            "summary": "Revalidate the bounded early candidate frontier.",
+            "expected_signals": ("repair_power_early_retained",),
+        }
+        templates, _ = GoalEvolveEngine._seed_revalidation_templates(
+            templates=(replace(self.hypothesis, student_id="student_1"),),
+            round_index=1,
+            historical_seeds=(seed,),
+        )
+
+        prompt = CodexTeacher._plan_prompt(
+            contract=self.contract,
+            parent=self.parent,
+            diagnosis=SimpleNamespace(to_dict=lambda: {}),
+            epd={},
+            observations={},
+            previous_review={},
+            fallback=templates,
+            decision_context={"stage": "power_reclaim", "evaluation_mode": "power_only"},
+        )
+
+        self.assertIn("do not create Pass-A draft signatures", prompt)
+        self.assertIn("one Evolution Idea for each assigned seed", prompt)
+        self.assertIn("controller-scheduled source experiment", prompt)
+        self.assertNotIn("Explorers are suspended", prompt)
+        self.assertNotIn("Do not invent Explorer ideas", prompt)
 
     def test_controller_materializes_teacher_authored_explorer_idea(self) -> None:
         from goalevolve.execution.teacher_assignment import (
@@ -609,7 +816,7 @@ Keep parent.
             templates = build_role_templates(
                 student_ids=("student_1",),
                 round_index=3,
-                decision_context={"evaluation_mode": "timing_only"},
+                decision_context={"evaluation_mode": "power_only"},
                 portfolio={},
                 suspend_explorers=False,
             )
@@ -669,7 +876,7 @@ Keep parent.
             templates = build_role_templates(
                 student_ids=("student_1",),
                 round_index=6,
-                decision_context={"evaluation_mode": "timing_only"},
+                decision_context={"evaluation_mode": "power_only"},
                 portfolio={},
                 suspend_explorers=False,
             )
@@ -769,6 +976,17 @@ Keep parent.
     def test_pure_explorer_materialization_failure_repairs_before_scheduling(self) -> None:
         from goalevolve.agents.teacher import TeacherPlan
 
+        retrieval_audit = {
+            "signatures": {
+                f"draft_{index}": {
+                    "accepted": True,
+                    "result_ids": [f"IDEA_NEAR_{index}"],
+                    "opened_idea_ids": [f"IDEA_NEAR_{index}"],
+                }
+                for index in range(1, 5)
+            }
+        }
+
         def plan_payload(*, repaired: bool) -> dict[str, object]:
             assignments = []
             ideas = []
@@ -814,6 +1032,14 @@ Keep parent.
                         "source_evidence": (evidence,),
                         "expected_signals": (signal,),
                         "falsification_condition": "No official timing gain.",
+                        "draft_signature_id": f"draft_{index}",
+                        "epd_search_query": f"draft_{index}",
+                        "retrieved_historical_ideas": (f"IDEA_NEAR_{index}",),
+                        "opened_epd_records": (f"IDEA_NEAR_{index}",),
+                        "nearest_historical_idea": f"IDEA_NEAR_{index}",
+                        "semantic_overlap": "none",
+                        "material_difference": "Distinct bounded ranking decision.",
+                        "novelty_conclusion": "Retain for independent source validation.",
                     }
                 )
             return {
@@ -864,6 +1090,7 @@ Keep parent.
                         "format_valid": True,
                         "teacher_markdown": "initial pure Explorer plan",
                         "parsed_markdown": initial_plan,
+                        "retrieval_audit": retrieval_audit,
                     },
                     {},
                 )
@@ -873,13 +1100,14 @@ Keep parent.
                 *,
                 errors,
                 role_templates,
-                **_,
+                **kwargs,
             ):
                 inner_self.repair_calls.append(
                     {
                         "errors": tuple(errors),
                         "role_ids": tuple(template.student_id for template in role_templates),
                         "evaluator_calls": tuple(evaluator.calls),
+                        "retrieval_audit": kwargs.get("retrieval_audit"),
                     }
                 )
                 return {
@@ -937,6 +1165,7 @@ Keep parent.
             {error.split(":", 1)[0] for error in repair_call["errors"]},
             {"student_1", "student_2", "student_3"},
         )
+        self.assertEqual(repair_call["retrieval_audit"], retrieval_audit)
         self.assertEqual(len(evaluator.calls), 4)
         self.assertTrue(
             all(
@@ -1233,7 +1462,7 @@ Keep parent.
             templates = build_role_templates(
                 student_ids=("student_1",),
                 round_index=1,
-                decision_context={"evaluation_mode": "timing_only"},
+                decision_context={"evaluation_mode": "power_only"},
                 portfolio={},
                 suspend_explorers=False,
             )
@@ -2143,6 +2372,7 @@ Keep the checked parent.
             required_roles=("explorer",),
             require_explorer_ideas=False,
             required_student_roles={"student_1": "explorer"},
+            require_source_investigation=True,
         )
         self.assertIn("missing_section:source_investigation", errors)
 
@@ -2158,6 +2388,25 @@ Keep the checked parent.
 """
         )
         self.assertEqual(parsed["assignments"][0]["candidate_id"], "")
+        self.assertEqual(parsed["assignments"][0]["idea_reference"], "idea_1")
+
+    def test_teacher_markdown_protocol_normalizes_inline_code_idea_reference(self) -> None:
+        """Markdown presentation must not make a valid seed idea unreachable."""
+        from goalevolve.agents.markdown_protocol import parse_teacher_plan
+
+        parsed = parse_teacher_plan(
+            """## Student Assignments
+### student_1
+- Role: explorer
+- Candidate: `repair_power_early_candidate_frontier`
+- EPD Idea: `idea_1`
+"""
+        )
+
+        self.assertEqual(
+            parsed["assignments"][0]["candidate_id"],
+            "repair_power_early_candidate_frontier",
+        )
         self.assertEqual(parsed["assignments"][0]["idea_reference"], "idea_1")
 
     def test_teacher_markdown_protocol_splits_semicolon_separated_source_hooks(self) -> None:
@@ -2182,6 +2431,31 @@ Keep the checked parent.
         self.assertEqual(parsed["evolution_idea_records"][0]["source_hooks"], expected)
         self.assertEqual(parsed["assignments"][0]["source_hooks"], expected)
 
+    def test_teacher_markdown_protocol_splits_semicolon_separated_signal_lists(self) -> None:
+        """Seed-revalidation signal lists remain valid when Teacher uses semicolons."""
+        from goalevolve.agents.markdown_protocol import parse_teacher_plan
+
+        parsed = parse_teacher_plan(
+            """## Evolution Ideas
+### idea_1
+- Idea: Revalidate the early power boundary.
+- Expected Signals: repair_power_early_examined; repair_power_early_retained
+- Activation Signals: repair_power_early_examined; repair_power_early_retained
+
+## Student Assignments
+### student_1
+- Role: explorer
+- EPD Idea: idea_1
+- Expected Signals: repair_power_early_examined; repair_power_early_retained
+- Activation Signals: repair_power_early_examined; repair_power_early_retained
+"""
+        )
+        expected = ("repair_power_early_examined", "repair_power_early_retained")
+        self.assertEqual(parsed["evolution_idea_records"][0]["expected_signals"], expected)
+        self.assertEqual(parsed["evolution_idea_records"][0]["activation_signals"], expected)
+        self.assertEqual(parsed["assignments"][0]["expected_signals"], expected)
+        self.assertEqual(parsed["assignments"][0]["activation_signals"], expected)
+
     def test_incomplete_teacher_plan_normalizes_legacy_combined_source_hooks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             from goalevolve.execution.engine import GoalEvolveEngine
@@ -2200,6 +2474,538 @@ Keep the checked parent.
         self.assertEqual(
             recovered[0][0].source_hooks,
             ("src/rsz/src/RepairPowerPolicy.cc", "src/rsz/src/Resizer.cc"),
+        )
+
+    def test_incomplete_teacher_plan_keeps_recoverable_controller_rejection(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            from goalevolve.execution.engine import GoalEvolveEngine
+
+            round_root = Path(temporary) / "round_001"
+            round_root.mkdir()
+            atomic_json(
+                round_root / "teacher_plan.json",
+                {
+                    "hypotheses": [],
+                    "teacher_markdown": "## Student Assignments\n### student_1",
+                    "controller_assignment_errors": [
+                        "student_1:controller_assignment_rejected"
+                    ],
+                },
+            )
+
+            recovered = GoalEvolveEngine._incomplete_teacher_plan(round_root)
+
+        self.assertIsNotNone(recovered)
+        assert recovered is not None
+        self.assertEqual(recovered[0], [])
+        self.assertIn("controller_assignment_errors", recovered[1])
+
+    def test_teacher_external_turn_failure_is_not_reported_as_markdown_invalid(self) -> None:
+        from goalevolve.execution.engine import GoalEvolveEngine
+
+        self.assertEqual(
+            GoalEvolveEngine._teacher_plan_failure(
+                {
+                    "format_valid": False,
+                    "teacher_failure_kind": "external_turn_failure",
+                    "teacher_detail": "codex_failed:stream disconnected",
+                }
+            ),
+            "teacher_external_turn_failed:codex_failed:stream disconnected",
+        )
+        self.assertEqual(
+            GoalEvolveEngine._teacher_plan_failure({"format_valid": False}),
+            "teacher_markdown_format_invalid_after_repair",
+        )
+
+    def test_external_teacher_failure_recovers_only_one_scheduled_seed_revalidation(self) -> None:
+        from goalevolve.execution.engine import GoalEvolveEngine
+
+        with tempfile.TemporaryDirectory() as temporary:
+            reference_diff = Path(temporary) / "critical_cone.diff"
+            reference_diff.write_text("--- a/source\n+++ b/source\n", encoding="utf-8")
+            seed = replace(
+                self.hypothesis,
+                hypothesis_id="r005_student_1_explorer",
+                mechanism_family="teacher_explorer",
+                student_id="student_1",
+                student_role="explorer",
+                role_mode="seed_revalidation",
+                evaluation_mode="power_then_timing",
+                timing_recipe_id="measured_vt_deep",
+                candidate_options=(
+                    {
+                        "candidate_id": "repair_power_critical_cone_persistence",
+                        "claim": "Protect the pre-reclaim critical timing cone.",
+                        "source_hooks": ("src/rsz/src/policy/RepairPowerPolicy.cc",),
+                        "source_anchors": (
+                            "src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::iterateEarlyForcedReclaim",
+                        ),
+                        "expected_signals": (
+                            "repair_power_reversion_excluded",
+                            "repair_power_persistent_retained",
+                        ),
+                        "reference_diff_paths": (str(reference_diff),),
+                    },
+                ),
+            )
+
+            recovered = GoalEvolveEngine._seed_revalidation_external_teacher_fallback(
+                templates=(seed,),
+                diagnosis=self.parent,
+                failed_plan={
+                    "teacher_failure_kind": "external_turn_failure",
+                    "teacher_detail": "codex_failed:stream disconnected",
+                },
+            )
+
+            self.assertIsNotNone(recovered)
+            assert recovered is not None
+            templates, payload = recovered
+            self.assertEqual(templates, (seed,))
+            self.assertEqual(payload["planner_mode"], "seed_revalidation_fallback")
+            self.assertEqual(
+                payload["seed_revalidation_fallback"]["seed_id"],
+                "repair_power_critical_cone_persistence",
+            )
+            parsed = payload["parsed_markdown"]
+            self.assertEqual(
+                parsed["assignments"][0]["candidate_id"],
+                "repair_power_critical_cone_persistence",
+            )
+            self.assertEqual(
+                parsed["assignments"][0]["source_evidence"],
+                seed.candidate_options[0]["source_anchors"],
+            )
+
+            self.assertIsNone(
+                GoalEvolveEngine._seed_revalidation_external_teacher_fallback(
+                    templates=(replace(seed, role_mode="fresh_exploration"),),
+                    diagnosis=self.parent,
+                    failed_plan={},
+                )
+            )
+            self.assertIsNone(
+                GoalEvolveEngine._seed_revalidation_external_teacher_fallback(
+                    templates=(seed, replace(seed, student_id="student_2")),
+                    diagnosis=self.parent,
+                    failed_plan={},
+                )
+            )
+            self.assertIsNone(
+                GoalEvolveEngine._seed_revalidation_external_teacher_fallback(
+                    templates=(replace(seed, candidate_options=({
+                        **seed.candidate_options[0],
+                        "reference_diff_paths": (str(reference_diff.with_name("missing.diff")),),
+                    },)),),
+                    diagnosis=self.parent,
+                    failed_plan={},
+                )
+            )
+
+    def test_codex_failure_replays_only_an_exact_scheduled_seed_patch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            state_root = root / "campaign"
+            parent_source = state_root / "parents" / self.parent.source_hash / "source"
+            parent_file = parent_source / "src/rsz/src/policy/RepairPowerPolicy.cc"
+            parent_file.parent.mkdir(parents=True)
+            parent_file.write_text("before\n", encoding="utf-8")
+            workspace = root / "rounds/round_001/students/student_1/workspace"
+            candidate_file = workspace / "source/src/rsz/src/policy/RepairPowerPolicy.cc"
+            candidate_file.parent.mkdir(parents=True)
+            candidate_file.write_text("before\n", encoding="utf-8")
+            atomic_json(
+                workspace.parent / "workspace_manifest.json",
+                {
+                    "parent_id": self.parent.parent_id,
+                    "parent_source_hash": self.parent.source_hash,
+                    "parent_source": str(parent_source),
+                },
+            )
+            reference = root / "seed.diff"
+            reference.write_text(
+                "--- a/src/rsz/src/policy/RepairPowerPolicy.cc\n"
+                "+++ b/src/rsz/src/policy/RepairPowerPolicy.cc\n"
+                "@@ -1 +1 @@\n"
+                "-before\n"
+                "+after\n",
+                encoding="utf-8",
+            )
+            hypothesis = replace(
+                self.hypothesis,
+                student_id="student_1",
+                student_role="explorer",
+                role_mode="seed_revalidation",
+                candidate_options=(
+                    {
+                        "candidate_id": "exact_seed",
+                        "reference_diff_paths": (str(reference),),
+                    },
+                ),
+            )
+
+            class FailedRunner:
+                def run(self, **_):
+                    return SimpleNamespace(
+                        ok=False,
+                        detail="codex_failed:stream disconnected",
+                        operation_id="r001_student_1",
+                        thread_id=None,
+                        artifacts={},
+                    )
+
+            prompt = root / "prompt.md"
+            prompt.write_text("packet", encoding="utf-8")
+            editor = CodexStudentEditor(
+                CodexStudentConfig(allowed_patch_roots=("src/rsz",))
+            )
+            editor.runner = FailedRunner()
+            report = editor.apply(
+                state_root=state_root,
+                round_index=1,
+                student_id="student_1",
+                workspace=workspace,
+                parent=self.parent,
+                hypothesis=hypothesis,
+                prompt_path=prompt,
+            )
+
+            self.assertTrue(report.ok)
+            self.assertEqual(report.detail, "seed_reference_patch_applied:exact_seed")
+            self.assertEqual(candidate_file.read_text(encoding="utf-8"), "after\n")
+            self.assertIn("seed_reference_patch_fallback", report.artifacts)
+
+            class UnexpectedRunner:
+                def run(self, **_):
+                    raise AssertionError("verified seed replay must not call Codex again")
+
+            editor.runner = UnexpectedRunner()
+            resumed = editor.apply(
+                state_root=state_root,
+                round_index=1,
+                student_id="student_1",
+                workspace=workspace,
+                parent=self.parent,
+                hypothesis=hypothesis,
+                prompt_path=prompt,
+            )
+            self.assertTrue(resumed.ok)
+            self.assertEqual(resumed.detail, "seed_reference_patch_recovered:exact_seed")
+            self.assertEqual(candidate_file.read_text(encoding="utf-8"), "after\n")
+
+            (workspace.parent / "artifacts" / "seed_reference_patch_replay.json").unlink()
+            editor.runner = FailedRunner()
+            already_applied = editor.apply(
+                state_root=state_root,
+                round_index=1,
+                student_id="student_1",
+                workspace=workspace,
+                parent=self.parent,
+                hypothesis=hypothesis,
+                prompt_path=prompt,
+            )
+            self.assertFalse(already_applied.ok)
+            self.assertEqual(candidate_file.read_text(encoding="utf-8"), "after\n")
+
+            candidate_file.write_text("unexpected\n", encoding="utf-8")
+            editor.runner = FailedRunner()
+            rejected = editor.apply(
+                state_root=state_root,
+                round_index=1,
+                student_id="student_1",
+                workspace=workspace,
+                parent=self.parent,
+                hypothesis=hypothesis,
+                prompt_path=prompt,
+            )
+            self.assertFalse(rejected.ok)
+            self.assertEqual(rejected.detail, "codex_failed:stream disconnected")
+
+    def test_explicit_seed_materialization_applies_only_the_exact_scheduled_patch(self) -> None:
+        """A controller-approved seed may bypass Codex, never patch fuzzily."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            state_root = root / "campaign"
+            parent_source = state_root / "parents" / self.parent.source_hash / "source"
+            parent_file = parent_source / "src/rsz/src/policy/RepairPowerPolicy.cc"
+            parent_file.parent.mkdir(parents=True)
+            parent_file.write_text("before\n", encoding="utf-8")
+            workspace = root / "rounds/round_001/students/student_1/workspace"
+            candidate_file = workspace / "source/src/rsz/src/policy/RepairPowerPolicy.cc"
+            candidate_file.parent.mkdir(parents=True)
+            candidate_file.write_text("before\n", encoding="utf-8")
+            atomic_json(
+                workspace.parent / "workspace_manifest.json",
+                {
+                    "parent_id": self.parent.parent_id,
+                    "parent_source_hash": self.parent.source_hash,
+                    "parent_source": str(parent_source),
+                },
+            )
+            reference = root / "seed.diff"
+            reference.write_text(
+                "--- a/src/rsz/src/policy/RepairPowerPolicy.cc\n"
+                "+++ b/src/rsz/src/policy/RepairPowerPolicy.cc\n"
+                "@@ -1 +1 @@\n"
+                "-before\n"
+                "+after\n",
+                encoding="utf-8",
+            )
+            hypothesis = replace(
+                self.hypothesis,
+                student_id="student_1",
+                student_role="explorer",
+                role_mode="seed_revalidation",
+                candidate_options=(
+                    {
+                        "candidate_id": "exact_seed",
+                        "materialization_mode": "exact_reference_patch",
+                        "reference_diff_paths": (str(reference),),
+                        "reference_parent_file_hashes": {
+                            "src/rsz/src/policy/RepairPowerPolicy.cc": hashlib.sha256(
+                                b"before\n"
+                            ).hexdigest(),
+                        },
+                    },
+                ),
+            )
+
+            class UnexpectedRunner:
+                def run(self, **_):
+                    raise AssertionError("explicit seed materialization must not call Codex")
+
+            prompt = root / "prompt.md"
+            prompt.write_text("packet", encoding="utf-8")
+            editor = CodexStudentEditor(
+                CodexStudentConfig(allowed_patch_roots=("src/rsz",))
+            )
+            editor.runner = UnexpectedRunner()
+            report = editor.apply(
+                state_root=state_root,
+                round_index=1,
+                student_id="student_1",
+                workspace=workspace,
+                parent=self.parent,
+                hypothesis=hypothesis,
+                prompt_path=prompt,
+            )
+
+            self.assertTrue(report.ok)
+            self.assertEqual(
+                report.detail, "seed_reference_patch_materialized:exact_seed"
+            )
+            self.assertEqual(candidate_file.read_text(encoding="utf-8"), "after\n")
+            self.assertTrue(
+                (workspace.parent / "artifacts" / "seed_reference_patch_materialization.json").is_file()
+            )
+
+            resumed = editor.apply(
+                state_root=state_root,
+                round_index=1,
+                student_id="student_1",
+                workspace=workspace,
+                parent=self.parent,
+                hypothesis=hypothesis,
+                prompt_path=prompt,
+            )
+            self.assertTrue(resumed.ok)
+            self.assertEqual(
+                resumed.detail, "seed_reference_patch_recovered:exact_seed"
+            )
+
+            restricted_editor = CodexStudentEditor(
+                CodexStudentConfig(allowed_patch_roots=("src/other",))
+            )
+            restricted_editor.runner = UnexpectedRunner()
+            restricted = restricted_editor.apply(
+                state_root=state_root,
+                round_index=1,
+                student_id="student_1",
+                workspace=workspace,
+                parent=self.parent,
+                hypothesis=hypothesis,
+                prompt_path=prompt,
+            )
+            self.assertFalse(restricted.ok)
+            self.assertEqual(
+                restricted.detail,
+                "exact_seed_reference_patch_not_applicable:exact_seed",
+            )
+
+            (workspace.parent / "artifacts" / "seed_reference_patch_materialization.json").unlink()
+            candidate_file.write_text("before\n", encoding="utf-8")
+            wrong_base = replace(
+                hypothesis,
+                candidate_options=(
+                    {
+                        **hypothesis.candidate_options[0],
+                        "reference_parent_file_hashes": {
+                            "src/rsz/src/policy/RepairPowerPolicy.cc": "0" * 64,
+                        },
+                    },
+                ),
+            )
+            wrong_base_report = editor.apply(
+                state_root=state_root,
+                round_index=1,
+                student_id="student_1",
+                workspace=workspace,
+                parent=self.parent,
+                hypothesis=wrong_base,
+                prompt_path=prompt,
+            )
+            self.assertFalse(wrong_base_report.ok)
+            self.assertEqual(
+                wrong_base_report.detail,
+                "exact_seed_reference_patch_not_applicable:exact_seed",
+            )
+            candidate_file.write_text("unexpected\n", encoding="utf-8")
+            rejected = editor.apply(
+                state_root=state_root,
+                round_index=1,
+                student_id="student_1",
+                workspace=workspace,
+                parent=self.parent,
+                hypothesis=hypothesis,
+                prompt_path=prompt,
+            )
+            self.assertFalse(rejected.ok)
+            self.assertEqual(
+                rejected.detail,
+                "exact_seed_reference_patch_not_applicable:exact_seed",
+            )
+
+    def test_engine_persists_external_teacher_failure_before_raising(self) -> None:
+        from goalevolve.agents.teacher import TeacherPlan
+
+        class FailedTeacher:
+            name = "codex_teacher"
+            config = SimpleNamespace(max_plan_format_repairs=2)
+
+            def plan(self, *, diagnosis, **_):
+                return TeacherPlan(
+                    (),
+                    diagnosis,
+                    {
+                        "format_valid": False,
+                        "teacher_failure_kind": "external_turn_failure",
+                        "teacher_detail": "codex_failed:stream disconnected",
+                        "teacher_markdown": "",
+                        "parsed_markdown": {},
+                    },
+                    {"codex_stderr": "/round/teacher/stderr.log"},
+                )
+
+        class StaticEvaluator:
+            name = "static"
+            config = SimpleNamespace(allowed_patch_roots=("src/rsz",))
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "seed"
+            (source / "src/rsz/src").mkdir(parents=True)
+            engine = GoalEvolveEngine(
+                self.contract,
+                root / "campaign",
+                DiversePlanner(),
+                StaticEvaluator(),
+                IsolatedWorkspace(source),
+                StrictEvidencePromotion(),
+                student_ids=("student_1",),
+                teacher=FailedTeacher(),
+            )
+            engine.initialize(baseline_metrics=dict(self.parent.metrics))
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "teacher_external_turn_failed:codex_failed:stream disconnected",
+            ):
+                engine.run(rounds=1)
+            persisted = load_json(root / "campaign" / "rounds/round_001/teacher_plan.json")
+
+        self.assertEqual(persisted["teacher_failure_kind"], "external_turn_failure")
+        self.assertEqual(persisted["teacher_detail"], "codex_failed:stream disconnected")
+
+    def test_engine_does_not_persist_exhausted_markdown_repair_as_external_failure(self) -> None:
+        from goalevolve.agents.teacher import TeacherPlan
+
+        class InvalidTeacher:
+            name = "codex_teacher"
+            config = SimpleNamespace(max_plan_format_repairs=2)
+
+            def plan(self, *, diagnosis, **_):
+                return TeacherPlan(
+                    (),
+                    diagnosis,
+                    {
+                        "format_valid": False,
+                        "teacher_detail": "missing required Markdown blocks",
+                        "teacher_markdown": "## Diagnosis Summary\ninvalid",
+                        "parsed_markdown": {},
+                    },
+                    {},
+                )
+
+        class StaticEvaluator:
+            name = "static"
+            config = SimpleNamespace(allowed_patch_roots=("src/rsz",))
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "seed"
+            (source / "src/rsz/src").mkdir(parents=True)
+            engine = GoalEvolveEngine(
+                self.contract,
+                root / "campaign",
+                DiversePlanner(),
+                StaticEvaluator(),
+                IsolatedWorkspace(source),
+                StrictEvidencePromotion(),
+                student_ids=("student_1",),
+                teacher=InvalidTeacher(),
+            )
+            engine.initialize(baseline_metrics=dict(self.parent.metrics))
+            with self.assertRaisesRegex(RuntimeError, "teacher_markdown_format_invalid_after_repair"):
+                engine.run(rounds=1)
+            plan_path = root / "campaign" / "rounds/round_001/teacher_plan.json"
+            self.assertFalse(plan_path.exists())
+
+    def test_incomplete_teacher_plan_discards_persisted_external_failure_for_retry(self) -> None:
+        from goalevolve.execution.engine import GoalEvolveEngine
+
+        with tempfile.TemporaryDirectory() as temporary:
+            round_root = Path(temporary) / "round_001"
+            round_root.mkdir()
+            atomic_json(
+                round_root / "teacher_plan.json",
+                {
+                    "format_valid": False,
+                    "teacher_failure_kind": "external_turn_failure",
+                    "teacher_detail": "codex_failed:stream disconnected",
+                    "hypotheses": [],
+                },
+            )
+
+            recovered = GoalEvolveEngine._incomplete_teacher_plan(round_root)
+
+        self.assertIsNone(recovered)
+
+    def test_incomplete_teacher_plan_uses_current_paper_card_catalog_when_unpersisted(self) -> None:
+        from goalevolve.execution.engine import _paper_card_ids_for_materialization
+
+        current_cards = (
+            {"card_id": "repair_power_default_late_handoff"},
+            {"card_id": "repair_power_guarded_commit"},
+        )
+        self.assertEqual(
+            _paper_card_ids_for_materialization({}, current_cards),
+            ("repair_power_default_late_handoff", "repair_power_guarded_commit"),
+        )
+        self.assertEqual(
+            _paper_card_ids_for_materialization(
+                {"paper_cards": [{"card_id": "frozen_card"}]}, current_cards
+            ),
+            ("frozen_card",),
         )
 
     def test_controller_repair_markdown_accepts_only_semicolon_hook_rejections(self) -> None:
@@ -2240,6 +3046,362 @@ Keep the checked parent.
             GoalEvolveEngine._recoverable_teacher_markdown(payload),
             "## valid repair",
         )
+
+    def test_codex_engine_recovers_only_completed_raw_teacher_plan_before_replanning(self) -> None:
+        """A paid, completed raw Teacher turn is reusable only with its full audit trail."""
+        from goalevolve.agents.markdown_protocol import parse_draft_signatures, parse_teacher_plan
+        from goalevolve.agents.teacher import TeacherPlan
+        from goalevolve.epd_search import build_explorer_retrieval_packet
+
+        def draft_markdown() -> str:
+            return "\n\n".join(
+                "\n".join(
+                    (
+                        "## Draft Mechanism Signatures" if index == 1 else "",
+                        f"### draft_{index}",
+                        "- Stage: timing_recovery",
+                        f"- Problem: Timing decision {index} needs a bounded probe.",
+                        "- Source Hook: src/rsz/src/Teacher.cc::rankEndpointRecovery",
+                        "- Decision Type: ranking",
+                        "- Observed State: Current endpoint timing debt.",
+                        f"- Action: Rank bounded endpoint recovery probe {index}.",
+                        "- Guard: Preserve the frozen contract and rollback behavior.",
+                        "- Expected Effect: Reduce measured timing debt.",
+                    )
+                ).strip()
+                for index in range(1, 6)
+            ) + "\n"
+
+        def plan_markdown() -> str:
+            ideas = "\n\n".join(
+                "\n".join(
+                    (
+                        f"### idea_{index}",
+                        f"- Idea: Rank bounded endpoint recovery probe {index}.",
+                        "- Predicted Stage Effect: Reduce measured timing debt.",
+                        "- Source Hooks: src/rsz/src/Teacher.cc",
+                        "- Source Evidence: src/rsz/src/Teacher.cc::rankEndpointRecovery",
+                        "- Evaluation Recipe: legacy_deep",
+                        f"- Expected Signals: endpoint_probe_{index}",
+                        f"- Activation Signals: endpoint_probe_{index}",
+                        "- Falsification Condition: No official timing improvement.",
+                        f"- Draft Signature: draft_{index}",
+                        f"- EPD Search Query: draft_{index}",
+                        "- Retrieved Historical Ideas: IDEA_baseline_baseline",
+                        "- Opened EPD Records: IDEA_baseline_baseline",
+                        "- Nearest Historical Idea: IDEA_baseline_baseline",
+                        "- Semantic Overlap: none",
+                        "- Material Difference: Distinct bounded ranking decision.",
+                        "- Novelty Conclusion: Retain for independent source validation.",
+                        "- Paper Card References: none",
+                        f"- Priority: {index - 1}",
+                    )
+                )
+                for index in range(1, 6)
+            )
+            return "\n".join(
+                (
+                    "## Diagnosis Summary",
+                    "Timing remains the active residual.",
+                    "",
+                    "## Source Investigation",
+                    "### investigation_1",
+                    "- Source Evidence: src/rsz/src/Teacher.cc::rankEndpointRecovery",
+                    "- Observed Control Point: The bounded endpoint ranking control point is present.",
+                    "### investigation_2",
+                    "- Source Evidence: src/rsz/src/Teacher.cc::rankEndpointRecovery",
+                    "- Observed Control Point: The same source snapshot retains the endpoint guard.",
+                    "",
+                    "## Evolution Ideas",
+                    ideas,
+                    "",
+                    "## Parent Policy",
+                    "Keep the checked parent.",
+                    "",
+                    "## Student Assignments",
+                    "### student_1",
+                    "- Role: explorer",
+                    "- Candidate:",
+                    "- EPD Idea: idea_1",
+                    "- Claim: Rank bounded endpoint recovery probe 1.",
+                    "- Selection Rationale: Directly tests the current timing residual.",
+                    "- Source Hooks: src/rsz/src/Teacher.cc",
+                    "- Source Evidence: src/rsz/src/Teacher.cc::rankEndpointRecovery",
+                    "- Evaluation Recipe: legacy_deep",
+                    "- Expected Signals: endpoint_probe_1",
+                    "- Activation Signals: endpoint_probe_1",
+                    "- Falsification Condition: No official timing improvement.",
+                    "- EPD References: none",
+                    "",
+                )
+            )
+
+        class Teacher:
+            name = "codex_teacher"
+
+            def __init__(self) -> None:
+                self.plan_calls = 0
+
+            def plan(self, *, diagnosis, **_) -> TeacherPlan:
+                self.plan_calls += 1
+                markdown = plan_markdown()
+                return TeacherPlan(
+                    (),
+                    diagnosis,
+                    {
+                        "teacher_markdown": markdown,
+                        "parsed_markdown": parse_teacher_plan(markdown),
+                        "format_valid": True,
+                        "hypotheses": [],
+                    },
+                    {},
+                )
+
+            def repair_plan_after_controller_validation(self, **kwargs):
+                raise AssertionError(
+                    "the valid controller assignment must not need repair:"
+                    + ";".join(str(item) for item in kwargs.get("errors") or ())
+                )
+
+            def review(self, **_):
+                return {}
+
+        class StaticEditor:
+            name = "static"
+
+            def apply(self, **_):
+                return StudentEditReport(True, "edited", "static", None, {})
+
+            def repair(self, **_):
+                return StudentEditReport(False, "not_needed", "static", None, {})
+
+        class StaticEvaluator:
+            name = "static"
+            config = SimpleNamespace(allowed_patch_roots=("src/rsz",))
+
+            def evaluate(self, *, parent, hypothesis, student_id, **_):
+                metrics = dict(parent.metrics)
+                metrics["tns_abs_ns"] = 40.0
+                metrics["leakage_power_pw"] = 100.0
+                return CandidateResult(
+                    student_id,
+                    hypothesis,
+                    metrics,
+                    {signal: 1.0 for signal in hypothesis.expected_signals},
+                    [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+                    f"+++ b/{hypothesis.source_hooks[0]}\n+// recovered raw Teacher plan\n",
+                    f"commit-{student_id}",
+                )
+
+        for artifact_state, expected_plan_calls in (
+            ("completed", 0),
+            ("completed_persistence_interrupted", 0),
+            ("absent", 1),
+            ("unfinished", 1),
+            ("invalid", 1),
+        ):
+            with self.subTest(artifact_state=artifact_state), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                source = root / "seed"
+                hook = source / "src/rsz/src/Teacher.cc"
+                hook.parent.mkdir(parents=True)
+                hook.write_text("void rankEndpointRecovery() {}\n", encoding="utf-8")
+                teacher = Teacher()
+                engine = GoalEvolveEngine(
+                    self.contract,
+                    root / "campaign",
+                    DiversePlanner(),
+                    StaticEvaluator(),
+                    IsolatedWorkspace(source),
+                    StrictEvidencePromotion(),
+                    student_ids=("student_1",),
+                    student_editor=StaticEditor(),
+                    teacher=teacher,
+                )
+                engine.initialize(baseline_metrics=dict(self.parent.metrics))
+                round_root = root / "campaign" / "rounds" / "round_001"
+                if artifact_state != "absent":
+                    draft_root = round_root / "teacher" / "draft_signatures"
+                    plan_root = round_root / "teacher" / "plan"
+                    draft_root.mkdir(parents=True)
+                    plan_root.mkdir(parents=True)
+                    draft = draft_markdown()
+                    draft_root.joinpath("last_message.md").write_text(draft, encoding="utf-8")
+                    draft_root.joinpath("events.jsonl").write_text(
+                        json.dumps({"type": "turn.completed"}) + "\n",
+                        encoding="utf-8",
+                    )
+                    signatures = parse_draft_signatures(draft)
+                    trace = round_root / "teacher_epd_retrieval_trace.jsonl"
+                    build_explorer_retrieval_packet(
+                        state_root=engine.state_root,
+                        signatures=signatures,
+                        trace_path=trace,
+                    )
+                    plan_root.joinpath("last_message.md").write_text(
+                        (
+                            "## Diagnosis Summary\ninvalid raw Teacher response\n"
+                            if artifact_state == "invalid"
+                            else plan_markdown()
+                        ),
+                        encoding="utf-8",
+                    )
+                    events = [
+                        {
+                            "type": "item.completed",
+                            "item": {
+                                "type": "command_execution",
+                                "command": "rg rankEndpointRecovery src/rsz/src/Teacher.cc",
+                                "exit_code": 0,
+                            },
+                        },
+                        {
+                            "type": "item.completed",
+                            "item": {
+                                "type": "command_execution",
+                                "command": "sed -n '1,10p' src/rsz/src/Teacher.cc",
+                                "exit_code": 0,
+                            },
+                        },
+                    ]
+                    if artifact_state in {
+                        "completed",
+                        "completed_persistence_interrupted",
+                        "invalid",
+                    }:
+                        events.append({"type": "turn.completed"})
+                    plan_root.joinpath("events.jsonl").write_text(
+                        "".join(json.dumps(row) + "\n" for row in events),
+                        encoding="utf-8",
+                    )
+
+                if artifact_state == "completed_persistence_interrupted":
+                    from goalevolve.execution.engine import atomic_json as engine_atomic_json
+
+                    teacher_plan_path = round_root / "teacher_plan.json"
+                    interrupted = False
+
+                    def persist_then_interrupt(path, value) -> None:
+                        nonlocal interrupted
+                        engine_atomic_json(path, value)
+                        if Path(path) == teacher_plan_path and not interrupted:
+                            interrupted = True
+                            raise RuntimeError("test_interrupt_after_teacher_plan_persistence")
+
+                    with patch(
+                        "goalevolve.execution.engine.atomic_json",
+                        side_effect=persist_then_interrupt,
+                    ):
+                        with self.assertRaisesRegex(
+                            RuntimeError,
+                            "test_interrupt_after_teacher_plan_persistence",
+                        ):
+                            engine.run(rounds=1)
+                    persisted = load_json(teacher_plan_path)
+                    self.assertTrue(persisted["hypotheses"])
+                    self.assertIn("raw_teacher_artifact_recovery", persisted)
+                    engine.run(rounds=1)
+                else:
+                    engine.run(rounds=1)
+
+                self.assertEqual(teacher.plan_calls, expected_plan_calls)
+                if artifact_state == "completed":
+                    persisted = load_json(round_root / "teacher_plan.json")
+                    self.assertEqual(
+                        persisted["teacher_markdown"],
+                        plan_markdown().strip(),
+                    )
+
+    def test_engine_recovers_completed_seed_revalidation_plan_without_draft_artifacts(self) -> None:
+        """A completed one-turn seed plan remains recoverable after interruption."""
+        seed = {
+            "seed_id": "early_frontier",
+            "source_anchors": (
+                "src/rsz/src/RecoverPower.cc::rsz::RecoverPower::recoverPower",
+            ),
+            "decision_boundary": "early candidate frontier admission",
+            "summary": "Revalidate the bounded early candidate frontier.",
+            "expected_signals": (
+                "repair_power_early_examined",
+                "repair_power_early_retained",
+            ),
+        }
+        markdown = """## Diagnosis Summary
+Revalidate the controller-bound early frontier.
+
+## Evolution Ideas
+### idea_1
+- Idea: Revalidate the bounded early candidate frontier in the live parent.
+- Predicted Stage Effect: Retain a real early power candidate decision.
+- Source Hooks: src/rsz/src/RecoverPower.cc
+- Source Evidence: src/rsz/src/RecoverPower.cc::rsz::RecoverPower::recoverPower
+- Evaluation Recipe: legacy_setup
+- Expected Signals: repair_power_early_examined; repair_power_early_retained
+- Activation Signals: repair_power_early_examined; repair_power_early_retained
+- Falsification Condition: No retained post-route power benefit.
+
+## Parent Policy
+Keep the checked parent.
+
+## Student Assignments
+### student_1
+- Role: explorer
+- Candidate: early_frontier
+- EPD Idea: idea_1
+- Claim: Revalidate the bounded early candidate frontier in the live parent.
+- Selection Rationale: It is the controller-bound first-round power experiment.
+- Source Hooks: src/rsz/src/RecoverPower.cc
+- Source Evidence: src/rsz/src/RecoverPower.cc::rsz::RecoverPower::recoverPower
+- Evaluation Recipe: legacy_setup
+- Expected Signals: repair_power_early_examined; repair_power_early_retained
+- Activation Signals: repair_power_early_examined; repair_power_early_retained
+- Falsification Condition: No retained post-route power benefit.
+- EPD References: none
+"""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            source.mkdir()
+            engine = GoalEvolveEngine(
+                self.contract,
+                root / "campaign",
+                DiversePlanner(),
+                MockEvaluator(),
+                IsolatedWorkspace(source),
+                StrictEvidencePromotion(),
+                student_ids=("student_1",),
+            )
+            parent = engine.initialize(baseline_metrics=dict(self.parent.metrics))
+            templates, _ = GoalEvolveEngine._seed_revalidation_templates(
+                templates=(replace(self.hypothesis, student_id="student_1"),),
+                round_index=1,
+                historical_seeds=(seed,),
+            )
+            round_root = engine.state_root / "rounds" / "round_001"
+            plan_root = round_root / "teacher" / "plan"
+            plan_root.mkdir(parents=True)
+            (plan_root / "last_message.md").write_text(markdown, encoding="utf-8")
+            (plan_root / "events.jsonl").write_text(
+                json.dumps({"type": "turn.completed"}) + "\n",
+                encoding="utf-8",
+            )
+            recovered = engine._recover_completed_raw_teacher_plan(
+                round_root=round_root,
+                round_index=1,
+                parent=parent,
+                diagnosis=SimpleNamespace(to_dict=lambda: {}),
+                role_templates=templates,
+                previous_review={},
+                decision_context={"stage": "power_reclaim", "evaluation_mode": "power_only"},
+                repository_graph={},
+                search_policy={},
+            )
+
+        self.assertIsNotNone(recovered)
+        assert recovered is not None
+        self.assertEqual(recovered["draft_signatures"], [])
+        self.assertEqual(recovered["retrieval_audit"], {})
 
     def test_source_hook_materialization_requires_an_executed_policy_recipe(self) -> None:
         from goalevolve.execution.teacher_assignment import (
@@ -2316,6 +3478,82 @@ Keep the checked parent.
             )
         )
 
+    def test_exact_seeded_power_recovery_plus_dispatch_is_narrowly_admitted(self) -> None:
+        from goalevolve.execution.teacher_assignment import (
+            _scheduled_seed_dispatch_is_reachable,
+        )
+        from goalevolve.planning.timing_recovery import timing_recipe
+
+        option = {
+            "materialization_mode": "exact_reference_patch",
+            "candidate_id": "power_recovery_plus_late_profile",
+            "timing_recipe_id": "implicit_power_recovery_plus",
+        }
+        hooks = (
+            "src/rsz/src/Optimizer.cc",
+            "src/rsz/src/policy/PowerRecoveryPlusPolicy.cc",
+        )
+        self.assertTrue(
+            _scheduled_seed_dispatch_is_reachable(
+                seed_option=option,
+                source_hooks=hooks,
+                evaluation_mode="power_then_timing",
+                declared_recipe_id="implicit_power_recovery_plus",
+            )
+        )
+        self.assertFalse(
+            _scheduled_seed_dispatch_is_reachable(
+                seed_option=option,
+                source_hooks=hooks,
+                evaluation_mode="power_only",
+                declared_recipe_id="implicit_power_recovery_plus",
+            )
+        )
+        self.assertFalse(
+            _scheduled_seed_dispatch_is_reachable(
+                seed_option=option,
+                source_hooks=hooks,
+                evaluation_mode="power_then_timing",
+                declared_recipe_id="legacy_deep",
+            )
+        )
+        self.assertEqual(
+            timing_recipe("implicit_power_recovery_plus").repair_timing_command(),
+            "repair_timing -setup",
+        )
+
+    def test_exact_seed_immutability_requires_a_materializable_seed_envelope(self) -> None:
+        """Malformed opt-in metadata must not suppress ordinary repair handling."""
+        from goalevolve.execution.engine import GoalEvolveEngine
+
+        materializable = replace(
+            self.hypothesis,
+            student_role="explorer",
+            role_mode="seed_revalidation",
+            candidate_options=(
+                {
+                    "materialization_mode": "exact_reference_patch",
+                    "candidate_id": "electrical_guard",
+                    "reference_diff_paths": ("/tmp/electrical_guard.diff",),
+                    "reference_parent_file_hashes": {
+                        "src/rsz/src/policy/RepairPowerPolicy.cc": "a" * 64,
+                    },
+                },
+            ),
+        )
+        malformed = replace(
+            materializable,
+            candidate_options=(
+                {
+                    "materialization_mode": "exact_reference_patch",
+                    "reference_diff_paths": ("/tmp/electrical_guard.diff",),
+                },
+            ),
+        )
+
+        self.assertTrue(GoalEvolveEngine._is_exact_seed_materialization(materializable))
+        self.assertFalse(GoalEvolveEngine._is_exact_seed_materialization(malformed))
+
     def _materialize_power_helpers(
         self,
         *,
@@ -2359,7 +3597,7 @@ Keep the checked parent.
                 "student_id": "student_1",
                 "role": "explorer",
                 "idea_reference": "idea_1",
-                "evaluation_recipe": "rmp_area_power",
+                "evaluation_recipe": "legacy_setup",
                 "claim": "Select a bounded power swap from measured alternatives.",
                 "selection_rationale": "Power reclaim is the active stage.",
                 "source_hooks": hooks,
@@ -2370,7 +3608,7 @@ Keep the checked parent.
             idea = {
                 "reference": "idea_1",
                 "idea": assignment["claim"],
-                "evaluation_recipe": "rmp_area_power",
+                "evaluation_recipe": "legacy_setup",
                 "source_hooks": hooks,
                 "source_evidence": evidence,
                 "expected_signals": assignment["expected_signals"],
@@ -2430,6 +3668,24 @@ Keep the checked parent.
 
         self.assertEqual(result.errors, ())
 
+    def test_power_only_accepts_controller_declared_entry_file_without_ast_graph(self) -> None:
+        from goalevolve.execution.teacher_assignment import (
+            _power_only_execution_admission_errors,
+        )
+
+        errors = _power_only_execution_admission_errors(
+            hooks=("src/rsz/src/Resizer.cc",),
+            source_evidence=(
+                "src/rsz/src/Resizer.cc::rsz::Resizer::repairPower",
+            ),
+            evaluation_mode="power_only",
+            recipe_id="legacy_setup",
+            repository_graph=None,
+            power_reclaim_phase="early_forced_reclaim",
+        )
+
+        self.assertEqual(errors, ())
+
     def test_power_only_rejects_a_late_only_symbol_for_early_forced_reclaim(self) -> None:
         from goalevolve.execution.teacher_assignment import (
             _power_only_execution_admission_errors,
@@ -2472,6 +3728,80 @@ Keep the checked parent.
             (f"inactive_power_phase_symbol:early_forced_reclaim:{anchor}",),
         )
 
+    def test_unrecognized_evaluation_mode_has_no_special_power_admission_path(self) -> None:
+        """Only established framework modes may influence power admission."""
+        from goalevolve.execution.teacher_assignment import (
+            _power_only_execution_admission_errors,
+        )
+
+        errors = _power_only_execution_admission_errors(
+            hooks=("src/rsz/src/Optimizer.cc",),
+            source_evidence=(),
+            evaluation_mode="unsupported_mode",
+            recipe_id="legacy_setup",
+            repository_graph=None,
+        )
+
+        self.assertEqual(errors, ())
+
+    def test_teacher_markdown_source_hooks_strip_symbol_anchors(self) -> None:
+        """Source Hooks are file fences; Source Evidence carries symbols."""
+        from goalevolve.agents.markdown_protocol import parse_teacher_plan
+
+        parsed = parse_teacher_plan(
+            """## Evolution Ideas
+### idea_1
+- Idea: Reach the default late reclaim path.
+- Source Hooks: src/rsz/src/Optimizer.cc::rsz::Optimizer::run; src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::iterateLateLeakageRecovery
+- Source Evidence: src/rsz/src/Optimizer.cc::rsz::Optimizer::run; src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::iterateLateLeakageRecovery
+
+## Student Assignments
+### student_1
+- Role: explorer
+- EPD Idea: idea_1
+- Claim: Reach the default late reclaim path.
+- Selection Rationale: The default dispatch is the only legal handoff.
+- Source Hooks: src/rsz/src/Optimizer.cc::rsz::Optimizer::run; src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::iterateLateLeakageRecovery
+- Source Evidence: src/rsz/src/Optimizer.cc::rsz::Optimizer::run; src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::iterateLateLeakageRecovery
+- Expected Signals: repair_power_guarded_moves
+- Falsification Condition: No official power improvement.
+"""
+        )
+
+        expected_hooks = (
+            "src/rsz/src/Optimizer.cc",
+            "src/rsz/src/policy/RepairPowerPolicy.cc",
+        )
+        self.assertEqual(parsed["evolution_idea_records"][0]["source_hooks"], expected_hooks)
+        self.assertEqual(parsed["assignments"][0]["source_hooks"], expected_hooks)
+        self.assertEqual(
+            parsed["assignments"][0]["source_evidence"],
+            (
+                "src/rsz/src/Optimizer.cc::rsz::Optimizer::run",
+                "src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::iterateLateLeakageRecovery",
+            ),
+        )
+
+    def test_teacher_markdown_strips_outer_backticks_from_evaluation_recipe(self) -> None:
+        from goalevolve.agents.markdown_protocol import parse_teacher_plan
+
+        parsed = parse_teacher_plan(
+            """## Evolution Ideas
+### idea_1
+- Idea: Exercise the default timing recipe.
+- Evaluation Recipe: `legacy_setup`
+
+## Student Assignments
+### student_1
+- Evaluation Recipe: `legacy_setup`
+"""
+        )
+
+        self.assertEqual(
+            parsed["evolution_idea_records"][0]["evaluation_recipe"], "legacy_setup"
+        )
+        self.assertEqual(parsed["assignments"][0]["evaluation_recipe"], "legacy_setup")
+
     def test_teacher_source_inspection_audit_requires_successful_source_reads(self) -> None:
         from goalevolve.agents.teacher import source_inspection_audit
 
@@ -2495,6 +3825,34 @@ Keep the checked parent.
             fallback=(replace(self.hypothesis, student_id="student_1"),),
         )
         self.assertLess(prompt.index("## Source Investigation"), prompt.index("## Evolution Ideas"))
+
+    def test_draft_signature_prompt_overrides_general_epd_tool_instructions(self) -> None:
+        planning_prompt = "\n".join(
+            (
+                "## Goal Contract",
+                "Use the current power_reclaim bottleneck.",
+                "## EPD",
+                "Invoke PYTHONPATH=/project python -m goalevolve.epd_search before finalizing an Explorer idea.",
+                "## Controller Role Envelopes",
+                "student_1 must not be assigned during Pass A.",
+                "## Historical Mechanism Seeds (revalidation only)",
+                "seed_should_not_reach_pass_a",
+                "## Live Source Access",
+                "Read-only parent source root: /state/parent/source",
+                "Return Markdown field blocks only.",
+                "## Student Assignments",
+            )
+        )
+
+        prompt = CodexTeacher._draft_signature_prompt(planning_prompt=planning_prompt)
+
+        self.assertIn("## Goal Contract", prompt)
+        self.assertIn("## Live Source Access", prompt)
+        self.assertIn("Pass A supersedes every general EPD instruction below", prompt)
+        self.assertIn("Do not invoke `goalevolve.epd_search`", prompt)
+        self.assertNotIn("python -m goalevolve.epd_search", prompt)
+        self.assertNotIn("Controller Role Envelopes", prompt)
+        self.assertNotIn("seed_should_not_reach_pass_a", prompt)
 
     def test_teacher_prompt_names_the_active_power_phase_as_a_hard_execution_boundary(self) -> None:
         prompt = CodexTeacher._plan_prompt(
@@ -2529,7 +3887,9 @@ Keep the checked parent.
         )
 
         self.assertIn("Use supplied absolute EPD and graph paths verbatim", prompt)
-        self.assertIn("Do not run `python -m goalevolve.epd_search` from the source root", prompt)
+        self.assertIn("Workers may use a dedicated round directory", prompt)
+        self.assertIn("PYTHONPATH=", prompt)
+        self.assertIn("python -m goalevolve.epd_search", prompt)
 
     def test_teacher_repair_prompt_repeats_controller_execution_contract(self) -> None:
         prompt = CodexTeacher._plan_repair_prompt(
@@ -2546,6 +3906,676 @@ Keep the checked parent.
         )
         self.assertIn("## Controller Execution Contracts", prompt)
         self.assertIn("Do not name Setup* or PowerRecoveryPlusPolicy", prompt)
+
+    def test_teacher_repair_prompt_retains_accepted_explorer_retrieval_bindings(self) -> None:
+        prompt = CodexTeacher._plan_repair_prompt(
+            prior_markdown="## Prior",
+            errors=("explorer_retrieval_audit_rejected:student_1",),
+            required_student_roles={"student_1": "explorer"},
+            require_explorer_ideas=True,
+            allowed_recipe_ids=("legacy_setup",),
+            retrieval_audit={
+                "signatures": {
+                    "draft_1": {
+                        "accepted": True,
+                        "result_ids": ["IDEA_NEAR", "IDEA_OTHER"],
+                        "opened_idea_ids": ["IDEA_NEAR"],
+                    },
+                    "draft_rejected": {
+                        "accepted": False,
+                        "result_ids": ["IDEA_UNUSABLE"],
+                        "opened_idea_ids": [],
+                    },
+                }
+            },
+        )
+
+        self.assertIn("## Accepted Explorer Retrieval Bindings", prompt)
+        self.assertIn("draft_1", prompt)
+        self.assertIn("IDEA_NEAR", prompt)
+        self.assertNotIn("draft_rejected", prompt)
+        self.assertNotIn("IDEA_UNUSABLE", prompt)
+
+    def test_teacher_repair_prompt_includes_cross_design_experience(self) -> None:
+        from goalevolve.planning.cross_design_experience import (
+            cross_design_experience_packet,
+        )
+
+        prompt = CodexTeacher._plan_repair_prompt(
+            prior_markdown="## Prior",
+            errors=("missing_assignment:student_1",),
+            required_student_roles={"student_1": "explorer"},
+            require_explorer_ideas=True,
+            allowed_recipe_ids=("legacy_setup",),
+            cross_design_experience=cross_design_experience_packet(
+                decision_context={"stage": "power_reclaim"},
+            ),
+        )
+
+        self.assertIn("## Cross-Design Iteration Experience", prompt)
+        self.assertIn("XDES_POWER_CELLSET_EFFECT_001", prompt)
+
+    def test_teacher_repair_prompt_repeats_seed_revalidation_contract(self) -> None:
+        prompt = CodexTeacher._plan_repair_prompt(
+            prior_markdown="## Prior",
+            errors=("seed_revalidation_candidate_mismatch:student_1:recover_power",),
+            required_student_roles={"student_1": "explorer"},
+            require_explorer_ideas=True,
+            allowed_recipe_ids=("legacy_setup",),
+            seed_revalidation_options={
+                "student_1": {
+                    "candidate_id": "recover_power",
+                    "source_anchors": (
+                        "src/rsz/src/Optimizer.cc::rsz::Optimizer::run",
+                        "src/rsz/src/RecoverPower.cc::RecoverPower::recoverPower(const float recover_power_percent, bool verbose)",
+                    ),
+                    "expected_signals": ("recover_power_guard_committed",),
+                }
+            },
+        )
+
+        self.assertIn("## Required Seed Revalidation Assignments", prompt)
+        self.assertIn("recover_power", prompt)
+        self.assertIn("RecoverPower::recoverPower", prompt)
+        self.assertIn("Candidate: <required controller seed ID", prompt)
+        self.assertIn(
+            "Candidate, Source Hooks, Source Evidence, Expected Signals, and Activation Signals",
+            prompt,
+        )
+
+    def test_teacher_prompts_distinguish_file_hooks_from_symbol_evidence(self) -> None:
+        """A repair must not recreate the path::symbol-as-file-hook failure."""
+        prompt = CodexTeacher._plan_prompt(
+            parent=self.parent,
+            diagnosis=SimpleNamespace(to_dict=lambda: {}),
+            epd={},
+            observations={},
+            previous_review={},
+            fallback=(replace(self.hypothesis, student_id="student_1"),),
+        )
+        repair = CodexTeacher._plan_repair_prompt(
+            prior_markdown="## Prior",
+            errors=("student_1:invalid_source_hook:src/rsz/src/Optimizer.cc::rsz::Optimizer::run",),
+            required_student_roles={"student_1": "explorer"},
+            require_explorer_ideas=True,
+            allowed_recipe_ids=("legacy_setup",),
+        )
+        for rendered in (prompt, repair):
+            self.assertIn(
+                "Source Hooks: relative source file paths only; never include ::symbol",
+                rendered,
+            )
+            self.assertIn(
+                "Source Evidence: path::symbol anchors; provide one or more anchors for every hook",
+                rendered,
+            )
+
+    def test_seed_revalidation_assignment_must_match_controller_card(self) -> None:
+        """A fresh P0 seed slot cannot be replaced by an unrelated Explorer idea."""
+        from goalevolve.execution.teacher_assignment import (
+            build_role_templates,
+            materialize_teacher_assignments,
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "source"
+            optimizer = source / "src/rsz/src/Optimizer.cc"
+            recover = source / "src/rsz/src/RecoverPower.cc"
+            unrelated = source / "src/rsz/src/Unrelated.cc"
+            optimizer.parent.mkdir(parents=True)
+            optimizer.write_text(
+                "namespace rsz { class Optimizer { public: void run(); }; "
+                "void Optimizer::run() {} }\n",
+                encoding="utf-8",
+            )
+            recover.write_text(
+                "namespace rsz { class RecoverPower { public: bool recoverPower(float, bool); bool otherBoundary(); }; "
+                "bool RecoverPower::recoverPower(float, bool) { return true; } "
+                "bool RecoverPower::otherBoundary() { return true; } }\n",
+                encoding="utf-8",
+            )
+            unrelated.write_text(
+                "namespace rsz { class Unrelated { public: bool unrelatedBoundary(); }; "
+                "bool Unrelated::unrelatedBoundary() { return true; } }\n",
+                encoding="utf-8",
+            )
+            base = build_role_templates(
+                student_ids=("student_1",),
+                round_index=1,
+                decision_context={"evaluation_mode": "timing_only"},
+                portfolio={},
+                suspend_explorers=False,
+            )[0]
+            seed = {
+                "candidate_id": "default_pipeline_recover_power_activation",
+                "source_anchors": (
+                    "src/rsz/src/Optimizer.cc::Optimizer::run",
+                    "src/rsz/src/RecoverPower.cc::RecoverPower::recoverPower",
+                ),
+                "source_hooks": (
+                    "src/rsz/src/Optimizer.cc",
+                    "src/rsz/src/RecoverPower.cc",
+                ),
+                "expected_signals": ("recover_power_guard_committed",),
+            }
+            split_signal_seed = {
+                **seed,
+                "expected_signals": (
+                    "recover_power_guard_examined",
+                    "recover_power_guard_retained",
+                ),
+                "activation_signals": ("recover_power_guard_examined",),
+            }
+            template = replace(
+                base,
+                role_mode="seed_revalidation",
+                candidate_options=(seed,),
+            )
+            assignment = {
+                "student_id": "student_1",
+                "role": "explorer",
+                "candidate_id": "unrelated_explorer",
+                "idea_reference": "idea_1",
+                "evaluation_recipe": "rmp_area_power",
+                "claim": "Reach bounded RecoverPower from the default dispatch.",
+                "selection_rationale": "Revalidate the historical source boundary.",
+                "source_hooks": seed["source_hooks"],
+                "source_evidence": seed["source_anchors"],
+                "expected_signals": seed["expected_signals"],
+                "activation_signals": seed["expected_signals"],
+                "falsification_condition": "No official retained QoR gain.",
+            }
+            result = materialize_teacher_assignments(
+                assignments=(assignment,),
+                evolution_ideas=({
+                    "reference": "idea_1",
+                    "idea": assignment["claim"],
+                    "source_hooks": assignment["source_hooks"],
+                    "source_evidence": assignment["source_evidence"],
+                    "expected_signals": assignment["expected_signals"],
+                    "activation_signals": assignment["activation_signals"],
+                    "evaluation_recipe": "legacy_setup",
+                },),
+                templates=(template,),
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                historical_ideas=(),
+            )
+            matching_assignment = dict(assignment)
+            matching_assignment["candidate_id"] = seed["candidate_id"]
+            matching_assignment["expected_signals"] = ("unrelated_signal",)
+            matching_assignment["activation_signals"] = ("unrelated_signal",)
+            missing_signal_result = materialize_teacher_assignments(
+                assignments=(matching_assignment,),
+                evolution_ideas=({
+                    "reference": "idea_1",
+                    "idea": matching_assignment["claim"],
+                    "source_hooks": matching_assignment["source_hooks"],
+                    "source_evidence": matching_assignment["source_evidence"],
+                    "expected_signals": matching_assignment["expected_signals"],
+                    "activation_signals": matching_assignment["activation_signals"],
+                    "evaluation_recipe": "legacy_setup",
+                },),
+                templates=(template,),
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                historical_ideas=(),
+            )
+            missing_hook_assignment = dict(assignment)
+            missing_hook_assignment["candidate_id"] = seed["candidate_id"]
+            missing_hook_assignment["source_hooks"] = (seed["source_hooks"][0],)
+            missing_hook_assignment["source_evidence"] = (seed["source_anchors"][0],)
+            missing_hook_result = materialize_teacher_assignments(
+                assignments=(missing_hook_assignment,),
+                evolution_ideas=({
+                    "reference": "idea_1",
+                    "idea": missing_hook_assignment["claim"],
+                    "source_hooks": missing_hook_assignment["source_hooks"],
+                    "source_evidence": missing_hook_assignment["source_evidence"],
+                    "expected_signals": missing_hook_assignment["expected_signals"],
+                    "activation_signals": missing_hook_assignment["activation_signals"],
+                    "evaluation_recipe": "legacy_setup",
+                },),
+                templates=(template,),
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                historical_ideas=(),
+            )
+            missing_anchor_assignment = dict(assignment)
+            missing_anchor_assignment["candidate_id"] = seed["candidate_id"]
+            missing_anchor_assignment["source_hooks"] = seed["source_hooks"]
+            missing_anchor_assignment["source_evidence"] = (
+                seed["source_anchors"][0],
+                "src/rsz/src/RecoverPower.cc::RecoverPower::otherBoundary",
+            )
+            missing_anchor_result = materialize_teacher_assignments(
+                assignments=(missing_anchor_assignment,),
+                evolution_ideas=({
+                    "reference": "idea_1",
+                    "idea": missing_anchor_assignment["claim"],
+                    "source_hooks": missing_anchor_assignment["source_hooks"],
+                    "source_evidence": missing_anchor_assignment["source_evidence"],
+                    "expected_signals": missing_anchor_assignment["expected_signals"],
+                    "activation_signals": missing_anchor_assignment["activation_signals"],
+                    "evaluation_recipe": "legacy_setup",
+                },),
+                templates=(template,),
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                historical_ideas=(),
+            )
+            exact_seed_assignment = dict(assignment)
+            exact_seed_assignment["candidate_id"] = seed["candidate_id"]
+            exact_seed_assignment["expected_signals"] = seed["expected_signals"]
+            exact_seed_assignment["activation_signals"] = seed["expected_signals"]
+            seed_with_rejected_novelty_audit = materialize_teacher_assignments(
+                assignments=(exact_seed_assignment,),
+                evolution_ideas=({
+                    "reference": "idea_1",
+                    "idea": exact_seed_assignment["claim"],
+                    "source_hooks": exact_seed_assignment["source_hooks"],
+                    "source_evidence": exact_seed_assignment["source_evidence"],
+                    "expected_signals": exact_seed_assignment["expected_signals"],
+                    "activation_signals": exact_seed_assignment["activation_signals"],
+                    "evaluation_recipe": "legacy_setup",
+                    "draft_signature_id": "draft_1",
+                },),
+                templates=(template,),
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                historical_ideas=(),
+                explorer_retrieval_audit={
+                    "signatures": {"draft_1": {"accepted": False}},
+                },
+            )
+            extra_hook_assignment = dict(exact_seed_assignment)
+            extra_hook_assignment["source_hooks"] = (*seed["source_hooks"], "src/rsz/src/Unrelated.cc")
+            extra_hook_assignment["source_evidence"] = (*seed["source_anchors"], "src/rsz/src/Unrelated.cc::Unrelated::unrelatedBoundary")
+            extra_hook_result = materialize_teacher_assignments(
+                assignments=(extra_hook_assignment,),
+                evolution_ideas=({
+                    "reference": "idea_1",
+                    "idea": extra_hook_assignment["claim"],
+                    "source_hooks": extra_hook_assignment["source_hooks"],
+                    "source_evidence": extra_hook_assignment["source_evidence"],
+                    "expected_signals": extra_hook_assignment["expected_signals"],
+                    "activation_signals": extra_hook_assignment["activation_signals"],
+                    "evaluation_recipe": "legacy_setup",
+                },),
+                templates=(template,),
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                historical_ideas=(),
+            )
+            extra_anchor_assignment = dict(exact_seed_assignment)
+            extra_anchor_assignment["source_evidence"] = (*seed["source_anchors"], "src/rsz/src/RecoverPower.cc::RecoverPower::otherBoundary")
+            extra_anchor_result = materialize_teacher_assignments(
+                assignments=(extra_anchor_assignment,),
+                evolution_ideas=({
+                    "reference": "idea_1",
+                    "idea": extra_anchor_assignment["claim"],
+                    "source_hooks": extra_anchor_assignment["source_hooks"],
+                    "source_evidence": extra_anchor_assignment["source_evidence"],
+                    "expected_signals": extra_anchor_assignment["expected_signals"],
+                    "activation_signals": extra_anchor_assignment["activation_signals"],
+                    "evaluation_recipe": "legacy_setup",
+                },),
+                templates=(template,),
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                historical_ideas=(),
+            )
+            extra_signal_assignment = dict(exact_seed_assignment)
+            extra_signal_assignment["expected_signals"] = (*seed["expected_signals"], "unrelated_signal")
+            extra_signal_assignment["activation_signals"] = extra_signal_assignment["expected_signals"]
+            extra_signal_result = materialize_teacher_assignments(
+                assignments=(extra_signal_assignment,),
+                evolution_ideas=({
+                    "reference": "idea_1",
+                    "idea": extra_signal_assignment["claim"],
+                    "source_hooks": extra_signal_assignment["source_hooks"],
+                    "source_evidence": extra_signal_assignment["source_evidence"],
+                    "expected_signals": extra_signal_assignment["expected_signals"],
+                    "activation_signals": extra_signal_assignment["activation_signals"],
+                    "evaluation_recipe": "legacy_setup",
+                },),
+                templates=(template,),
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                historical_ideas=(),
+            )
+            split_signal_template = replace(
+                template,
+                candidate_options=(split_signal_seed,),
+            )
+            split_signal_assignment = {
+                **assignment,
+                "candidate_id": split_signal_seed["candidate_id"],
+                "expected_signals": split_signal_seed["expected_signals"],
+                "activation_signals": split_signal_seed["activation_signals"],
+            }
+            split_signal_result = materialize_teacher_assignments(
+                assignments=(split_signal_assignment,),
+                evolution_ideas=({
+                    "reference": "idea_1",
+                    "idea": split_signal_assignment["claim"],
+                    "source_hooks": split_signal_assignment["source_hooks"],
+                    "source_evidence": split_signal_assignment["source_evidence"],
+                    "expected_signals": split_signal_assignment["expected_signals"],
+                    "activation_signals": split_signal_assignment["activation_signals"],
+                    "evaluation_recipe": "legacy_setup",
+                },),
+                templates=(split_signal_template,),
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                historical_ideas=(),
+            )
+
+        self.assertEqual(
+            result.errors,
+            ("seed_revalidation_candidate_mismatch:student_1:default_pipeline_recover_power_activation",),
+        )
+        self.assertEqual(
+            missing_signal_result.errors,
+            ("seed_revalidation_missing_activation_signal:student_1:default_pipeline_recover_power_activation:recover_power_guard_committed",),
+        )
+        self.assertEqual(
+            missing_hook_result.errors,
+            ("seed_revalidation_missing_source_hook:student_1:default_pipeline_recover_power_activation:src/rsz/src/RecoverPower.cc",),
+        )
+        self.assertEqual(
+            missing_anchor_result.errors,
+            ("seed_revalidation_missing_source_anchor:student_1:default_pipeline_recover_power_activation:src/rsz/src/RecoverPower.cc::RecoverPower::recoverPower",),
+        )
+        self.assertEqual(
+            extra_hook_result.errors,
+            ("seed_revalidation_source_hooks_do_not_match_card:student_1:default_pipeline_recover_power_activation",),
+        )
+        self.assertEqual(
+            extra_anchor_result.errors,
+            ("seed_revalidation_source_anchors_do_not_match_card:student_1:default_pipeline_recover_power_activation",),
+        )
+        self.assertEqual(
+            extra_signal_result.errors,
+            ("seed_revalidation_expected_signals_do_not_match_card:student_1:default_pipeline_recover_power_activation",),
+        )
+        self.assertEqual(seed_with_rejected_novelty_audit.errors, ())
+        self.assertEqual(split_signal_result.errors, ())
+        self.assertEqual(
+            split_signal_result.hypotheses[0].activation_signals,
+            ("recover_power_guard_examined",),
+        )
+
+    def test_seed_revalidation_materializes_candidate_id_written_as_inline_code(self) -> None:
+        """Markdown presentation fences must not change a strict seed card ID."""
+        from goalevolve.agents.markdown_protocol import parse_teacher_plan
+        from goalevolve.execution.teacher_assignment import (
+            build_role_templates,
+            materialize_teacher_assignments,
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "source"
+            recover = source / "src/rsz/src/RecoverPower.cc"
+            recover.parent.mkdir(parents=True)
+            recover.write_text(
+                "namespace rsz { class RecoverPower { public: bool recoverPower(float, bool); }; "
+                "bool RecoverPower::recoverPower(float, bool) { return true; } }\n",
+                encoding="utf-8",
+            )
+            base = build_role_templates(
+                student_ids=("student_1",),
+                round_index=1,
+                decision_context={"evaluation_mode": "timing_only"},
+                portfolio={},
+                suspend_explorers=False,
+            )[0]
+            seed = {
+                "candidate_id": "repair_power_command_path_activation",
+                "source_hooks": ("src/rsz/src/RecoverPower.cc",),
+                "source_anchors": (
+                    "src/rsz/src/RecoverPower.cc::RecoverPower::recoverPower",
+                ),
+                "expected_signals": ("repair_power_command_path_examined",),
+            }
+            template = replace(
+                base,
+                role_mode="seed_revalidation",
+                candidate_options=(seed,),
+            )
+            plan = parse_teacher_plan(
+                """## Evolution Ideas
+### idea_1
+- Idea: Revalidate the historical RecoverPower command-path boundary.
+- Predicted Stage Effect: Preserve the prior measured power recovery path.
+- Source Hooks: src/rsz/src/RecoverPower.cc
+- Source Evidence: src/rsz/src/RecoverPower.cc::RecoverPower::recoverPower
+- Evaluation Recipe: legacy_setup
+- Expected Signals: repair_power_command_path_examined
+- Activation Signals: repair_power_command_path_examined
+- Falsification Condition: No official retained QoR gain.
+- Paper Card References: none
+
+## Student Assignments
+### student_1
+- Role: explorer
+- Candidate: `repair_power_command_path_activation`
+- EPD Idea: idea_1
+- Claim: Revalidate the historical RecoverPower command-path boundary.
+- Selection Rationale: Revalidate the exact controller-issued seed card.
+- Source Hooks: src/rsz/src/RecoverPower.cc
+- Source Evidence: src/rsz/src/RecoverPower.cc::RecoverPower::recoverPower
+- Evaluation Recipe: legacy_setup
+- Expected Signals: repair_power_command_path_examined
+- Activation Signals: repair_power_command_path_examined
+- Falsification Condition: No official retained QoR gain.
+- EPD References: none
+"""
+            )
+            result = materialize_teacher_assignments(
+                assignments=tuple(plan["assignments"]),
+                evolution_ideas=tuple(plan["evolution_idea_records"]),
+                templates=(template,),
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                historical_ideas=(),
+            )
+
+        self.assertEqual(
+            plan["assignments"][0]["candidate_id"],
+            "repair_power_command_path_activation",
+        )
+        self.assertEqual(result.errors, ())
+        self.assertEqual(len(result.hypotheses), 1)
+
+    def test_fresh_p0_round_one_requires_resolvable_seed_revalidation(self) -> None:
+        """A clean P0 campaign spends its initial budget on known-good boundaries."""
+        seeds = (
+            {
+                "seed_id": "recover_power",
+                "source_anchors": (
+                    "src/rsz/src/Optimizer.cc::rsz::Optimizer::run",
+                    "src/rsz/src/RecoverPower.cc::rsz::RecoverPower::recoverPower",
+                ),
+                "decision_boundary": "default dispatch",
+                "summary": "Run bounded guarded RecoverPower after the default timing pipeline.",
+                "expected_signals": ("recover_power_guard_committed",),
+            },
+            {
+                "seed_id": "late_reclaim",
+                "source_anchors": (
+                    "src/rsz/src/Optimizer.cc::rsz::Optimizer::run",
+                    "src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::iterateLateLeakageRecovery",
+                ),
+                "decision_boundary": "late retention",
+                "summary": "Revalidate bounded late reclaim through default dispatch.",
+                "expected_signals": ("repair_power_retained_gain",),
+            },
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            engine = GoalEvolveEngine(
+                self.contract,
+                Path(temporary),
+                DiversePlanner(),
+                MockEvaluator(),
+                IsolatedWorkspace(),
+                StrictEvidencePromotion(),
+                student_ids=("student_1", "student_2", "student_3"),
+            )
+            templates, schedule = engine._teacher_role_schedule(
+                round_index=1,
+                diagnosis=SimpleNamespace(dominant_bottleneck="leakage_power_pw"),
+                portfolio={},
+                decision_context={"evaluation_mode": "timing_only"},
+                historical_seeds=seeds,
+            )
+
+        self.assertEqual(
+            [template.role_mode for template in templates],
+            ["seed_revalidation", "seed_revalidation", "fresh_exploration"],
+        )
+        self.assertEqual(
+            [template.candidate_options[0]["candidate_id"] for template in templates[:2]],
+            ["recover_power", "late_reclaim"],
+        )
+        self.assertEqual(schedule["seed_revalidation_ids"], ["recover_power", "late_reclaim"])
+
+    def test_explicit_later_round_seed_revalidation_is_bound_to_that_round(self) -> None:
+        """A controller-scheduled seed may depend on the prior round's parent."""
+        seed = {
+            "seed_id": "late_second_pass",
+            "source_anchors": (
+                "src/rsz/src/Resizer.cc::rsz::Resizer::repairPower",
+            ),
+            "decision_boundary": "late pass after the retained early reclaim",
+            "summary": "Revalidate the bounded repair_power late second pass.",
+            "expected_signals": ("repair_power_late_second_pass_retained",),
+        }
+        templates, assigned = GoalEvolveEngine._seed_revalidation_templates(
+            templates=(
+                replace(self.hypothesis, student_id="student_1"),
+                replace(self.hypothesis, student_id="student_2"),
+            ),
+            round_index=3,
+            historical_seeds=(seed,),
+        )
+
+        self.assertEqual(assigned, ("late_second_pass",))
+        self.assertEqual(templates[0].role_mode, "seed_revalidation")
+        self.assertEqual(templates[0].candidate_options[0]["candidate_id"], "late_second_pass")
+        self.assertEqual(templates[1].role_mode, "fresh_exploration")
+
+    def test_later_round_seed_reserves_an_explorer_slot_alongside_epd_roles(self) -> None:
+        """A parent-dependent seed cannot disappear when EPD adds an enhancer."""
+        seed = {
+            "seed_id": "mt1_batch_guard",
+            "source_anchors": (
+                "src/rsz/src/policy/SetupMt1Policy.cc::rsz::SetupMt1Policy::commitAndUpdateTiming",
+            ),
+            "decision_boundary": "journal-retained MT1 timing batches",
+            "summary": "Revalidate the bounded MT1 batch guard.",
+            "expected_signals": ("timing_mt1_deep_retained",),
+        }
+        templates, assigned = GoalEvolveEngine._seed_revalidation_templates(
+            templates=(
+                replace(self.hypothesis, student_id="student_1"),
+                replace(
+                    self.hypothesis,
+                    student_id="student_2",
+                    student_role="enhancer",
+                    role_mode="epd_enhancement",
+                ),
+            ),
+            round_index=5,
+            historical_seeds=(seed,),
+        )
+
+        self.assertEqual(assigned, ("mt1_batch_guard",))
+        self.assertEqual(templates[0].role_mode, "seed_revalidation")
+        self.assertEqual(templates[1].student_role, "enhancer")
+
+    def test_round_two_hides_historical_seed_cards_from_codex_teacher(self) -> None:
+        """Historical cards are a round-one revalidation packet, not R2 input."""
+        class StopAfterPlanning(RuntimeError):
+            pass
+
+        class RecordingTeacher:
+            name = "codex_teacher"
+
+            def __init__(inner_self) -> None:
+                inner_self.historical_seed_calls: list[tuple[dict[str, object], ...]] = []
+
+            def plan(inner_self, *, diagnosis, historical_seeds, **_):
+                received = tuple(historical_seeds)
+                inner_self.historical_seed_calls.append(received)
+                if received:
+                    raise AssertionError("round_two_historical_seeds_leaked_to_teacher")
+                raise StopAfterPlanning
+
+            def review(inner_self, **_):
+                return {}
+
+        seed_card = {
+            "seed_id": "round_one_only_seed",
+            "source_anchors": ("src/rsz/src/RecoverPower.cc::rsz::RecoverPower::recoverPower",),
+            "decision_boundary": "default dispatch",
+            "summary": "Only assigned during the first-round revalidation.",
+            "expected_signals": ("recover_power_guard_committed",),
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            teacher = RecordingTeacher()
+            engine = GoalEvolveEngine(
+                self.contract,
+                root / "campaign",
+                DiversePlanner(),
+                MockEvaluator(),
+                IsolatedWorkspace(),
+                StrictEvidencePromotion(),
+                teacher=teacher,
+                historical_seed_cards=(seed_card,),
+            )
+            parent = engine.initialize(baseline_metrics=dict(self.parent.metrics))
+            with patch.object(engine, "_graph_resolvable_historical_seeds", return_value=(seed_card,)):
+                with self.assertRaises(StopAfterPlanning):
+                    engine.run_round(round_index=2, parent=parent)
+
+        self.assertEqual(teacher.historical_seed_calls, [()])
+
+    def test_seed_revalidation_teacher_packet_exposes_required_card(self) -> None:
+        template = replace(
+            self.hypothesis,
+            student_id="student_1",
+            role_mode="seed_revalidation",
+            candidate_options=({
+                "candidate_id": "default_pipeline_recover_power_activation",
+                "seed_id": "default_pipeline_recover_power_activation",
+                "source_anchors": (
+                    "src/rsz/src/Optimizer.cc::rsz::Optimizer::run",
+                    "src/rsz/src/RecoverPower.cc::rsz::RecoverPower::recoverPower",
+                ),
+                "source_hooks": (
+                    "src/rsz/src/Optimizer.cc",
+                    "src/rsz/src/RecoverPower.cc",
+                ),
+                "decision_boundary": "default dispatch",
+                "summary": "Add one bounded guarded RecoverPower invocation.",
+                "expected_signals": ("recover_power_guard_committed",),
+            },),
+        )
+        prompt = CodexTeacher._plan_prompt(
+            parent=self.parent,
+            diagnosis=SimpleNamespace(to_dict=lambda: {}),
+            epd={},
+            observations={},
+            previous_review={},
+            fallback=(template,),
+            historical_seeds=(),
+        )
+
+        self.assertIn("default_pipeline_recover_power_activation", prompt)
+        self.assertIn("required controller seed ID", prompt)
+        self.assertIn("src/rsz/src/Optimizer.cc::rsz::Optimizer::run", prompt)
 
     def test_teacher_prompt_includes_p0_rooted_doc_card_packet(self) -> None:
         prompt = CodexTeacher._plan_prompt(
@@ -2579,7 +4609,8 @@ Keep the checked parent.
         )
 
         self.assertIn("## Source Localization", prompt)
-        self.assertIn("Repository graph is disabled for this ablation", prompt)
+        self.assertIn("OpenROAD-card mode is active", prompt)
+        self.assertIn("No AST graph is built or injected", prompt)
         self.assertNotIn("## P0-rooted Source Graph and Doc Cards", prompt)
         self.assertNotIn("## Compact Source Structure Index", prompt)
 
@@ -2657,6 +4688,111 @@ Keep the checked parent.
         self.assertIn("no_promotion_streak: 2", prompt)
         self.assertIn("promotion_authority: Controller only", prompt)
 
+    def test_cross_design_experience_reaches_teacher_student_and_review_packets(self) -> None:
+        from goalevolve.agents.prompting import student_packet, teacher_packet
+        from goalevolve.planning.cross_design_experience import (
+            cross_design_experience_packet,
+            load_cross_design_experience,
+        )
+
+        decision_context = {
+            "stage": "power_reclaim",
+            "evaluation_mode": "power_only",
+        }
+        library = load_cross_design_experience()
+        packet = cross_design_experience_packet(
+            decision_context=decision_context,
+        )
+        teacher_prompt = CodexTeacher._plan_prompt(
+            parent=self.parent,
+            diagnosis=SimpleNamespace(to_dict=lambda: {}),
+            epd={},
+            observations={},
+            previous_review={},
+            fallback=(replace(self.hypothesis, student_id="student_1"),),
+            decision_context=decision_context,
+        )
+        student_prompt = student_packet(
+            parent=self.parent,
+            hypothesis=replace(self.hypothesis, student_id="student_1"),
+            prior=(),
+            decision_context=decision_context,
+        )
+        audit_prompt = teacher_packet(
+            contract=self.contract,
+            parent=self.parent,
+            round_index=1,
+            retrieval_audit={},
+            decision_context=decision_context,
+        )
+        review_prompt = CodexTeacher._review_prompt(
+            parent=self.parent,
+            diagnosis=SimpleNamespace(to_dict=lambda: {}),
+            epd={},
+            observations={},
+            cross_design_experience=packet,
+            rows=(),
+            decision_context=decision_context,
+        )
+
+        self.assertGreaterEqual(int(library["lesson_count"]), 3)
+        for rendered in (teacher_prompt, student_prompt, audit_prompt, review_prompt):
+            self.assertIn("## Cross-Design Iteration Experience", rendered)
+            self.assertIn("XDES_POWER_CELLSET_EFFECT_001", rendered)
+            self.assertIn("XDES_POWER_STAGE_OBJECTIVE_ALIGNMENT_001", rendered)
+        timing_packet = cross_design_experience_packet(
+            decision_context={"stage": "timing_recovery"},
+        )
+        self.assertIn("XDES_SOURCE_ANCHOR_COVERAGE_001", str(timing_packet))
+        self.assertNotIn("XDES_POWER_CELLSET_EFFECT_001", str(timing_packet))
+
+    def test_teacher_packet_keeps_execution_symbols_and_relations_ahead_of_file_cards(self) -> None:
+        files = [
+            {"card_id": f"file:src/rsz/src/filler_{index}.cc", "node_kind": "file", "path": f"src/rsz/src/filler_{index}.cc"}
+            for index in range(20)
+        ]
+        optimizer = {
+            "card_id": "symbol:optimizer_run",
+            "node_kind": "function",
+            "path": "src/rsz/src/Optimizer.cc",
+            "qualified_name": "rsz::Optimizer::run",
+            "declarator": "void rsz::Optimizer::run()",
+            "calls": ["symbol:repair_power_iterate"],
+        }
+        policy = {
+            "card_id": "symbol:repair_power_iterate",
+            "node_kind": "function",
+            "path": "src/rsz/src/policy/RepairPowerPolicy.cc",
+            "qualified_name": "rsz::RepairPowerPolicy::iterate",
+            "declarator": "void rsz::RepairPowerPolicy::iterate()",
+            "called_by": ["symbol:optimizer_run"],
+        }
+        prompt = CodexTeacher._plan_prompt(
+            parent=self.parent,
+            diagnosis=SimpleNamespace(to_dict=lambda: {}),
+            epd={},
+            observations={},
+            previous_review={},
+            fallback=(replace(self.hypothesis, student_id="student_1"),),
+            repository_graph={
+                "entry_chain": ["src/rsz/src/Optimizer.cc::rsz::Optimizer::run"],
+                "focused_files": ["src/rsz/src/Optimizer.cc"],
+                "cards": [*files, optimizer, policy],
+                "edges": [
+                    {
+                        "kind": "calls",
+                        "source": "symbol:optimizer_run",
+                        "target": "symbol:repair_power_iterate",
+                    }
+                ],
+            },
+        )
+
+        self.assertIn("rsz::Optimizer::run", prompt)
+        self.assertIn("rsz::RepairPowerPolicy::iterate", prompt)
+        self.assertIn("rsz::Optimizer::run → rsz::RepairPowerPolicy::iterate", prompt)
+        self.assertNotIn("filler_16.cc", prompt)
+
     def test_repository_graph_focus_filters_cards_to_allowed_patch_roots(self) -> None:
         from goalevolve.planning.repository_graph import RepositoryGraphIndex
 
@@ -2720,7 +4856,32 @@ Keep the checked parent.
             for field in ("contains", "includes", "included_by", "calls", "called_by"):
                 self.assertTrue(set(card.get(field, ())).issubset(card_ids))
 
-    def test_codex_teacher_retries_invalid_markdown_in_the_same_thread(self) -> None:
+    def test_engine_graph_anchor_hints_preserve_power_execution_and_seed_symbols(self) -> None:
+        hints = GoalEvolveEngine._teacher_graph_anchor_hints(
+            decision_context={"evaluation_mode": "power_only"},
+            historical_seeds=(
+                {
+                    "source_anchors": (
+                        "src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::tryCommitCandidate",
+                    )
+                },
+            ),
+        )
+
+        self.assertIn(
+            "src/rsz/src/Resizer.cc::rsz::Resizer::repairPower",
+            hints,
+        )
+        self.assertIn(
+            "src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::iterate",
+            hints,
+        )
+        self.assertIn(
+            "src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::tryCommitCandidate",
+            hints,
+        )
+
+    def test_codex_teacher_retries_invalid_markdown_in_a_bounded_repair_session(self) -> None:
         from goalevolve.agents.codex_runtime import CodexTurn
         from goalevolve.agents.teacher import CodexTeacher, CodexTeacherConfig
 
@@ -2850,8 +5011,172 @@ Keep the checked parent.
             )
         self.assertTrue(plan.plan["format_valid"])
         self.assertEqual(len(runner.calls), 2)
-        self.assertEqual(runner.calls[0][0], runner.calls[1][0])
+        self.assertEqual(runner.calls[0][0], "teacher_r004_draft")
+        self.assertEqual(runner.calls[1][0], "teacher_r004_format_repair_01")
+        self.assertNotEqual(runner.calls[0][0], runner.calls[1][0])
         self.assertIn("format_repair", runner.calls[1][1])
+
+    def test_codex_teacher_does_not_spend_format_repairs_after_external_draft_failure(self) -> None:
+        """A disconnected Teacher turn is retryable externally, not malformed Markdown."""
+        from goalevolve.agents.codex_runtime import CodexTurn
+        from goalevolve.agents.teacher import CodexTeacher, CodexTeacherConfig
+
+        class FailingRunner:
+            def __init__(self) -> None:
+                self.calls = []
+
+            def run(self, *, identity, operation_id, artifact_root, **_):
+                self.calls.append((identity, operation_id))
+                artifact_root.mkdir(parents=True, exist_ok=True)
+                events = artifact_root / "events.jsonl"
+                events.write_text('{"type":"error","message":"stream disconnected"}\n', encoding="utf-8")
+                return CodexTurn(
+                    False,
+                    operation_id,
+                    None,
+                    "codex_failed:stream disconnected",
+                    {"codex_events": str(events)},
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            teacher = CodexTeacher(CodexTeacherConfig(max_plan_format_repairs=2))
+            runner = FailingRunner()
+            teacher.runner = runner
+            plan = teacher.plan(
+                state_root=root,
+                round_root=root / "round",
+                round_index=4,
+                parent=self.parent,
+                diagnosis=SimpleNamespace(to_dict=lambda: {}),
+                fallback=(replace(self.hypothesis, student_id="student_1"),),
+                previous_review={},
+            )
+
+        self.assertFalse(plan.plan["format_valid"])
+        self.assertEqual(plan.plan["teacher_failure_kind"], "external_turn_failure")
+        self.assertEqual(runner.calls, [("teacher_r004_draft", "r004_teacher_draft_signatures")])
+        self.assertEqual(plan.plan["format_repair_artifacts"], [])
+
+    def test_codex_teacher_stops_format_repairs_after_external_repair_failure(self) -> None:
+        """A disconnected repair turn must not be retried as if its Markdown were invalid."""
+        from goalevolve.agents.codex_runtime import CodexTurn
+        from goalevolve.agents.teacher import CodexTeacher, CodexTeacherConfig
+
+        class RepairFailingRunner:
+            def __init__(self) -> None:
+                self.calls = []
+
+            def run(self, *, identity, operation_id, artifact_root, **_):
+                self.calls.append((identity, operation_id))
+                artifact_root.mkdir(parents=True, exist_ok=True)
+                events = artifact_root / "events.jsonl"
+                events.write_text("", encoding="utf-8")
+                if len(self.calls) == 1:
+                    message = artifact_root / "last_message.md"
+                    message.write_text("## Diagnosis Summary\ninvalid", encoding="utf-8")
+                    return CodexTurn(
+                        True,
+                        operation_id,
+                        "thread-1",
+                        "ok",
+                        {"codex_last_message": str(message), "codex_events": str(events)},
+                    )
+                return CodexTurn(
+                    False,
+                    operation_id,
+                    None,
+                    "codex_failed:stream disconnected",
+                    {"codex_events": str(events)},
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            teacher = CodexTeacher(CodexTeacherConfig(max_plan_format_repairs=2))
+            runner = RepairFailingRunner()
+            teacher.runner = runner
+            plan = teacher.plan(
+                state_root=root,
+                round_root=root / "round",
+                round_index=4,
+                parent=self.parent,
+                diagnosis=SimpleNamespace(to_dict=lambda: {}),
+                fallback=(replace(self.hypothesis, student_id="student_1"),),
+                previous_review={},
+            )
+
+        self.assertFalse(plan.plan["format_valid"])
+        self.assertEqual(plan.plan["teacher_failure_kind"], "external_turn_failure")
+        self.assertEqual(plan.plan["teacher_detail"], "codex_failed:stream disconnected")
+        self.assertEqual(
+            runner.calls,
+            [
+                ("teacher_r004_draft", "r004_teacher_draft_signatures"),
+                ("teacher_r004_format_repair_01", "r004_teacher_plan_format_repair_01"),
+            ],
+        )
+
+    def test_codex_teacher_format_repair_retains_seed_revalidation_card(self) -> None:
+        """A malformed initial plan must not discard a required R1 seed card."""
+        from goalevolve.agents.codex_runtime import CodexTurn
+        from goalevolve.agents.teacher import CodexTeacher, CodexTeacherConfig
+
+        class ScriptedRunner:
+            def __init__(self) -> None:
+                self.calls = []
+
+            def run(self, *, identity, operation_id, artifact_root, prompt, **_):
+                self.calls.append((identity, prompt))
+                artifact_root.mkdir(parents=True, exist_ok=True)
+                message = artifact_root / "last_message.md"
+                message.write_text("## Diagnosis Summary\ninvalid", encoding="utf-8")
+                events = artifact_root / "events.jsonl"
+                events.write_text("", encoding="utf-8")
+                return CodexTurn(
+                    True,
+                    operation_id,
+                    "thread-1",
+                    "ok",
+                    {"codex_last_message": str(message), "codex_events": str(events)},
+                )
+
+        seed = {
+            "candidate_id": "repair_power_early_window_commit",
+            "source_hooks": ("src/rsz/src/policy/RepairPowerPolicy.cc",),
+            "source_anchors": (
+                "src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::iterateEarlyForcedReclaim",
+            ),
+            "expected_signals": (
+                "repair_power_early_window_examined",
+                "repair_power_early_window_retained",
+            ),
+        }
+        template = replace(
+            self.hypothesis,
+            student_id="student_1",
+            student_role="explorer",
+            role_mode="seed_revalidation",
+            candidate_options=(seed,),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            teacher = CodexTeacher(CodexTeacherConfig(max_plan_format_repairs=1))
+            runner = ScriptedRunner()
+            teacher.runner = runner
+            teacher.plan(
+                state_root=root,
+                round_root=root / "round",
+                round_index=1,
+                parent=self.parent,
+                diagnosis=SimpleNamespace(to_dict=lambda: {}),
+                fallback=(template,),
+                previous_review={},
+            )
+
+        repair_prompt = runner.calls[1][1]
+        self.assertIn("## Required Seed Revalidation Assignments", repair_prompt)
+        self.assertIn(seed["candidate_id"], repair_prompt)
+        self.assertIn("repair_power_early_window_retained", repair_prompt)
 
     def test_codex_engine_uses_teacher_authored_mechanisms_not_planner_cards(self) -> None:
         from goalevolve.agents.markdown_protocol import parse_teacher_plan
@@ -2860,7 +5185,11 @@ Keep the checked parent.
         class Teacher:
             name = "codex_teacher"
 
-            def plan(self, *, diagnosis, fallback, **_):
+            def __init__(self) -> None:
+                self.repository_graph_packets = []
+
+            def plan(self, *, diagnosis, fallback, repository_graph, **_):
+                self.repository_graph_packets.append(dict(repository_graph or {}))
                 markdown = """## Diagnosis Summary
 Timing is the only active residual.
 
@@ -2982,15 +5311,30 @@ Keep the checked parent.
             planner = DiversePlanner(DiverseRetriever((
                 MechanismCard("planner_card", "planner", ("timing",), ("src/rsz/src/Planner.cc",), ("planner",), "planner card"),
             )))
+            teacher = Teacher()
             engine = GoalEvolveEngine(
                 self.contract, root / "campaign", planner, StaticEvaluator(),
                 IsolatedWorkspace(source), StrictEvidencePromotion(),
-                student_ids=("student_1", "student_2"), student_editor=StaticEditor(), teacher=Teacher(),
+                student_ids=("student_1", "student_2"), student_editor=StaticEditor(), teacher=teacher,
             )
             engine.initialize(baseline_metrics=dict(self.parent.metrics))
             engine.run(rounds=1)
             plan = load_json(root / "campaign" / "rounds" / "round_001" / "teacher_plan.json")
             self.assertTrue((root / "campaign" / "rounds" / "round_001" / "search_policy.json").is_file())
+            focused_graph_path = root / "campaign" / "rounds" / "round_001" / "repository_graph_focus.json"
+            self.assertTrue(focused_graph_path.is_file())
+            self.assertEqual(
+                teacher.repository_graph_packets[0]["focused_graph_path"],
+                str(focused_graph_path),
+            )
+            self.assertEqual(
+                load_json(focused_graph_path),
+                {
+                    key: value
+                    for key, value in teacher.repository_graph_packets[0].items()
+                    if key != "focused_graph_path"
+                },
+            )
         hypotheses = list(plan["hypotheses"])
         self.assertEqual([row["source_hooks"] for row in hypotheses], [["src/rsz/src/Teacher.cc"], ["src/rsz/src/Teacher.cc"]])
         self.assertTrue(all(row["retrieval_ids"][0].startswith("teacher_idea:") for row in hypotheses))
@@ -3066,6 +5410,89 @@ Keep the checked parent.
         self.assertEqual(record.epd_status, "promising")
         self.assertEqual([row["record_id"] for row in portfolio["records"]], [record.record_id])
         self.assertEqual(portfolio["enhancement_record_ids"], [record.record_id])
+
+    def test_epd_role_portfolio_excludes_refuted_combinations_and_unactivated_promises(self) -> None:
+        """A completed refutation cannot consume another EPD role slot."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            epd = EvolutionProgramDatabase(root)
+            checks = [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")]
+
+            def record_validated(name: str, hook: str, signal: str):
+                hypothesis = Hypothesis(
+                    name, name, f"{name} claim", (hook,), (signal,), (name,), name,
+                )
+                return epd.record(
+                    round_index=1,
+                    parent=self.parent,
+                    candidate=CandidateResult(
+                        name, hypothesis,
+                        {"tns_abs_ns": 60.0, "leakage_power_pw": 170.0},
+                        {signal: 1.0}, checks,
+                        f"+++ b/{hook}\\n+change\\n", f"{name}-source",
+                    ),
+                    verdict=EvidenceVerdict("validated", 0.1, 0.3, True, True, ()),
+                )
+
+            first = record_validated("first", "src/rsz/src/First.cc", "first_fired")
+            second = record_validated("second", "src/rsz/src/Second.cc", "second_fired")
+            inherited = record_validated("inherited", "src/rsz/src/Inherited.cc", "inherited_fired")
+            epd.mark_inherited(record_id=inherited.record_id, parent=self.parent)
+            epd.record(
+                round_index=2,
+                parent=self.parent,
+                candidate=CandidateResult(
+                    "integrator",
+                    Hypothesis(
+                        "integrator", "integration", "refuted pair",
+                        ("src/rsz/src/First.cc", "src/rsz/src/Second.cc"),
+                        ("pair_fired",), ("pair",), "integration",
+                        student_role="integrator", role_mode="epd_integration",
+                        epd_record_ids=(first.record_id, second.record_id),
+                    ),
+                    {"tns_abs_ns": 60.0, "leakage_power_pw": 170.0},
+                    {"pair_fired": 1.0}, checks,
+                    "+++ b/src/rsz/src/First.cc\\n+pair change\\n", "pair-source",
+                ),
+                verdict=EvidenceVerdict("refuted", 0.1, 0.0, True, True, ()),
+            )
+            epd.record(
+                round_index=2,
+                parent=self.parent,
+                candidate=CandidateResult(
+                    "enhancer",
+                    Hypothesis(
+                        "enhancer", "enhancement", "refuted refinement",
+                        ("src/rsz/src/Inherited.cc",), ("enhancement_fired",), ("enhancement",), "enhancement",
+                        student_role="enhancer", role_mode="epd_enhancement",
+                        epd_record_ids=(inherited.record_id,),
+                    ),
+                    {"tns_abs_ns": 60.0, "leakage_power_pw": 170.0},
+                    {"enhancement_fired": 1.0}, checks,
+                    "+++ b/src/rsz/src/Inherited.cc\\n+refinement\\n", "enhancement-source",
+                ),
+                verdict=EvidenceVerdict("refuted", 0.1, 0.0, True, True, ()),
+            )
+            inactive = epd.record(
+                round_index=1,
+                parent=self.parent,
+                candidate=CandidateResult(
+                    "inactive",
+                    Hypothesis(
+                        "inactive", "inactive", "unactivated promise",
+                        ("src/rsz/src/Inactive.cc",), ("inactive_fired",), ("inactive",), "inactive",
+                    ),
+                    {"tns_abs_ns": 60.0, "leakage_power_pw": 170.0},
+                    {"inactive_fired": 0.0}, checks,
+                    "+++ b/src/rsz/src/Inactive.cc\\n+inactive\\n", "inactive-source",
+                ),
+                verdict=EvidenceVerdict("verified_qor_unattributed", 0.1, 0.3, False, True, ()),
+            )
+            portfolio = epd.role_portfolio(contract=self.contract, parent=self.parent)
+
+        self.assertEqual(portfolio["integration_candidates"], [])
+        self.assertNotIn(inherited.record_id, portfolio["enhancement_candidates"])
+        self.assertNotIn(inactive.record_id, portfolio["enhancement_candidates"])
 
     def test_epd_v2_teacher_idea_is_pending_then_updated_by_its_attempt(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -3224,7 +5651,7 @@ Keep the checked parent.
         self.assertEqual(by_text["Unselected power-aware endpoint tie-break."]["execution_count"], 0)
         self.assertEqual(attempts[1]["idea_id"], by_text["Selected bounded timing guard."]["idea_id"])
 
-    def test_epd_v2_integrator_uses_only_validated_records_not_inherited_by_current_parent(self) -> None:
+    def test_epd_v2_routes_inherited_validated_mechanism_to_enhancer_not_integrator(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             epd = EvolutionProgramDatabase(root)
@@ -3269,7 +5696,15 @@ Keep the checked parent.
         self.assertNotIn(promising.record_id, integration_ids)
         self.assertNotIn(second_validated.record_id, integration_ids)
         self.assertEqual(portfolio["integration_candidates"], [])
-        self.assertEqual(portfolio["enhancement_candidates"], [promising.record_id])
+        self.assertEqual(
+            portfolio["enhancement_candidates"],
+            [validated.record_id],
+        )
+        self.assertEqual(portfolio["enhancement_record_ids"], [validated.record_id])
+        inherited_row = next(
+            row for row in portfolio["records"] if row["record_id"] == validated.record_id
+        )
+        self.assertTrue(inherited_row["inherited_by_current_parent"])
 
     def test_epd_v2_every_uninherited_validated_attempt_is_represented_in_an_integrator_option(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -3565,7 +6000,7 @@ Keep the checked parent.
         hypothesis = Hypothesis(
             "enhance", "enhancement", "refine prior timing change",
             ("src/rsz/src/Timing.cc",), ("timing_examined",), ("enhance",), "enhance",
-            student_role="enhancer", role_mode="epd_enhancement", epd_record_ids=("EPD_promising",),
+            student_role="enhancer", role_mode="epd_enhancement", epd_record_ids=("EPD_inherited",),
         )
         packet = student_packet(
             parent=self.parent,
@@ -3573,8 +6008,9 @@ Keep the checked parent.
             prior=(),
             epd_records=(
                 {
-                    "record_id": "EPD_promising",
-                    "epd_status": "promising",
+                    "record_id": "EPD_inherited",
+                    "epd_status": "validated",
+                    "inherited_by_current_parent": True,
                     "source_change_bundle": {
                         "modified_files": ["src/rsz/src/Timing.cc"],
                         "added_code": ["add bounded endpoint guard"],
@@ -3583,13 +6019,15 @@ Keep the checked parent.
                         "removed_mechanism_changes": ["removed:unguarded_selection"],
                         "telemetry_changes": ["added:METRIC|timing_examined"],
                     },
-                    "implementation_diff_artifact": "/tmp/promising.diff",
+                    "implementation_diff_artifact": "/tmp/inherited.diff",
                 },
             ),
         )
         self.assertIn("## Enhancer Candidate Directory", packet)
         self.assertIn("## Previous-round Enhancer Dossier", packet)
-        self.assertIn("/tmp/promising.diff", packet)
+        self.assertIn("/tmp/inherited.diff", packet)
+        candidate_directory = packet.split("## Previous-round Enhancer Dossier", 1)[0]
+        self.assertIn('"inherited_by_current_parent": true', candidate_directory)
         self.assertNotIn("add bounded endpoint guard", packet)
         self.assertNotIn("remove unguarded selection", packet)
         self.assertNotIn("added:endpoint_guard", packet)
@@ -3811,6 +6249,27 @@ Keep the checked parent.
         self.assertIn("exactly one of validated|promising|invalid|unactivated", packet)
         self.assertIn("Controller alone decides promotion", packet)
 
+    def test_student_packet_keeps_only_the_assigned_hypothesis_view(self) -> None:
+        from goalevolve.agents.prompting import student_packet
+
+        hypothesis = replace(
+            self.hypothesis,
+            student_id="student_1",
+            candidate_options=(
+                {
+                    "candidate_id": "unselected-card",
+                    "unselected_source_dump": "DO_NOT_INLINE_UNSELECTED_SOURCE",
+                },
+            ),
+            teacher_evolution_ideas=("Assigned mechanism narrative.",),
+        )
+
+        packet = student_packet(parent=self.parent, hypothesis=hypothesis, prior=())
+
+        self.assertIn("Assigned mechanism narrative.", packet)
+        self.assertNotIn("DO_NOT_INLINE_UNSELECTED_SOURCE", packet)
+        self.assertNotIn('"candidate_options"', packet)
+
     def test_teacher_markdown_handoff_is_compiled_into_the_student_packet(self) -> None:
         from goalevolve.agents.prompting import student_packet
 
@@ -3838,7 +6297,10 @@ Keep the checked parent.
                     "Keep rollback accounting explicit.",
                 ),
                 "idea_records": {
-                    "idea_1": {"predicted_stage_effect": "Reduce timing debt after the repair stage."},
+                    "idea_1": {
+                        "idea": "Use endpoint freshness to avoid stale criticality ordering.",
+                        "predicted_stage_effect": "Reduce timing debt after the repair stage.",
+                    },
                 },
             },
         )
@@ -3847,6 +6309,7 @@ Keep the checked parent.
         self.assertIn("TNS is the sole unresolved target.", packet)
         self.assertIn("Preserve the checked low-power parent.", packet)
         self.assertIn("endpoint freshness", packet)
+        self.assertNotIn("Keep rollback accounting explicit.", packet)
         self.assertIn("Timing debt dominates", packet)
         self.assertIn("Reduce timing debt after the repair stage.", packet)
         self.assertEqual(selected[0].activation_signals, ("timing_examined",))
@@ -4399,6 +6862,28 @@ Keep the checked parent.
         self.assertTrue(report.ok)
         self.assertIn("executor-ok", report.stdout_tail)
 
+    def test_executor_replaces_invalid_utf8_without_stalling_output_drain(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            log = root / "evaluation.log"
+            report = ResilientCommandRunner(
+                ExecutionPolicy(timeout_s=5, retries=0, min_free_gb=0)
+            ).run(
+                command=[
+                    "python3",
+                    "-c",
+                    "import sys; sys.stdout.buffer.write(b'before\\xffafter\\n'); sys.stdout.flush()",
+                ],
+                cwd=root,
+                output_log=log,
+            )
+
+            captured_log = log.read_text(encoding="utf-8")
+
+        self.assertTrue(report.ok)
+        self.assertIn("before\ufffdafter", report.stdout_tail)
+        self.assertIn("before\ufffdafter", captured_log)
+
     def test_executor_preserves_complete_log_for_official_parser(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             log = Path(temporary) / "evaluation.log"
@@ -4439,6 +6924,35 @@ Keep the checked parent.
             worker.join(timeout=5)
             self.assertFalse(worker.is_alive())
             self.assertTrue(result[0].ok)
+
+    def test_executor_reports_periodic_liveness_with_latest_log_activity(self) -> None:
+        """Long OpenROAD/CMake steps must visibly remain alive in a terminal."""
+        from io import StringIO
+        from contextlib import redirect_stdout
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stream = StringIO()
+            with redirect_stdout(stream):
+                report = ResilientCommandRunner(
+                    ExecutionPolicy(
+                        timeout_s=5,
+                        retries=0,
+                        min_free_gb=0,
+                        heartbeat_s=0.05,
+                    )
+                ).run(
+                    command=[
+                        "python3",
+                        "-c",
+                        "import time; print('FLOW_STAGE placement', flush=True); time.sleep(.14)",
+                    ],
+                    cwd=root,
+                )
+        terminal = stream.getvalue()
+        self.assertTrue(report.ok)
+        self.assertIn("[GoalEvolve][executor] running", terminal)
+        self.assertIn("last_activity=stdout:FLOW_STAGE placement", terminal)
 
     def test_four_of_four_gate_and_mechanism_attribution(self) -> None:
         checks = [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")]
@@ -4482,16 +6996,16 @@ Keep the checked parent.
             "mt1_freshness",
             "claim",
             ("src/rsz/src/policy/SetupMt1Policy.cc",),
-            ("reestimated", "choice_changed", "retained"),
+            ("reestimated", "retained"),
             ("freshness",),
             "freshness",
-            activation_signals=("reestimated", "retained"),
+            activation_signals=("reestimated",),
         )
         candidate = CandidateResult(
             "student",
             hypothesis,
             {"tns_abs_ns": 60.0, "leakage_power_pw": 170.0},
-            {"reestimated": 12.0, "choice_changed": 0.0, "retained": 1.0},
+            {"reestimated": 12.0, "retained": 0.0},
             checks,
             "+++ b/src/rsz/src/policy/SetupMt1Policy.cc\n+change\n",
             "commit",
@@ -4845,6 +7359,58 @@ Keep the checked parent.
         self.assertEqual(evaluator.calls, 0)
         self.assertEqual(payload["reason"], "bootstrap_unstaged_p0_parent")
         self.assertEqual(payload["comparison_authority"], "unstaged_p0_parent")
+
+    def test_power_stage_admits_parent_within_configured_safety_ceiling(self) -> None:
+        class StageEvaluator:
+            name = "stage_evaluator"
+
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def evaluate_parent(self, **_: object) -> dict[str, object]:
+                self.calls += 1
+                return {
+                    "ok": True,
+                    "metrics": {
+                        "tns_abs_ns": 12.69,
+                        "leakage_power_pw": 110.0,
+                        "drv_count": 0.0,
+                    },
+                    "checks": [],
+                    "artifacts": {},
+                }
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            parent = Parent(
+                "baseline",
+                {"tns_abs_ns": 12.69, "leakage_power_pw": 200.0},
+                "p0",
+                "p0_hash",
+                0.0,
+                "unknown",
+            )
+            (root / "parents" / parent.source_hash / "source").mkdir(parents=True)
+            evaluator = StageEvaluator()
+            engine = GoalEvolveEngine(
+                contract=self.contract,
+                state_root=root,
+                planner=SimpleNamespace(name="planner"),
+                evaluator=evaluator,
+                workspace_provider=SimpleNamespace(name="workspace"),
+                promotion_policy=SimpleNamespace(name="promotion"),
+            )
+            staged = engine._stage_matched_parent(
+                parent=parent,
+                decision_context={
+                    "evaluation_mode": "power_only",
+                    "power_stage_tns_ceiling_ns": 60.0,
+                },
+            )
+
+        self.assertEqual(evaluator.calls, 0)
+        self.assertEqual(staged, parent)
+        self.assertEqual(staged.metrics["tns_abs_ns"], 12.69)
 
     def test_power_stage_rejects_nonbootstrap_baseline_above_safety_ceiling(self) -> None:
         class StageEvaluator:
@@ -5424,6 +7990,100 @@ Keep the checked parent.
         self.assertEqual(evaluator.parent_recipe_calls, ["mt1_deep"])
         self.assertEqual(len(baselines), 1)
 
+    def test_external_codex_edit_failure_does_not_consume_timing_recipe_baseline(self) -> None:
+        """A transport failure without a patch must leave the round retryable."""
+
+        class OneTimingPlanner:
+            name = "one_timing_planner"
+
+            def plan(self, **_: object) -> list[Hypothesis]:
+                return [
+                    Hypothesis(
+                        "r001_student_1_mt1",
+                        "mt1_guard",
+                        "Measure a bounded MT1 admission guard.",
+                        ("src/rsz/src/policy/SetupMt1Policy.cc",),
+                        ("mt1_guard_examined",),
+                        ("teacher_idea:idea_1",),
+                        "mt1_guard",
+                        evaluation_mode="power_then_timing",
+                        timing_recipe_id="mt1_deep",
+                        student_id="student_1",
+                    )
+                ]
+
+        class FailedStudentEditor:
+            name = "failed_student_editor"
+            config = SimpleNamespace(max_repair_attempts=0)
+
+            def apply(self, **_: object) -> StudentEditReport:
+                return StudentEditReport(
+                    False,
+                    "codex_failed:stream disconnected before completion",
+                    "r001_student_1",
+                    None,
+                    {},
+                )
+
+        class TimingEvaluator:
+            name = "timing_evaluator"
+            config = SimpleNamespace(allowed_patch_roots=("src/rsz",))
+
+            def __init__(self) -> None:
+                self.parent_recipe_calls: list[str] = []
+
+            def evaluate_parent(self, *, parent, timing_recipe_id: str = "legacy_setup", **_: object):
+                self.parent_recipe_calls.append(timing_recipe_id)
+                return {
+                    "ok": True,
+                    "metrics": dict(parent.metrics),
+                    "checks": [],
+                    "artifacts": {},
+                }
+
+            def evaluate(self, **_: object) -> CandidateResult:
+                raise AssertionError("a failed Student edit must not enter evaluation")
+
+        contract = build_contract(
+            design="external_codex_retry",
+            baseline_metrics={
+                "tns_abs_ns": 10.0,
+                "dynamic_power_pw": 200.0,
+                "leakage_power_pw": 100.0,
+            },
+            target_metrics={
+                "tns_abs_ns": 5.0,
+                "dynamic_power_pw": 300.0,
+                "leakage_power_pw": 150.0,
+            },
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            seed = root / "seed"
+            hook = seed / "src/rsz/src/policy/SetupMt1Policy.cc"
+            hook.parent.mkdir(parents=True)
+            hook.write_text("void SetupMt1Policy::apply() {}\n", encoding="utf-8")
+            evaluator = TimingEvaluator()
+            engine = GoalEvolveEngine(
+                contract,
+                root / "campaign",
+                OneTimingPlanner(),
+                evaluator,
+                IsolatedWorkspace(seed),
+                PowerFirstPromotion(),
+                student_editor=FailedStudentEditor(),
+                student_ids=("student_1",),
+            )
+            initial = engine.initialize(baseline_metrics=dict(contract.baseline_metrics))
+            final_parent = engine.run(rounds=1)
+            retry = load_json(root / "campaign" / "rounds" / "round_001" / "external_edit_retry.json")
+            round_completed = (root / "campaign" / "rounds" / "round_001" / "round.json").exists()
+
+        self.assertEqual(final_parent.parent_id, initial.parent_id)
+        self.assertEqual(evaluator.parent_recipe_calls, ["legacy_setup"])
+        self.assertFalse(round_completed)
+        self.assertEqual(retry["student_failures"][0]["evaluation_error"], "codex_failed:stream disconnected before completion")
+
     def test_failed_recipe_baseline_is_cached_and_falls_back_to_lineage(self) -> None:
         class FailingRecipeEvaluator:
             name = "failing_recipe_evaluator"
@@ -5485,7 +8145,7 @@ Keep the checked parent.
         self.assertTrue(first_status.startswith("unavailable:"))
         self.assertEqual(first_status, second_status)
 
-    def test_power_first_promotes_power_gain_with_bounded_timing_degradation(self) -> None:
+    def test_power_first_promotes_power_gain_within_the_contract_timing_target(self) -> None:
         contract = build_contract(
             design="power_first",
             baseline_metrics={"tns_abs_ns": 8.89, "dynamic_power_pw": 381_931_800_000.0, "leakage_power_pw": 68_200_000.0},
@@ -5501,7 +8161,7 @@ Keep the checked parent.
         candidate = CandidateResult(
             "student_1",
             self.hypothesis,
-            {"tns_abs_ns": 20.0, "dynamic_power_pw": 370_000_000_000.0, "leakage_power_pw": 50_000_000.0, "drv_count": 0.0},
+            {"tns_abs_ns": 10.0, "dynamic_power_pw": 370_000_000_000.0, "leakage_power_pw": 50_000_000.0, "drv_count": 0.0},
             {"accepted": 1.0},
             [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
             "+++ b/src/rsz/src/RecoverPower.cc\n+change\n",
@@ -5525,6 +8185,84 @@ Keep the checked parent.
         )
         self.assertEqual(policy.classify(contract=contract, parent=parent, candidate=unsafe).state, "refuted")
 
+    def test_power_first_accepts_power_gain_within_configured_stage_tns_ceiling(self) -> None:
+        contract = build_contract(
+            design="power_first_safe_timing",
+            baseline_metrics={
+                "tns_abs_ns": 12.69,
+                "dynamic_power_pw": 411_904_600_000.0,
+                "leakage_power_pw": 95_400_000.0,
+            },
+            target_metrics={
+                "tns_abs_ns": 12.0,
+                "dynamic_power_pw": 350_000_000_000.0,
+                "leakage_power_pw": 35_000_000.0,
+            },
+        )
+        parent = Parent(
+            "p0",
+            {
+                "tns_abs_ns": 12.69,
+                "dynamic_power_pw": 411_904_600_000.0,
+                "leakage_power_pw": 95_400_000.0,
+                "drv_count": 0.0,
+            },
+            "base",
+            "hash",
+            0.0,
+        )
+        candidate = CandidateResult(
+            "student_1",
+            self.hypothesis,
+            {
+                "tns_abs_ns": 15.29,
+                "dynamic_power_pw": 409_906_600_000.0,
+                "leakage_power_pw": 93_400_000.0,
+                "drv_count": 0.0,
+            },
+            {"accepted": 1.0},
+            [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+            "+++ b/src/rsz/src/RecoverPower.cc\n+change\n",
+            "commit",
+        )
+
+        verdict = PowerFirstPromotion(power_stage_tns_ceiling_ns=60.0).classify(
+            contract=contract,
+            parent=parent,
+            candidate=candidate,
+        )
+
+        self.assertEqual(verdict.state, "validated")
+        self.assertIn("official_checks_passed_and_power_residual_improved", verdict.reasons)
+
+    def test_power_first_config_preserves_declared_stage_tns_ceiling(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "power_first.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "design": "safe_power_first",
+                        "baseline_metrics": {
+                            "tns_abs_ns": 12.69,
+                            "dynamic_power_pw": 411_904_600_000.0,
+                            "leakage_power_pw": 95_400_000.0,
+                        },
+                        "target_metrics": {
+                            "tns_abs_ns": 12.0,
+                            "dynamic_power_pw": 350_000_000_000.0,
+                            "leakage_power_pw": 35_000_000.0,
+                        },
+                        "promotion": "power_first_promotion",
+                        "power_stage_tns_ceiling_ns": 60.0,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            config = load_config(path)
+
+        self.assertEqual(config.power_stage_tns_ceiling_ns, 60.0)
+
     def test_power_first_selects_lexicographic_power_frontier_not_residual_sum(self) -> None:
         contract = build_contract(
             design="power_frontier",
@@ -5535,14 +8273,148 @@ Keep the checked parent.
         checks = [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")]
         # Candidate A lowers the worst unresolved residual more, even though
         # its residual sum is larger because it spends dynamic-power headroom.
-        first = CandidateResult("student_a", self.hypothesis, {"tns_abs_ns": 20.0, "dynamic_power_pw": 422_000_000_000.0, "leakage_power_pw": 48_000_000.0, "drv_count": 0.0}, {"accepted": 1.0}, checks, "+++ a\n", "a")
-        second = CandidateResult("student_b", self.hypothesis, {"tns_abs_ns": 20.0, "dynamic_power_pw": 350_000_000_000.0, "leakage_power_pw": 48_600_000.0, "drv_count": 0.0}, {"accepted": 1.0}, checks, "+++ b\n", "b")
+        first = CandidateResult("student_a", self.hypothesis, {"tns_abs_ns": 10.0, "dynamic_power_pw": 422_000_000_000.0, "leakage_power_pw": 48_000_000.0, "drv_count": 0.0}, {"accepted": 1.0}, checks, "+++ a\n", "a")
+        second = CandidateResult("student_b", self.hypothesis, {"tns_abs_ns": 10.0, "dynamic_power_pw": 350_000_000_000.0, "leakage_power_pw": 48_600_000.0, "drv_count": 0.0}, {"accepted": 1.0}, checks, "+++ b\n", "b")
         policy = PowerFirstPromotion()
         first_verdict = policy.classify(contract=contract, parent=parent, candidate=first)
         second_verdict = policy.classify(contract=contract, parent=parent, candidate=second)
         self.assertGreater(first_verdict.goal_distance, second_verdict.goal_distance)
         chosen = policy.choose(((first, first_verdict), (second, second_verdict)))
         self.assertIsNotNone(chosen)
+        self.assertEqual(chosen[0].student_id, "student_a")
+
+    def test_power_first_uses_lower_tns_for_an_exact_power_frontier_tie(self) -> None:
+        """TNS is a legal Stage-1 tie-breaker, never a primary power gate."""
+        contract = build_contract(
+            design="power_frontier_tie",
+            baseline_metrics={
+                "tns_abs_ns": 12.69,
+                "dynamic_power_pw": 411_904_600_000.0,
+                "leakage_power_pw": 95_400_000.0,
+            },
+            target_metrics={
+                "tns_abs_ns": 12.0,
+                "dynamic_power_pw": 350_000_000_000.0,
+                "leakage_power_pw": 35_000_000.0,
+            },
+        )
+        parent = Parent(
+            "parent",
+            {
+                "tns_abs_ns": 12.69,
+                "dynamic_power_pw": 411_904_600_000.0,
+                "leakage_power_pw": 95_400_000.0,
+                "drv_count": 0.0,
+            },
+            "base",
+            "hash",
+            0.0,
+        )
+        checks = [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")]
+        first = CandidateResult(
+            "student_a",
+            self.hypothesis,
+            {
+                "tns_abs_ns": 63.19,
+                "dynamic_power_pw": 253_960_000_000.0,
+                "leakage_power_pw": 40_000_000.0,
+                "drv_count": 0.0,
+            },
+            {"accepted": 1.0},
+            checks,
+            "+++ a\n",
+            "a",
+        )
+        second = CandidateResult(
+            "student_b",
+            self.hypothesis,
+            {
+                **first.metrics,
+                "tns_abs_ns": 62.41,
+            },
+            {"accepted": 1.0},
+            checks,
+            "+++ b\n",
+            "b",
+        )
+        policy = PowerFirstPromotion(power_stage_tns_ceiling_ns=80.0)
+        first_verdict = policy.classify(contract=contract, parent=parent, candidate=first)
+        second_verdict = policy.classify(contract=contract, parent=parent, candidate=second)
+
+        chosen = policy.choose(((first, first_verdict), (second, second_verdict)))
+
+        self.assertEqual(first_verdict.state, "validated")
+        self.assertEqual(second_verdict.state, "validated")
+        self.assertIsNotNone(chosen)
+        self.assertEqual(chosen[0].student_id, "student_b")
+
+    def test_power_stage_keeps_direct_repair_power_and_power_frontier(self) -> None:
+        """Stage-1 retains the original power_only command boundary and ranking."""
+
+        contract = build_contract(
+            design="power_only",
+            baseline_metrics={
+                "tns_abs_ns": 8.89,
+                "dynamic_power_pw": 381_931_800_000.0,
+                "leakage_power_pw": 68_200_000.0,
+            },
+            target_metrics={
+                "tns_abs_ns": 12.0,
+                "dynamic_power_pw": 350_000_000_000.0,
+                "leakage_power_pw": 35_000_000.0,
+            },
+        )
+        parent = Parent(
+            "parent",
+            {
+                "tns_abs_ns": 8.87,
+                "dynamic_power_pw": 379_937_000_000.0,
+                "leakage_power_pw": 63_000_000.0,
+                "drv_count": 0.0,
+            },
+            "base",
+            "hash",
+            0.16,
+        )
+        policy = PowerFirstPromotion()
+        context = policy.context(contract=contract, parent=parent, round_index=1)
+        self.assertEqual(context["stage"], "power_reclaim")
+        self.assertEqual(context["evaluation_mode"], "power_only")
+        self.assertIn("repair_power command", context["executed_command_boundary"])
+        checks = [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")]
+        first = CandidateResult(
+            "student_a",
+            replace(self.hypothesis, expected_signals=("accepted",)),
+            {
+                "tns_abs_ns": 10.0,
+                "dynamic_power_pw": 422_000_000_000.0,
+                "leakage_power_pw": 48_000_000.0,
+                "drv_count": 0.0,
+            },
+            {"accepted": 1.0},
+            checks,
+            "+++ a\n",
+            "a",
+        )
+        second = CandidateResult(
+            "student_b",
+            replace(self.hypothesis, expected_signals=("accepted",)),
+            {
+                "tns_abs_ns": 10.0,
+                "dynamic_power_pw": 350_000_000_000.0,
+                "leakage_power_pw": 48_600_000.0,
+                "drv_count": 0.0,
+            },
+            {"accepted": 1.0},
+            checks,
+            "+++ b\n",
+            "b",
+        )
+        first_verdict = policy.classify(contract=contract, parent=parent, candidate=first)
+        second_verdict = policy.classify(contract=contract, parent=parent, candidate=second)
+        chosen = policy.choose(((first, first_verdict), (second, second_verdict)))
+        self.assertEqual(first_verdict.state, "validated")
+        self.assertEqual(second_verdict.state, "validated")
         self.assertEqual(chosen[0].student_id, "student_a")
 
     def test_power_first_switches_to_final_contract_after_both_power_targets(self) -> None:
@@ -5873,11 +8745,13 @@ Keep the checked parent.
             placement = tcl.index("detailed_placement\n", tcl.index("set rsz_end"))
             improve = tcl.index("improve_placement", placement)
             mirror = tcl.index("optimize_mirroring", improve)
-            final_legalize = tcl.index("detailed_placement\n", mirror)
+            placement_check = tcl.index("check_placement -verbose", mirror)
+            placement_estimate = tcl.index("estimate_parasitics -placement", placement_check)
             self.assertLess(placement, improve)
             self.assertLess(improve, mirror)
-            self.assertLess(mirror, final_legalize)
-            self.assertLess(final_legalize, tcl.index("check_placement -verbose", final_legalize))
+            self.assertLess(mirror, placement_check)
+            self.assertLess(placement_check, placement_estimate)
+            self.assertEqual(tcl.count("\ndetailed_placement\n"), 1)
 
     def test_relocated_cow_build_discards_absolute_cmake_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -6227,6 +9101,45 @@ Keep the checked parent.
             self.assertLess(checkpoint_start, rendered.index("report_power", checkpoint_start))
             self.assertLess(rendered.index("report_power", checkpoint_start), checkpoint_end)
 
+    def test_generated_tcl_reestimates_and_refreshes_power_at_stage_boundaries(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            benchmark_root = root / "benchmarks"
+            benchmark = benchmark_root / "unit"
+            asap7 = root / "asap7"
+            benchmark.mkdir(parents=True)
+            (asap7 / "lef").mkdir(parents=True)
+            (asap7 / "lib").mkdir(parents=True)
+            for path in (benchmark / "unit.def", benchmark / "unit.v", benchmark / "unit.sdc", asap7 / "lef" / "unit.lef", asap7 / "lib" / "unit.lib", asap7 / "setRC.tcl"):
+                path.write_text("", encoding="utf-8")
+            tcl = root / "evaluate.tcl"
+            Contest2026OpenROADEvaluator(Contest2026Config("unit", benchmark_root, root))._write_tcl(tcl=tcl, output=root / "out")
+            rendered = tcl.read_text(encoding="utf-8")
+            placement_padding = rendered.index("set_placement_padding -global -left 0 -right 0")
+            placement_start = rendered.index("detailed_placement")
+            placement_improve = rendered.index("improve_placement -max_displacement {5 1}")
+            placement_mirror = rendered.index("optimize_mirroring")
+            placement_check = rendered.index("check_placement -verbose")
+            placement_estimate = rendered.index("estimate_parasitics -placement", placement_check)
+            placement_checkpoint = rendered.index("GOALEVOLVE_CHECKPOINT_BEGIN post_placement")
+            route_estimate = rendered.index("estimate_parasitics -global_routing")
+            route_checkpoint = rendered.index("GOALEVOLVE_CHECKPOINT_BEGIN post_route")
+            refresh = "set_power_activity -global -activity 0.1 -duty 0.5\nunset_power_activity -global"
+            self.assertIn(refresh, rendered)
+            self.assertEqual(rendered.count("\ndetailed_placement\n"), 1)
+            self.assertEqual(rendered.count(refresh), 2)
+            self.assertLess(placement_padding, placement_start)
+            placement_refresh = rendered.index(refresh, placement_estimate)
+            route_refresh = rendered.index(refresh, route_estimate)
+            self.assertLess(placement_start, placement_improve)
+            self.assertLess(placement_improve, placement_mirror)
+            self.assertLess(placement_mirror, placement_check)
+            self.assertLess(placement_check, placement_estimate)
+            self.assertLess(placement_estimate, placement_refresh)
+            self.assertLess(placement_refresh, placement_checkpoint)
+            self.assertLess(route_estimate, route_refresh)
+            self.assertLess(route_refresh, route_checkpoint)
+
     def test_generated_tcl_can_export_frozen_tns_goal(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -6453,6 +9366,15 @@ Keep the checked parent.
             self.assertEqual(load_config(path).source_root, DEFAULT_OPENROAD_SEED)
             self.assertTrue(DEFAULT_OPENROAD_SEED.is_dir())
 
+    def test_nvdla_c_evolution_contract_keeps_its_frozen_timing_reference(self) -> None:
+        profile = load_config(
+            Path(__file__).resolve().parents[2] / "experiments" / "nvdla_c" / "evolve.json"
+        )
+
+        self.assertEqual(profile.baseline_metrics["tns_abs_ns"], 55.58)
+        self.assertEqual(profile.target_metrics["tns_abs_ns"], 10.0)
+        self.assertEqual(profile.max_consecutive_no_promotion_rounds, 3)
+
     def test_repository_graph_profile_default_and_cli_override(self) -> None:
         from goalevolve.cli import build_parser
 
@@ -6503,6 +9425,155 @@ Keep the checked parent.
             )
         self.assertIsNone(graph)
         graph_index.assert_not_called()
+
+    def test_openroad_card_mode_resolves_seed_cards_without_ast_graph(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "source"
+            hook = source / "src/rsz/src/RecoverPower.cc"
+            hook.parent.mkdir(parents=True)
+            hook.write_text(
+                "namespace rsz { void RecoverPower::run() {} }\n",
+                encoding="utf-8",
+            )
+            seed = {
+                "seed_id": "card_only_seed",
+                "source_anchors": (
+                    "src/rsz/src/RecoverPower.cc::rsz::RecoverPower::run",
+                ),
+                "decision_boundary": "bounded card-only decision",
+                "summary": "Use the original OpenROAD card path.",
+                "expected_signals": ("card_only_examined",),
+            }
+            engine = GoalEvolveEngine(
+                self.contract,
+                source / "state",
+                DiversePlanner(),
+                MockEvaluator(),
+                IsolatedWorkspace(),
+                StrictEvidencePromotion(),
+                historical_seed_cards=(seed,),
+                planning_mode="openroad_cards",
+                repository_graph_enabled=False,
+            )
+            with patch("goalevolve.execution.engine.RepositoryGraphIndex") as graph_index:
+                graph = engine._parent_repository_graph(
+                    source_root=source,
+                    source_hash="parent_hash",
+                    allowed_patch_roots=("src/rsz",),
+                )
+            cards = engine._graph_resolvable_historical_seeds(
+                graph, source_root=source
+            )
+
+        self.assertIsNone(graph)
+        graph_index.assert_not_called()
+        self.assertEqual(engine.effective_planning_mode, "openroad_cards")
+        self.assertEqual([card["seed_id"] for card in cards], ["card_only_seed"])
+
+    def test_card_only_assignment_accepts_namespace_elided_member_definition(self) -> None:
+        from goalevolve.execution.teacher_assignment import (
+            build_role_templates,
+            materialize_teacher_assignments,
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "source"
+            policy = source / "src/rsz/src/policy/RepairPowerPolicy.cc"
+            policy.parent.mkdir(parents=True)
+            policy.write_text(
+                "namespace rsz { void RepairPowerPolicy::iterate() {} }\n",
+                encoding="utf-8",
+            )
+            template = build_role_templates(
+                student_ids=("student_1",),
+                round_index=1,
+                decision_context={"evaluation_mode": "power_only"},
+                portfolio={},
+                suspend_explorers=False,
+            )
+            assignment = {
+                "student_id": "student_1",
+                "role": "explorer",
+                "idea_reference": "idea_1",
+                "evaluation_recipe": "legacy_setup",
+                "claim": "Use the executed policy member.",
+                "selection_rationale": "The member is present in live source.",
+                "source_hooks": ("src/rsz/src/policy/RepairPowerPolicy.cc",),
+                "source_evidence": (
+                    "src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::iterate",
+                ),
+                "expected_signals": ("policy_examined",),
+                "falsification_condition": "No official QoR improvement.",
+            }
+            result = materialize_teacher_assignments(
+                assignments=(assignment,),
+                evolution_ideas=({
+                    "reference": "idea_1",
+                    "idea": assignment["claim"],
+                    "evaluation_recipe": "legacy_setup",
+                    "source_hooks": assignment["source_hooks"],
+                    "source_evidence": assignment["source_evidence"],
+                    "expected_signals": assignment["expected_signals"],
+                },),
+                templates=template,
+                source_root=source,
+                allowed_patch_roots=("src/rsz",),
+                historical_ideas=(),
+                repository_graph=None,
+            )
+
+        self.assertEqual(result.errors, ())
+
+    def test_planning_mode_must_agree_with_repository_graph_setting(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "contest.json"
+            atomic_json(path, {
+                "design": "aes_cipher_top",
+                "state_root": "state",
+                "baseline_metrics": {"tns_abs_ns": 1.0},
+                "target_metrics": {"tns_abs_ns": 1.0},
+                "evaluator": "contest_openroad",
+                "planning_mode": "openroad_cards",
+            })
+            config = load_config(path)
+            self.assertEqual(config.planning_mode, "openroad_cards")
+            self.assertFalse(config.repository_graph_enabled)
+            atomic_json(path, {
+                "design": "aes_cipher_top",
+                "state_root": "state",
+                "baseline_metrics": {"tns_abs_ns": 1.0},
+                "target_metrics": {"tns_abs_ns": 1.0},
+                "evaluator": "contest_openroad",
+                "planning_mode": "openroad_cards",
+                "repository_graph_enabled": True,
+            })
+            with self.assertRaisesRegex(ValueError, "must agree with planning_mode"):
+                load_config(path)
+
+    def test_card_only_teacher_packet_does_not_claim_an_ast_graph(self) -> None:
+        from goalevolve.agents.teacher_packet import TeacherPacketBuilder
+
+        packet = TeacherPacketBuilder(
+            contract=self.contract.to_dict(),
+            parent=self.parent,
+            diagnosis={},
+            epd={},
+            observations={},
+            schedule_memory={},
+            previous_review={},
+            slots=(),
+            allowed_recipe_ids=(),
+            decision_context={},
+            repository_graph=None,
+            search_policy={},
+            source_root=Path("/source"),
+            paper_cards=(),
+        )
+        rendered = "\n".join([*packet.usage_guide(), *packet.sections()])
+
+        self.assertIn("OpenROAD mechanism cards", rendered)
+        self.assertIn("No AST graph is built or injected", rendered)
+        self.assertNotIn("P0-rooted Source Graph and Doc Cards", rendered)
 
     def test_graph_free_engine_records_its_effective_setting(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -6567,6 +9638,86 @@ Keep the checked parent.
         self.assertIn("shutil.rmtree(workspace)", source)
         self.assertIn("clone_source_tree(self.config.source_seed, source)", source)
         self.assertIn("self._build(\n                source,", source)
+
+    def test_baseline_rejects_missing_placement_legality_evidence(self) -> None:
+        """A baseline cannot be valid when its otherwise-successful flow lacks placement proof."""
+        class SuccessfulFlowRunner:
+            def __init__(self, *_args, **_kwargs) -> None:
+                pass
+
+            def run(self, *, command, output_log=None, **_kwargs):
+                if command[0] == "python3":
+                    csv_path = Path(command[command.index("--csv") + 1])
+                    csv_path.write_text(
+                        "design,tns,leakage_power,slew_over_count,total_power\n"
+                        "aes_cipher_top,-10,1,0,2\n",
+                        encoding="utf-8",
+                    )
+                elif output_log is not None:
+                    output_log.write_text("flow completed without placement result\n", encoding="utf-8")
+                return SimpleNamespace(ok=True, resource_error=None)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            seed = root / "seed"
+            seed.mkdir()
+            evaluator = Contest2026OpenROADEvaluator(
+                Contest2026Config("aes_cipher_top", DEFAULT_BENCHMARK_ROOT, seed)
+            )
+            evaluator._build = lambda _source, workspace, **_kwargs: workspace / "bin" / "openroad"
+            with patch("goalevolve.evaluation.contest2026.ResilientCommandRunner", SuccessfulFlowRunner), patch(
+                "goalevolve.evaluation.contest2026.official_four_check",
+                return_value=(True, "official_4of4_pass"),
+            ), patch("goalevolve.evaluation.contest2026._observe_sfinal", return_value={}):
+                result = evaluator.evaluate_baseline(contract=self.contract, output=root / "baseline")
+
+        self.assertFalse(result["ok"])
+        checks = {item["name"]: item for item in result["checks"]}
+        self.assertFalse(checks["placement"]["passed"])
+        self.assertEqual(checks["lec"]["detail"], "placement_failed")
+
+    def test_stage_baseline_rejects_missing_placement_legality_evidence(self) -> None:
+        """A recipe-comparison baseline needs the same placement proof as a candidate."""
+        class SuccessfulFlowRunner:
+            def __init__(self, *_args, **_kwargs) -> None:
+                pass
+
+            def run(self, *, command, output_log=None, **_kwargs):
+                if command[0] == "python3":
+                    csv_path = Path(command[command.index("--csv") + 1])
+                    csv_path.write_text(
+                        "design,tns,leakage_power,slew_over_count,total_power\n"
+                        "aes_cipher_top,-10,1,0,2\n",
+                        encoding="utf-8",
+                    )
+                elif output_log is not None:
+                    output_log.write_text("flow completed without placement result\n", encoding="utf-8")
+                return SimpleNamespace(ok=True, resource_error=None)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            source.mkdir()
+            evaluator = Contest2026OpenROADEvaluator(
+                Contest2026Config("aes_cipher_top", DEFAULT_BENCHMARK_ROOT, source)
+            )
+            evaluator._build = lambda _source, workspace, **_kwargs: workspace / "bin" / "openroad"
+            with patch("goalevolve.evaluation.contest2026.ResilientCommandRunner", SuccessfulFlowRunner), patch(
+                "goalevolve.evaluation.contest2026.official_four_check",
+                return_value=(True, "official_4of4_pass"),
+            ), patch("goalevolve.evaluation.contest2026._observe_sfinal", return_value={}):
+                result = evaluator.evaluate_parent(
+                    contract=self.contract,
+                    parent=self.parent,
+                    source=source,
+                    output=root / "stage_baseline",
+                    optimization_mode="power_then_timing",
+                )
+
+        self.assertFalse(result["ok"])
+        checks = {item["name"]: item for item in result["checks"]}
+        self.assertFalse(checks["placement"]["passed"])
+        self.assertEqual(checks["lec"]["detail"], "placement_failed")
 
     def test_baseline_cli_is_registered(self) -> None:
         from goalevolve.cli import build_parser
@@ -6861,14 +10012,82 @@ Keep the checked parent.
             self.assertIn("Any change outside this boundary is rejected", bounded_repair)
             self.assertTrue(NoopStudentEditor().apply().ok)
 
-    def test_codex_remote_context_is_round_scoped_but_repair_continuous(self) -> None:
+    def test_codex_runtime_retries_stream_disconnect_before_abandoning_turn(self) -> None:
+        """A transient provider stream reset must consume the runner retry budget."""
+        import subprocess
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            state_root = root / "state"
+            artifact_root = root / "artifacts"
+            home = root / "home"
+            home.mkdir()
+            runner = PersistentCodexRunner(CodexRuntimeConfig(retries=2))
+            runner._ensure_home = lambda *_: home  # type: ignore[method-assign]
+            calls: list[int] = []
+
+            def invoke(*, events: Path, stderr: Path, **_: object) -> subprocess.CompletedProcess[str]:
+                calls.append(1)
+                if len(calls) == 1:
+                    events.write_text(
+                        '{"type":"thread.started","thread_id":"retry-thread"}\n'
+                        '{"type":"error","message":"stream disconnected before completion"}\n',
+                        encoding="utf-8",
+                    )
+                    stderr.write_text("stream disconnected before completion\n", encoding="utf-8")
+                    return subprocess.CompletedProcess(["codex"], 1, "", "")
+                events.write_text(
+                    '{"type":"thread.started","thread_id":"retry-thread"}\n'
+                    '{"type":"turn.completed","usage":{}}\n',
+                    encoding="utf-8",
+                )
+                stderr.write_text("", encoding="utf-8")
+                return subprocess.CompletedProcess(["codex"], 0, "", "")
+
+            runner._invoke = invoke  # type: ignore[method-assign]
+            with patch("goalevolve.agents.codex_runtime.time.sleep"):
+                turn = runner.run(
+                    state_root=state_root,
+                    identity="teacher_r002_draft",
+                    operation_id="r002_teacher_draft_signatures",
+                    cwd=root,
+                    artifact_root=artifact_root,
+                    prompt="draft packet",
+                )
+
+        self.assertTrue(turn.ok)
+        self.assertEqual(len(calls), 2)
+
+    def test_codex_remote_context_is_round_scoped_and_repair_sessions_are_fresh(self) -> None:
         self.assertEqual(CodexStudentEditor._round_identity("student_1", 48), "student_1_r048")
         self.assertNotEqual(
             CodexStudentEditor._round_identity("student_1", 48),
             CodexStudentEditor._round_identity("student_1", 49),
         )
+        repair_identity = CodexStudentEditor._repair_identity(
+            "student_1", 48, "electrical_constraint", 1
+        )
+        self.assertEqual(
+            repair_identity,
+            "student_1_r048_electrical_constraint_repair_01",
+        )
+        self.assertNotEqual(repair_identity, CodexStudentEditor._round_identity("student_1", 48))
+        self.assertNotEqual(
+            repair_identity,
+            CodexStudentEditor._repair_identity(
+                "student_1", 48, "electrical_constraint", 2
+            ),
+        )
         self.assertEqual(CodexTeacher._round_identity(48), "teacher_r048")
         self.assertNotEqual(CodexTeacher._round_identity(48), CodexTeacher._round_identity(49))
+        self.assertEqual(
+            CodexTeacher._assignment_repair_identity(48, 1),
+            "teacher_r048_assignment_repair_01",
+        )
+        self.assertNotEqual(
+            CodexTeacher._assignment_repair_identity(48, 1),
+            CodexTeacher._round_identity(48),
+        )
 
     def test_student_vcs_metadata_is_removed_before_evaluation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -7062,7 +10281,7 @@ Keep the checked parent.
             self.assertEqual(editor.repair_boundaries, [("src/rmp/src/Restructure.cpp",)])
             self.assertIn(
                 "outside_assigned_patch_scope:src/rsz/src/policy/RepairPowerPolicy.cc",
-                candidate.evaluation_error or "",
+                str(candidate.evaluation_error),
             )
 
     def test_missing_telemetry_repairs_same_student_without_losing_better_qor(self) -> None:
@@ -7117,7 +10336,7 @@ Keep the checked parent.
             self.assertTrue(Path(candidate.artifacts["telemetry_repair_candidate"]).is_file())
             self.assertTrue((workspace.parent / "artifacts" / "repair_attempts" / "telemetry" / "attempt_01" / "evaluation" / "candidate_before_repair.json").is_file())
 
-    def test_missing_telemetry_repairs_same_round_even_without_qor_gain(self) -> None:
+    def test_missing_telemetry_does_not_rerun_a_refuted_qor_candidate(self) -> None:
         class TelemetryEditor:
             name = "telemetry_editor"
             config = SimpleNamespace(max_repair_attempts=0)
@@ -7166,11 +10385,11 @@ Keep the checked parent.
             evaluator.parent_metrics = dict(self.parent.metrics)
             engine = GoalEvolveEngine(self.contract, root / "state", DiversePlanner(), evaluator, IsolatedWorkspace(), StrictEvidencePromotion(), student_editor=editor)
             candidate = engine._edit_then_evaluate(self.parent, self.hypothesis, "student_1", workspace, prompt, 1)
-            self.assertEqual(evaluator.calls, 2)
-            self.assertEqual(editor.repair_kinds, ["telemetry"])
-            self.assertEqual(candidate.phase_signals, {"accepted": 1.0})
+            self.assertEqual(evaluator.calls, 1)
+            self.assertEqual(editor.repair_kinds, [])
+            self.assertEqual(candidate.phase_signals, {})
 
-    def test_student_reflection_precedes_unactivated_fallback_and_is_projected(self) -> None:
+    def test_student_reflection_follows_controller_verdict_and_is_projected(self) -> None:
         class ReflectingEditor:
             name = "reflecting_editor"
             config = SimpleNamespace(max_repair_attempts=0)
@@ -7190,6 +10409,12 @@ Keep the checked parent.
                 self.events.append("reflect")
                 if candidate.phase_signals:
                     raise AssertionError("reflection must receive the final telemetry-incomplete candidate")
+                evidence_path = Path(candidate.artifacts["student_reflection_controller_evidence"])
+                evidence = load_json(evidence_path)
+                if evidence["comparison_parent"]["parent_id"] != "baseline":
+                    raise AssertionError("reflection must receive the Controller comparison parent")
+                if evidence["final_verdict"]["state"] != "refuted":
+                    raise AssertionError("reflection must receive the final Controller verdict")
                 return StudentReflectionReport(
                     True,
                     "reflection_completed",
@@ -7225,7 +10450,7 @@ Keep the checked parent.
             prompt = root / "prompt.md"
             prompt.write_text("packet", encoding="utf-8")
             editor = ReflectingEditor()
-            candidate = GoalEvolveEngine(
+            engine = GoalEvolveEngine(
                 self.contract,
                 root / "state",
                 DiversePlanner(),
@@ -7233,8 +10458,25 @@ Keep the checked parent.
                 IsolatedWorkspace(),
                 StrictEvidencePromotion(),
                 student_editor=editor,
-            )._edit_then_evaluate(self.parent, self.hypothesis, "student_1", workspace, prompt, 1)
+            )
+            candidate = engine._edit_then_evaluate(
+                self.parent, self.hypothesis, "student_1", workspace, prompt, 1
+            )
             verdict = classify_candidate(contract=self.contract, parent=self.parent, candidate=candidate)
+            # Raw source evaluation must finish before the Controller has an
+            # exact comparison / final verdict to give the observer.
+            self.assertEqual(editor.events, ["apply"])
+            engine._record_student_reflection(
+                candidate=candidate,
+                parent=self.parent,
+                comparison_parent=self.parent,
+                verdict=verdict,
+                decision_context={"stage": "power_reclaim"},
+                student_id="student_1",
+                workspace=workspace,
+                prompt_path=prompt,
+                round_index=1,
+            )
             record = EvolutionProgramDatabase(root / "state").record(
                 round_index=1,
                 parent=self.parent,
@@ -7243,7 +10485,7 @@ Keep the checked parent.
             )
             projection = root / "state" / "knowledge" / "epd" / "attempts" / record.record_id
 
-            self.assertEqual(editor.events, ["apply", "telemetry_repair", "reflect"])
+            self.assertEqual(editor.events, ["apply", "reflect"])
             self.assertEqual(verdict.state, "refuted")
             self.assertEqual(record.epd_status, "unactivated")
             self.assertEqual(record.student_recommended_lifecycle, "promising")
@@ -7251,6 +10493,7 @@ Keep the checked parent.
             self.assertEqual(candidate.artifacts["student_reflection_recommendation"], "promising")
             self.assertIn("retryable activation question", (projection / "student_reflection.md").read_text(encoding="utf-8"))
             self.assertEqual(load_json(projection / "attempt.json")["student_recommended_lifecycle"], "promising")
+            self.assertTrue(Path(candidate.artifacts["student_reflection_controller_evidence"]).is_file())
 
     def test_codex_student_reflection_reuses_round_thread_and_parses_only_documented_field(self) -> None:
         class RecordingRunner:
@@ -7277,6 +10520,33 @@ Keep the checked parent.
             editor = CodexStudentEditor(CodexStudentConfig())
             runner = RecordingRunner()
             editor.runner = runner
+            candidate = CandidateResult(
+                "student_2",
+                self.hypothesis,
+                dict(self.parent.metrics),
+                {},
+                [],
+                "",
+                "source",
+            )
+            comparison_parent = Parent(
+                "recipe_baseline",
+                {"tns_abs_ns": 90.0, "leakage_power_pw": 190.0},
+                "recipe-source",
+                "recipe-hash",
+                0.7,
+            )
+            evidence_path = GoalEvolveEngine._write_student_reflection_evidence(
+                candidate=candidate,
+                parent=self.parent,
+                comparison_parent=comparison_parent,
+                verdict=EvidenceVerdict(
+                    "validated", 0.28, 0.42, True, True, ("controller_final",)
+                ),
+                decision_context={"stage": "adaptive_tradeoff"},
+                workspace=workspace,
+            )
+            candidate.artifacts["student_reflection_controller_evidence"] = str(evidence_path)
             report = editor.reflect(
                 state_root=root / "state",
                 round_index=7,
@@ -7285,7 +10555,7 @@ Keep the checked parent.
                 parent=self.parent,
                 hypothesis=self.hypothesis,
                 prompt_path=prompt,
-                candidate=CandidateResult("student_2", self.hypothesis, dict(self.parent.metrics), {}, [], "", "source"),
+                candidate=candidate,
             )
 
         self.assertEqual(runner.calls[0]["identity"], "student_2_r007")
@@ -7293,6 +10563,9 @@ Keep the checked parent.
         self.assertEqual(report.thread_id, "thread-1")
         self.assertEqual(report.recommended_lifecycle, "unactivated")
         self.assertIn("official checks", report.reflection)
+        self.assertIn('"parent_id": "recipe_baseline"', str(runner.calls[0]["prompt"]))
+        self.assertIn('"distance_gain": 0.42', str(runner.calls[0]["prompt"]))
+        self.assertIn('"stage": "adaptive_tradeoff"', str(runner.calls[0]["prompt"]))
 
     def test_narrative_summarizer_is_registered_observer_only_plugin(self) -> None:
         from goalevolve.agents.narrator import CodexNarrativeSummarizer, CodexNarratorConfig
@@ -7328,6 +10601,81 @@ Keep the checked parent.
         self.assertIn("observer only", runner.prompt.lower())
         self.assertIn("must not edit", runner.prompt.lower())
         self.assertIn("narrators", registry.manifest())
+
+    def test_narrator_falls_back_only_when_student_reflection_fails(self) -> None:
+        class FailingReflectionEditor:
+            name = "failing_reflection_editor"
+
+            def reflect(self, **_: object) -> StudentReflectionReport:
+                return StudentReflectionReport(
+                    False,
+                    "student_reflection_transport_failed",
+                    "reflection",
+                    None,
+                    {},
+                    "",
+                    None,
+                )
+
+        class RecordingNarrator:
+            name = "recording_narrator"
+
+            def __init__(self) -> None:
+                self.calls: list[dict[str, object]] = []
+
+            def summarize(self, **kwargs: object):
+                self.calls.append(kwargs)
+                return SimpleNamespace(
+                    ok=True,
+                    text="The official evidence passed, while the Student reflection transport failed; preserve the measured telemetry for later diagnosis.",
+                    detail="narrated",
+                    operation_id="r001_narrator_student_reflection_fallback",
+                    thread_id="narrator-thread",
+                    artifacts={"narrative": "/tmp/narrative.md"},
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            (workspace / "source").mkdir(parents=True)
+            prompt = root / "prompt.md"
+            prompt.write_text("packet", encoding="utf-8")
+            narrator = RecordingNarrator()
+            engine = GoalEvolveEngine(
+                self.contract,
+                root / "state",
+                DiversePlanner(),
+                MockEvaluator(),
+                IsolatedWorkspace(),
+                StrictEvidencePromotion(),
+                student_editor=FailingReflectionEditor(),
+                narrator=narrator,
+            )
+            candidate = CandidateResult(
+                "student_1",
+                self.hypothesis,
+                {"tns_abs_ns": 60.0, "leakage_power_pw": 170.0},
+                {"accepted": 1.0},
+                [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+                "+++ b/src/rsz/src/RecoverPower.cc\n+change\n",
+                "commit",
+            )
+            engine._record_student_reflection(
+                candidate=candidate,
+                parent=self.parent,
+                student_id="student_1",
+                workspace=workspace,
+                prompt_path=prompt,
+                round_index=1,
+            )
+
+            reflection = Path(candidate.artifacts["student_reflection"]).read_text(encoding="utf-8")
+
+        self.assertEqual(len(narrator.calls), 1)
+        self.assertIn("reflection_failure", narrator.calls[0]["evidence"])
+        self.assertIn("Student reflection transport failed", reflection)
+        self.assertEqual(candidate.artifacts["student_reflection_recommendation"], "unavailable")
+        self.assertIn("student_reflection_narrator_report", candidate.artifacts)
 
     def test_campaign_stops_after_configured_consecutive_no_promotion_rounds(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -7378,7 +10726,7 @@ Keep the checked parent.
                 candidate = CandidateResult(
                     student_id,
                     hypothesis,
-                    dict(self.parent_metrics),
+                    {"tns_abs_ns": 60.0, "leakage_power_pw": 170.0},
                     {} if self.calls == 1 else {"accepted": 1.0},
                     checks,
                     diff,
@@ -7424,9 +10772,10 @@ Keep the checked parent.
             )
 
             self.assertEqual(editor.repair_boundaries, [("src/rmp/src/Restructure.cpp",)])
-            self.assertIn(
-                "outside_assigned_patch_scope:src/rsz/src/policy/RepairPowerPolicy.cc",
-                candidate.evaluation_error or "",
+            self.assertIsNone(candidate.evaluation_error)
+            self.assertNotIn(
+                "src/rsz/src/policy/RepairPowerPolicy.cc",
+                candidate.implementation_diff,
             )
 
     def test_constraint_repair_stays_within_initial_changed_files(self) -> None:
@@ -7567,7 +10916,7 @@ Keep the checked parent.
                 return CandidateResult(
                     student_id,
                     self.hypothesis,
-                    dict(self.parent_metrics),
+                    {"tns_abs_ns": 60.0, "leakage_power_pw": 170.0},
                     {} if self.calls == 1 else {"accepted": 1.0},
                     checks,
                     diff,
@@ -8061,6 +11410,443 @@ Keep the checked parent.
         self.assertTrue(config.campaign_ready)
         self.assertIsNone(config.declared_power_reclaim_profile)
 
+    def test_configured_baseline_missing_artifact_reports_a_clear_error(self) -> None:
+        """A fresh campaign must not crash with AttributeError on an empty root."""
+        with tempfile.TemporaryDirectory() as temporary:
+            engine = SimpleNamespace(contract=self.contract)
+            config = SimpleNamespace(baseline_evaluation_root=Path(temporary))
+
+            with self.assertRaisesRegex(RuntimeError, "configured baseline is incomplete"):
+                _attach_configured_baseline(engine=engine, config=config)
+
+    def test_aes_p0_revalidation_profile_contract(self) -> None:
+        project_root = Path(__file__).resolve().parents[2]
+        config = load_config(
+            project_root / "experiments/aes_cipher_top/p0_revalidation_20260805.local.json"
+        )
+
+        self.assertTrue(config.campaign_ready)
+        self.assertEqual(config.state_root.name, "campaign")
+        self.assertIn("aes_p0_revalidation_20260805", str(config.state_root))
+        self.assertEqual(config.source_root, project_root / "artifact_evaluation/lineage/openroad_power/p0/source")
+        self.assertEqual(
+            config.baseline_metrics,
+            {
+                "tns_abs_ns": 12.69,
+                "dynamic_power_pw": 411904600000.0,
+                "leakage_power_pw": 95400000.0,
+            },
+        )
+        self.assertEqual(config.target_metrics["tns_abs_ns"], 12.0)
+        self.assertEqual(config.power_stage_tns_ceiling_ns, 60.0)
+        self.assertEqual(config.max_campaign_rounds, 10)
+        self.assertGreaterEqual(len(config.historical_seed_cards), 3)
+
+    def test_aes_original_power_eight_round_profile_uses_direct_power_seeds(self) -> None:
+        project_root = Path(__file__).resolve().parents[2]
+        config = load_config(
+            project_root
+            / "experiments/aes_cipher_top/p0_original_power_8r_20260805.local.json"
+        )
+
+        self.assertEqual(config.power_stage_protected_rounds, 8)
+        self.assertEqual(config.max_campaign_rounds, 10)
+        self.assertEqual(config.power_stage_tns_ceiling_ns, 80.0)
+        self.assertEqual(config.power_reclaim_phase, "early_forced_reclaim")
+        self.assertEqual(
+            [card["seed_id"] for card in config.historical_seed_cards],
+            [
+                "repair_power_early_electrical_commit",
+                "repair_power_early_bounded_tail",
+                "repair_power_late_second_pass",
+                "power_recovery_plus_late_profile",
+                "setup_mt1_deep_batch_guard",
+            ],
+        )
+        self.assertTrue(all(card["reference_diff_paths"] for card in config.historical_seed_cards))
+        self.assertTrue(
+            all(
+                Path(path).is_file()
+                for card in config.historical_seed_cards
+                for path in card["reference_diff_paths"]
+            )
+        )
+        self.assertEqual(
+            [
+                (
+                    slot["round_index"],
+                    slot["seed_ids"],
+                    slot["stages"],
+                )
+                for slot in config.historical_seed_revalidation_schedule
+            ],
+            [
+                (1, ("repair_power_early_electrical_commit",), ("power_reclaim",)),
+                (2, ("repair_power_early_bounded_tail",), ("power_reclaim",)),
+                (3, ("repair_power_late_second_pass",), ("power_reclaim",)),
+                (4, ("power_recovery_plus_late_profile",), ("timing_recovery",)),
+                (5, ("setup_mt1_deep_batch_guard",), ("timing_recovery",)),
+            ],
+        )
+
+    def test_aes_original_power_rerun_profile_only_changes_output_roots(self) -> None:
+        project_root = Path(__file__).resolve().parents[2]
+        config = load_config(
+            project_root
+            / "experiments/aes_cipher_top/p0_original_power_8r_20260805_rerun1.local.json"
+        )
+
+        self.assertEqual(config.state_root.name, "campaign")
+        self.assertIn("aes_p0_original_power_8r_20260805_rerun1", str(config.state_root))
+        self.assertEqual(config.baseline_evaluation_root, config.state_root)
+        self.assertEqual(config.power_stage_protected_rounds, 8)
+        self.assertEqual(config.power_stage_tns_ceiling_ns, 80.0)
+        self.assertEqual(config.power_reclaim_phase, "early_forced_reclaim")
+        self.assertEqual(config.max_campaign_rounds, 10)
+        self.assertEqual(config.max_consecutive_no_promotion_rounds, 10)
+
+    def test_aes_original_power_rerun3_profile_is_a_new_clean_campaign_root(self) -> None:
+        project_root = Path(__file__).resolve().parents[2]
+        config = load_config(
+            project_root
+            / "experiments/aes_cipher_top/p0_original_power_8r_20260805_rerun3.local.json"
+        )
+
+        self.assertIn("aes_p0_original_power_8r_20260805_rerun3", str(config.state_root))
+        self.assertEqual(config.baseline_evaluation_root, config.state_root)
+        self.assertEqual(config.power_stage_protected_rounds, 8)
+        self.assertEqual(config.power_stage_tns_ceiling_ns, 80.0)
+        self.assertEqual(config.power_reclaim_phase, "early_forced_reclaim")
+        self.assertEqual(config.max_campaign_rounds, 10)
+
+    def test_aes_original_power_20260806_profile_is_a_clean_eight_round_80ns_campaign(self) -> None:
+        project_root = Path(__file__).resolve().parents[2]
+        config = load_config(
+            project_root
+            / "experiments/aes_cipher_top/p0_original_power_8r_20260806.local.json"
+        )
+
+        self.assertIn("aes_p0_original_power_8r_20260806", str(config.state_root))
+        self.assertEqual(config.baseline_evaluation_root, config.state_root)
+        self.assertEqual(config.power_stage_protected_rounds, 8)
+        self.assertEqual(config.power_stage_tns_ceiling_ns, 80.0)
+        self.assertEqual(config.max_campaign_rounds, 10)
+
+    def test_aes_ast_recovery_profile_is_fresh_and_preserves_direct_power_contract(self) -> None:
+        """The post-AST recovery proof must not resume an old 60 ns ledger."""
+        project_root = Path(__file__).resolve().parents[2]
+        baseline = load_config(
+            project_root
+            / "experiments/aes_cipher_top/p0_ast_recovery_20260810_baseline.local.json"
+        )
+        config = load_config(
+            project_root
+            / "experiments/aes_cipher_top/p0_ast_recovery_20260810.local.json"
+        )
+
+        self.assertTrue(config.campaign_ready)
+        self.assertEqual(config.state_root.name, "campaign")
+        self.assertIn("aes_ast_recovery_20260810", str(config.state_root))
+        self.assertEqual(config.baseline_evaluation_root, baseline.state_root)
+        self.assertNotEqual(config.state_root, baseline.state_root)
+        self.assertEqual(
+            config.source_root,
+            project_root / "artifact_evaluation/lineage/openroad_power/p0/source",
+        )
+        self.assertEqual(config.promotion, "power_first_promotion")
+        self.assertEqual(config.power_stage_tns_ceiling_ns, 80.0)
+        self.assertEqual(config.power_stage_protected_rounds, 8)
+        self.assertEqual(config.power_reclaim_phase, "early_forced_reclaim")
+        self.assertEqual(config.power_reclaim_proportion_percent, 80.0)
+        self.assertEqual(config.power_reclaim_max_moves, 0)
+        self.assertEqual(config.max_campaign_rounds, 10)
+        self.assertEqual(config.max_consecutive_no_promotion_rounds, 10)
+        self.assertTrue(config.repository_graph_enabled)
+        self.assertEqual(
+            [slot["seed_ids"] for slot in config.historical_seed_revalidation_schedule],
+            [
+                ("repair_power_early_electrical_commit",),
+                ("repair_power_early_bounded_tail",),
+                ("repair_power_late_second_pass",),
+                ("power_recovery_plus_late_profile",),
+                ("repair_power_critical_cone_persistence",),
+                ("setup_mt1_deep_batch_guard",),
+                ("repair_power_compound_vt_reserve",),
+                ("repair_power_compound_vt_halo",),
+                ("repair_power_critical_halo_vt_guard",),
+                ("repair_power_commit_boundary_halo_guard",),
+            ],
+        )
+        self.assertTrue(
+            all(
+                Path(path).is_file()
+                for card in config.historical_seed_cards
+                for path in card["reference_diff_paths"]
+            )
+        )
+
+    def test_seed_revalidation_option_is_a_complete_teacher_selectable_hypothesis(self) -> None:
+        seed = {
+            "seed_id": "direct_power_seed",
+            "source_anchors": [
+                "src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::iterateEarlyForcedReclaim"
+            ],
+            "decision_boundary": "Use only the active direct repair_power path.",
+            "summary": "Refine one bounded direct power decision.",
+            "expected_signals": ["direct_power_examined", "direct_power_retained"],
+        }
+        second_seed = {
+            **seed,
+            "seed_id": "direct_power_seed_2",
+            "expected_signals": ["direct_power_2_examined", "direct_power_2_retained"],
+        }
+        templates_input = (
+            replace(self.hypothesis, student_id="student_1"),
+            replace(self.hypothesis, student_id="student_2"),
+        )
+        templates, assigned = GoalEvolveEngine._seed_revalidation_templates(
+            templates=templates_input,
+            round_index=1,
+            historical_seeds=(seed, second_seed),
+        )
+
+        selected = CodexTeacher._sanitize_hypotheses(
+            [
+                {"student_id": "student_1", "candidate_id": "direct_power_seed"},
+                {"student_id": "student_2", "candidate_id": "direct_power_seed_2"},
+            ],
+            templates,
+        )
+
+        self.assertEqual(assigned, ("direct_power_seed", "direct_power_seed_2"))
+        self.assertEqual(selected[0].retrieval_ids, ("direct_power_seed",))
+        self.assertEqual(selected[1].retrieval_ids, ("direct_power_seed_2",))
+        self.assertEqual(selected[0].source_hooks, ("src/rsz/src/policy/RepairPowerPolicy.cc",))
+
+    def test_seed_revalidation_derives_an_executable_recipe_for_phase_bound_hooks(self) -> None:
+        seed = {
+            "seed_id": "mt1_batch_guard",
+            "source_anchors": [
+                "src/rsz/src/policy/SetupMt1Policy.cc::rsz::SetupMt1Policy::commitAndUpdateTiming"
+            ],
+            "decision_boundary": "Retain a measured MT1 batch only after its journal improves TNS.",
+            "summary": "Revalidate the MT1 batch guard.",
+            "expected_signals": ["timing_mt1_deep_batches", "timing_mt1_deep_retained"],
+        }
+        template = replace(
+            self.hypothesis,
+            student_id="student_1",
+            evaluation_mode="power_then_timing",
+            timing_recipe_id="legacy_deep",
+        )
+
+        templates, assigned = GoalEvolveEngine._seed_revalidation_templates(
+            templates=(template,),
+            round_index=6,
+            historical_seeds=(seed,),
+        )
+
+        self.assertEqual(assigned, ("mt1_batch_guard",))
+        self.assertEqual(templates[0].timing_recipe_id, "mt1_deep")
+        self.assertEqual(
+            templates[0].candidate_options[0]["timing_recipe_id"], "mt1_deep"
+        )
+
+    def test_seed_revalidation_normalizes_timing_template_for_power_only(self) -> None:
+        """A power-only seed must not inherit the later timing-stage probe."""
+        seed = {
+            "seed_id": "early_power_guard",
+            "source_anchors": [
+                "src/rsz/src/policy/RepairPowerPolicy.cc::"
+                "rsz::RepairPowerPolicy::tryCommitCandidate"
+            ],
+            "decision_boundary": "Keep the early journaled power commit safe.",
+            "summary": "Revalidate the bounded early electrical guard.",
+            "expected_signals": ["early_power_examined", "early_power_retained"],
+        }
+        template = replace(
+            self.hypothesis,
+            student_id="student_1",
+            evaluation_mode="power_only",
+            timing_recipe_id="legacy_deep",
+        )
+
+        templates, assigned = GoalEvolveEngine._seed_revalidation_templates(
+            templates=(template,),
+            round_index=1,
+            historical_seeds=(seed,),
+        )
+
+        self.assertEqual(assigned, ("early_power_guard",))
+        self.assertEqual(templates[0].timing_recipe_id, "legacy_setup")
+        self.assertEqual(
+            templates[0].candidate_options[0]["timing_recipe_id"], "legacy_setup"
+        )
+
+    def test_seed_revalidation_honors_a_valid_controller_recipe_override(self) -> None:
+        seed = {
+            "seed_id": "compound_vt_reserve",
+            "source_anchors": [
+                "src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::tryCommitCandidate"
+            ],
+            "decision_boundary": "Bound one compound power-reclaim decision.",
+            "summary": "Reserve the early compound-VT budget.",
+            "expected_signals": ["compound_vt_examined", "compound_vt_retained"],
+            "timing_recipe_id": "mt1_deep",
+        }
+        template = replace(
+            self.hypothesis,
+            student_id="student_1",
+            evaluation_mode="power_then_timing",
+            timing_recipe_id="legacy_deep",
+        )
+
+        templates, assigned = GoalEvolveEngine._seed_revalidation_templates(
+            templates=(template,),
+            round_index=7,
+            historical_seeds=(seed,),
+        )
+
+        self.assertEqual(assigned, ("compound_vt_reserve",))
+        self.assertEqual(templates[0].timing_recipe_id, "mt1_deep")
+        self.assertEqual(
+            templates[0].candidate_options[0]["timing_recipe_id"], "mt1_deep"
+        )
+
+    def test_seed_revalidation_routes_read_only_reference_diff_to_assigned_student(self) -> None:
+        """A mature source pattern is visible only to its fresh revalidation slot."""
+        from goalevolve.agents.prompting import student_packet
+        from goalevolve.planning.historical_seeds import load_historical_seed_cards
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            reference_diff = root / "v2_electrical_guard.diff"
+            reference_diff.write_text("--- a/policy.cc\n+++ b/policy.cc\n", encoding="utf-8")
+            seed_path = root / "seeds.json"
+            atomic_json(
+                seed_path,
+                {
+                    "cards": [
+                        {
+                            "seed_id": "electrical_guard",
+                            "source_anchors": [
+                                "src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::tryCommitCandidate"
+                            ],
+                            "decision_boundary": "journaled early candidate commit",
+                            "summary": "Port the local electrical rollback pattern.",
+                            "expected_signals": [
+                                "repair_power_electrical_rejected",
+                                "repair_power_electrical_retained",
+                            ],
+                            "reference_diff_paths": [str(reference_diff)],
+                        }
+                    ]
+                },
+            )
+            seed = load_historical_seed_cards(seed_path)[0]
+            templates, _ = GoalEvolveEngine._seed_revalidation_templates(
+                templates=(replace(self.hypothesis, student_id="student_1"),),
+                round_index=1,
+                historical_seeds=(seed,),
+            )
+            selected = CodexTeacher._sanitize_hypotheses(
+                [{"student_id": "student_1", "candidate_id": "electrical_guard"}],
+                templates,
+            )[0]
+            # The engine keeps controller-owned allocation metadata when it
+            # materializes this parsed selection for the Student.
+            selected = replace(selected, candidate_options=templates[0].candidate_options)
+
+        packet = student_packet(parent=self.parent, hypothesis=selected, prior=())
+        self.assertIn(str(reference_diff), packet)
+        self.assertIn("Seed Reference Discipline", packet)
+        self.assertNotIn('"candidate_options"', packet)
+
+    def test_historical_seed_explicit_materialization_mode_is_validated_and_preserved(self) -> None:
+        """Only the named Controller opt-in may bypass a normal Student turn."""
+        from goalevolve.planning.historical_seeds import load_historical_seed_cards
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            reference_diff = root / "guard.diff"
+            reference_diff.write_text(
+                "--- a/src/rsz/src/policy/RepairPowerPolicy.cc\n"
+                "+++ b/src/rsz/src/policy/RepairPowerPolicy.cc\n",
+                encoding="utf-8",
+            )
+            seed_path = root / "seeds.json"
+            card = {
+                "seed_id": "electrical_guard",
+                "source_anchors": [
+                    "src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::tryCommitCandidate"
+                ],
+                "decision_boundary": "journaled early candidate commit",
+                "summary": "Port the local electrical rollback pattern.",
+                "expected_signals": ["repair_power_electrical_retained"],
+                "reference_diff_paths": [str(reference_diff)],
+                "materialization_mode": "exact_reference_patch",
+                "reference_parent_file_hashes": {
+                    "src/rsz/src/policy/RepairPowerPolicy.cc": hashlib.sha256(
+                        b"parent\n"
+                    ).hexdigest(),
+                },
+            }
+            atomic_json(seed_path, {"cards": [card]})
+
+            seed = load_historical_seed_cards(seed_path)[0]
+            self.assertEqual(seed["materialization_mode"], "exact_reference_patch")
+            templates, _ = GoalEvolveEngine._seed_revalidation_templates(
+                templates=(replace(self.hypothesis, student_id="student_1"),),
+                round_index=1,
+                historical_seeds=(seed,),
+            )
+            self.assertEqual(
+                templates[0].candidate_options[0]["materialization_mode"],
+                "exact_reference_patch",
+            )
+            self.assertEqual(
+                templates[0].candidate_options[0]["reference_parent_file_hashes"],
+                seed["reference_parent_file_hashes"],
+            )
+
+            card["materialization_mode"] = "replay_any_reference"
+            atomic_json(seed_path, {"cards": [card]})
+            with self.assertRaisesRegex(
+                ValueError, "unsupported historical seed materialization mode"
+            ):
+                load_historical_seed_cards(seed_path)
+
+    def test_seed_revalidation_packet_requires_a_real_cell_set_decision_change(self) -> None:
+        """A seed replay must not degrade into trigger-only or telemetry-only edits."""
+        from goalevolve.agents.prompting import student_packet
+
+        seed = {
+            "candidate_id": "early_frontier",
+            "seed_id": "early_frontier",
+            "source_anchors": (
+                "src/rsz/src/policy/RepairPowerPolicy.cc::rsz::RepairPowerPolicy::generateCandidates",
+            ),
+            "decision_boundary": "early candidate frontier admission",
+            "summary": "Port the bounded historical candidate-frontier mechanism.",
+            "expected_signals": ("repair_power_early_vt_retained",),
+            "reference_diff_paths": ("/tmp/reference.diff",),
+        }
+        hypothesis = replace(
+            self.hypothesis,
+            student_id="student_1",
+            student_role="explorer",
+            role_mode="seed_revalidation",
+            candidate_options=(seed,),
+        )
+
+        packet = student_packet(parent=self.parent, hypothesis=hypothesis, prior=())
+
+        self.assertIn(
+            "must change the actual admitted, ordered, or committed cell set",
+            packet,
+        )
+        self.assertIn("trigger-only, environment-only, or telemetry-only", packet)
+
     def test_aes_recovery_profile_is_fresh_p0_with_audited_unlimited_reclaim(self) -> None:
         project_root = Path(__file__).resolve().parents[2]
         baseline = load_config(
@@ -8104,6 +11890,8 @@ Keep the checked parent.
             "decision_boundary",
             "summary",
             "expected_signals",
+            "activation_signals",
+            "reference_diff_paths",
         }
         self.assertTrue(
             all(set(card).issubset(allowed) for card in config.historical_seed_cards)
@@ -8277,6 +12065,36 @@ Keep the checked parent.
         self.assertIn("## Historical Mechanism Seeds (revalidation only)", prompt)
         self.assertIn("cannot supply a parent, QoR metric, or promotion", prompt)
         self.assertIn("v2_r3_repair_power", prompt)
+
+    def test_aes_v2_seed_cards_preserve_original_early_reclaim_references(self) -> None:
+        from goalevolve.planning.historical_seeds import load_historical_seed_cards
+
+        cards = load_historical_seed_cards(
+            Path(__file__).resolve().parents[2]
+            / "experiments"
+            / "aes_cipher_top"
+            / "aes_v2_seed_cards.json"
+        )
+        anchors = tuple(
+            anchor
+            for card in cards
+            for anchor in tuple(card.get("source_anchors") or ())
+        )
+        signals = {
+            signal
+            for card in cards
+            for signal in tuple(card.get("expected_signals") or ())
+        }
+        self.assertTrue(any(anchor.endswith("Optimizer::makePolicyForPhase") for anchor in anchors))
+        self.assertTrue(any("iterateEarlyForcedReclaim" in anchor for anchor in anchors))
+        self.assertFalse(any("iterateLateLeakageRecovery" in anchor for anchor in anchors))
+        self.assertTrue(
+            {"repair_power_candidates", "repair_power_committed"}.issubset(signals)
+        )
+        self.assertTrue(
+            {"repair_power_leakage_gain", "repair_power_timing_rejected"}.issubset(signals)
+        )
+        self.assertTrue(any("PowerRecoveryPlusPolicy" in anchor for anchor in anchors))
 
     def test_graph_filter_excludes_seed_with_unresolved_anchor(self) -> None:
         from goalevolve.planning.historical_seeds import graph_resolvable_seeds

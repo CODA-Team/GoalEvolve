@@ -116,9 +116,9 @@ write_db [goalevolve_path {__OUTPUT_ROOT__/post_placement.odb}]
 puts "GOALEVOLVE_CHECKPOINT_END post_placement"
 write_def [goalevolve_path {__OUTPUT_ROOT__/mempool_group.def}]
 write_verilog [goalevolve_path {__OUTPUT_ROOT__/mempool_group.v}]
-if {[info exists route_signal_layers]} { set signal_layers $route_signal_layers } else { set signal_layers M2-M9 }
-if {[info exists route_clock_layers]} { set clock_layers $route_clock_layers } else { set clock_layers M2-M9 }
-set_routing_layers -signal $signal_layers -clock $clock_layers
+	if {[info exists route_signal_layers]} { set signal_layers $route_signal_layers } else { set signal_layers M2-M9 }
+	if {[info exists route_clock_layers]} { set clock_layers $route_clock_layers } else { set clock_layers M2-M9 }
+	set_routing_layers -signal $signal_layers -clock $clock_layers
 	global_route -skip_large_fanout_nets 300 -allow_congestion -congestion_iterations 50
 	estimate_parasitics -global_routing
 	set_power_activity -global -activity 0.1 -duty 0.5

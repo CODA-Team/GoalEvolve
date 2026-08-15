@@ -1,5 +1,12 @@
 {
   "artifact_id": "nvdla_c_rmp_path_cone_halo_timing",
+  "cache_safe_replay_metrics": {
+    "dynamic_power_pw": 584086037000.0,
+    "leakage_power_pw": 17259404000.0,
+    "measurement_boundary": "post_route_global_route_estimate_parasitics_cache_refreshed",
+    "tns_abs_ns": 7.247678218,
+    "total_power_pw": 601345441000.0
+  },
   "contract": {
     "baseline_metrics": {
       "dynamic_power_pw": 583700000000.0,
@@ -46,35 +53,35 @@
   "goal_distances": {
     "dynamic_power_pw": {
       "baseline": 583700000000.0,
-      "normalized_residual": 0.0011992461881103306,
+      "normalized_residual": 0.001860608189138256,
       "target": 583000000000.0,
-      "unmet_target_percent": 0.12006861063464837,
-      "value": 583700000000.0
+      "unmet_target_percent": 0.18628421955403088,
+      "value": 584086037000.0
     },
     "leakage_power_pw": {
       "baseline": 17300000000.0,
-      "normalized_residual": 0.046242774566473986,
+      "normalized_residual": 0.04389618497109827,
       "target": 16500000000.0,
-      "unmet_target_percent": 4.848484848484849,
-      "value": 17300000000.0
+      "unmet_target_percent": 4.602448484848485,
+      "value": 17259404000.0
     },
     "tns_abs_ns": {
       "baseline": 10.08,
       "normalized_residual": 0.0,
       "target": 10.0,
       "unmet_target_percent": 0.0,
-      "value": 8.93
+      "value": 7.247678218
     }
   },
   "parent": {
     "evaluation_mode": "timing_only",
-    "goal_distance": 0.015814006918194772,
+    "goal_distance": 0.015252264386745507,
     "metrics": {
       "drv_count": 476.0,
-      "dynamic_power_pw": 583700000000.0,
-      "leakage_power_pw": 17300000000.0,
+      "dynamic_power_pw": 584086037000.0,
+      "leakage_power_pw": 17259404000.0,
       "runtime_s": 124.0,
-      "tns_abs_ns": 8.93
+      "tns_abs_ns": 7.247678218
     },
     "parent_id": "schedule:rmp_path_cone_halo_timing",
     "source_commit": "baseline",
@@ -97,10 +104,10 @@
   },
   "recorded_flow_metrics": {
     "drv_count": 476.0,
-    "dynamic_power_pw": 583700000000.0,
-    "leakage_power_pw": 17300000000.0,
+    "dynamic_power_pw": 584086037000.0,
+    "leakage_power_pw": 17259404000.0,
     "runtime_s": 124.0,
-    "tns_abs_ns": 8.93
+    "tns_abs_ns": 7.247678218
   },
   "schema": "goalevolve.ae2-selection.v1"
 }

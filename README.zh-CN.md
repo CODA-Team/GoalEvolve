@@ -49,8 +49,9 @@ hook 和建议的 `avoid_exact_source_hooks` 前沿，要求 Teacher 换用新 h
 | 类型 | 证明内容 | 是否使用 API key | 是否有稳定 pass/fail |
 |---|---|---:|---:|
 | AE-1 | 源码、benchmark、checker、manifest 与本机接口完整 | 否 | 是 |
-| AE-2 | 固定 AES R54 Student 1 artifact 的 post-route replay | 否 | 是，使用明确容差 |
+| AE-2 | 固定的八个已选择 artifact 之一的 post-route replay | 否 | 是，使用明确容差 |
 | AE-3 | 用户能启动新的 Teacher/Student 源码进化 campaign | 是 | 只检查流程；QoR 本身随机 |
+| AE-4 | 使用 AES 演化后二进制评测七个非 AES contest design | 否 | 是，记录 21 个 flow |
 
 立即运行 AE-1：
 
@@ -68,10 +69,27 @@ export OPENROAD_EXE=/path/to/prepared/OpenROAD/build/bin/openroad
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2-preflight \
   --artifact aes_r58_student1 --openroad "$OPENROAD_EXE"
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2 \
-  --artifact aes_r58_student1 --openroad "$OPENROAD_EXE"
+  --artifact aes_r58_student1 --rebuild --jobs 8 --verbose
 ```
 
 AE-2 使用版本匹配、且在当前 shell 已激活的 OpenROAD 执行可移植的已捕获 Tcl、官方 parser 与 4/4 checker，然后与 `artifact_evaluation/expected/aes_cipher_top/r058_student1/metrics.json` 对比 TNS、dynamic power、leakage。该结果的阶段是 `global_route + estimate_parasitics`，不是 detailed routing。
+
+## AE-4：跨 design transfer
+
+AE-4 必须在 AES AE-2 已经成功之后运行。它使用本机刚刚 rebuild 且通过 AE-2 的
+`aes_r58_student1` 二进制，在七个非 AES design 上运行三种 schedule；RMP 所需的单文件
+Liberty 会从仓库内 ASAP7 Liberty 自动生成。因此 release 不依赖机器绝对路径或 ELF 二进制 hash。
+
+```bash
+source outputs/toolchain/activate.sh
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" AE4/run_ae4.py prepare
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" AE4/run_ae4.py run --jobs 1
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" AE4/run_ae4.py collect
+```
+
+`--jobs 1` 是共享服务器的安全默认值；只有确认 CPU 和内存足够时再提高并行数。21 个 Tcl、
+日志和汇总都写入被 Git 忽略的 `AE4/results/`。三类 schedule、统计口径和结果解释见
+[AE4/README.md](AE4/README.md)。
 
 ## 环境安装
 
@@ -135,6 +153,31 @@ OpenROAD 构建依赖、环境脚本和动态库由用户准备的 workspace 负
 ## AE-3：新鲜进化
 
 从 [config/credentials/goalevolve_codex.env.example](config/credentials/goalevolve_codex.env.example) 建立被忽略的 `config/credentials/goalevolve_codex.env`，并执行 `chmod 600 config/credentials/goalevolve_codex.env`。GoalEvolve 永远不读取 `~/.codex`，而是从这个项目文件创建隔离的 Teacher/Student home。所有 design 共用的模型和推理强度位于 `config/codex.json`，当前为 `gpt-5.6-terra` 与 `xhigh`。
+
+### 推荐：P0-rooted campaign
+
+P0 命令将已审核的 template 复制到一个新的隔离 campaign，测量并冻结 baseline 后才启动
+Teacher/Student 演化。`ast_graph` 是默认的 AST 图证据模式；`openroad_cards` 是明确的无 AST
+ablation。二者均要求上面已配置 credential，且要求 AE-1 已准备可工作的 OpenROAD build 环境。
+
+```bash
+source outputs/toolchain/activate.sh
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli p0 list
+
+# AST 代码图版本
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli p0 start \
+  --design aes_cipher_top --run-id aes_ast_10r --output-root outputs/p0_campaigns \
+  --planning-mode ast_graph --rounds 10
+
+# OpenROAD Card ablation；必须用不同 run ID。
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli p0 start \
+  --design aes_cipher_top --run-id aes_cards_10r --output-root outputs/p0_campaigns \
+  --planning-mode openroad_cards --rounds 10
+```
+
+使用 `p0 status --campaign <campaign-directory>` 检查状态，使用
+`p0 run --campaign <campaign-directory> --rounds N` 续跑。P0 输出只会写入 `outputs/`，
+不替代冻结的 AE-2 artifact。
 
 ### EPD v2 生命周期
 
@@ -266,8 +309,9 @@ PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli run \
 
 ## 当前固定 AES artifact
 
-`aes_r58_student1` 是 `round_058:student_1`；其冻结记录的 TNS 为
-`15.68 ns`、dynamic power 为 `340.9709B pW`、leakage 为 `29.1M pW`。
+`aes_r58_student1` 是 `round_058:student_1`；其 cache-safe post-route
+replay 记录的 TNS 为 `15.5726 ns`、dynamic power 为 `335.607141B pW`、
+leakage 为 `29.093M pW`。
 复现实验应使用本文档的 AE-2 命令，以本机兼容工具链重新生成结果。
 
 ## Further documentation

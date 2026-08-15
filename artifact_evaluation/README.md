@@ -38,8 +38,8 @@ only: formal AE-2 never uses it in place of the selected artifact binary.
 `--verbose` streams flow logs to the terminal; all logs remain recorded under
 `outputs/ae2/`.
 
-The selected modes are `power_then_timing`, NVDLA-A `power_only`, and NVDLA-C
-`timing_only`; none is detailed routing. A passing AE-2 report proves that the
+The selected modes are `power_then_timing` and NVDLA-C `timing_only`; neither
+is detailed routing. A passing AE-2 report proves that the
 released source artifact, benchmark, checker, and flow produce the reported
 result on the declared environment; it does not prove a fresh LLM run will
 rediscover the same patch. See

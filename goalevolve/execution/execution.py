@@ -15,6 +15,9 @@ class ExecutionPolicy:
     timeout_s: int = 7200
     retries: int = 1
     min_free_gb: float = 2.0
+    # Terminal-only liveness reporting.  It has no effect on the command,
+    # resource budget, logs, evidence, or promotion outcome.
+    heartbeat_s: float = 30.0
 
 
 @dataclass(frozen=True)
@@ -52,6 +55,7 @@ class ResilientCommandRunner:
             return report
         last: subprocess.CompletedProcess[str] | None = None
         command_label = Path(command[0]).name if command else "<empty>"
+        heartbeat_s = max(0.05, float(self.policy.heartbeat_s))
         for attempt in range(1, self.policy.retries + 2):
             print(
                 f"[GoalEvolve][executor] start attempt={attempt}/{self.policy.retries + 1} command={command_label}",
@@ -63,6 +67,8 @@ class ResilientCommandRunner:
                 command,
                 cwd=cwd,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 env=environment,
@@ -74,18 +80,36 @@ class ResilientCommandRunner:
             )
             stdout_chunks: list[str] = []
             stderr_chunks: list[str] = []
+            last_activity: list[str] = [""]
 
-            def drain(stream: object, chunks: list[str]) -> None:
+            def drain(stream: object, chunks: list[str], *, stream_name: str) -> None:
                 assert hasattr(stream, "readline")
                 for line in iter(stream.readline, ""):
                     chunks.append(line)
+                    # The official flow can be quiet while a costly stage is
+                    # executing.  Keep the newest nonempty log line solely as
+                    # a terminal heartbeat; the full original stream stays in
+                    # ``output_log`` and no output is paraphrased or dropped.
+                    text = line.strip()
+                    if text:
+                        last_activity[0] = f"{stream_name}:{text[-160:]}"
                     if live_log is not None:
                         live_log.write(line)
                         live_log.flush()
 
             assert process.stdout is not None and process.stderr is not None
-            stdout_thread = threading.Thread(target=drain, args=(process.stdout, stdout_chunks), daemon=True)
-            stderr_thread = threading.Thread(target=drain, args=(process.stderr, stderr_chunks), daemon=True)
+            stdout_thread = threading.Thread(
+                target=drain,
+                args=(process.stdout, stdout_chunks),
+                kwargs={"stream_name": "stdout"},
+                daemon=True,
+            )
+            stderr_thread = threading.Thread(
+                target=drain,
+                args=(process.stderr, stderr_chunks),
+                kwargs={"stream_name": "stderr"},
+                daemon=True,
+            )
             stdout_thread.start()
             stderr_thread.start()
             while True:
@@ -104,10 +128,15 @@ class ResilientCommandRunner:
                     report = ExecutionReport(False, attempt, None, stdout[-4000:], stderr[-4000:], "timeout")
                     return report
                 try:
-                    process.wait(timeout=min(30.0, remaining))
+                    process.wait(timeout=min(heartbeat_s, remaining))
                 except subprocess.TimeoutExpired:
                     elapsed = int(time.monotonic() - started)
-                    print(f"[GoalEvolve][executor] running attempt={attempt} command={command_label} elapsed_s={elapsed}", flush=True)
+                    heartbeat = last_activity[0] or "awaiting_output"
+                    print(
+                        f"[GoalEvolve][executor] running attempt={attempt} "
+                        f"command={command_label} elapsed_s={elapsed} last_activity={heartbeat}",
+                        flush=True,
+                    )
                     continue
                 stdout_thread.join()
                 stderr_thread.join()

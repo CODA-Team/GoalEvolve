@@ -43,9 +43,9 @@
   },
   "decision_metrics": {
     "drv_count": 0.0,
-    "dynamic_power_pw": 340970900000.0,
-    "leakage_power_pw": 29100000.0,
+    "dynamic_power_pw": 335607141000.0,
+    "leakage_power_pw": 29093000.0,
     "runtime_s": 203.0,
-    "tns_abs_ns": 15.68
+    "tns_abs_ns": 15.572590769
   }
 }

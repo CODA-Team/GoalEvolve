@@ -1,0 +1,45 @@
+{
+  "schema_version": "goalevolve.p0-template-registry.v1",
+  "designs": {
+    "aes_cipher_top": {
+      "template": "aes_cipher_top/p0_ast_recovery_20260810_baseline.local.json",
+      "target_policy_ready": true,
+      "description": "P0 AST campaign; first 8 rounds force power recovery and permit TNS up to 80 ns."
+    },
+    "ariane": {
+      "template": "ariane/evolve.json",
+      "target_policy_ready": false,
+      "description": "P0 AST campaign template; its target policy remains unreviewed."
+    },
+    "jpeg_encoder": {
+      "template": "jpeg_encoder/evolve.json",
+      "target_policy_ready": true,
+      "description": "P0 AST campaign with the reviewed JPEG target policy."
+    },
+    "mempool_group": {
+      "template": "mempool_group/evolve.json",
+      "target_policy_ready": false,
+      "description": "P0 AST campaign template; its target policy remains unreviewed."
+    },
+    "nvdla_a": {
+      "template": "nvdla_a/evolve.json",
+      "target_policy_ready": false,
+      "description": "P0 AST campaign template; its target policy remains unreviewed."
+    },
+    "nvdla_c": {
+      "template": "nvdla_c/evolve.json",
+      "target_policy_ready": false,
+      "description": "P0 AST campaign template; baseline/flow consistency must be resolved before evolution."
+    },
+    "nvdla_m": {
+      "template": "nvdla_m/evolve.json",
+      "target_policy_ready": false,
+      "description": "P0 AST campaign template; its target policy remains unreviewed."
+    },
+    "nvdla_p": {
+      "template": "nvdla_p/evolve.json",
+      "target_policy_ready": false,
+      "description": "P0 AST campaign template; its target policy remains unreviewed."
+    }
+  }
+}

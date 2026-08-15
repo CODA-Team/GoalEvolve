@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "goalevolve"
 version = "1.0.0"
@@ -17,3 +21,14 @@ addopts = "-q"
 # Keep the in-tree package importable for the documented `pytest` command.
 # This project deliberately has no installation step for local campaigns.
 pythonpath = ["."]
+
+[tool.setuptools]
+packages = [
+  "goalevolve",
+  "goalevolve.agents",
+  "goalevolve.core",
+  "goalevolve.evaluation",
+  "goalevolve.execution",
+  "goalevolve.planning",
+  "goalevolve.testing",
+]

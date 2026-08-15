@@ -13,7 +13,14 @@ from pathlib import Path
 from ..core.io import atomic_json
 
 
-RETRYABLE_FAILURES = ("model is at capacity", "rate limit", "temporarily unavailable", "overloaded", "connection")
+RETRYABLE_FAILURES = (
+    "model is at capacity",
+    "rate limit",
+    "temporarily unavailable",
+    "overloaded",
+    "connection",
+    "stream disconnected",
+)
 PROJECT_CREDENTIAL_ENV = Path(__file__).resolve().parents[2] / "config" / "credentials" / "goalevolve_codex.env"
 
 
@@ -294,12 +301,24 @@ class PersistentCodexRunner:
                 watched.register(process.stdout, selectors.EVENT_READ, "stdout")
                 watched.register(process.stderr, selectors.EVENT_READ, "stderr")
                 deadline = time.monotonic() + self.config.timeout_s
+                next_heartbeat = time.monotonic() + 30.0
                 while watched.get_map():
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
                         self._terminate_process_group(process)
                         return subprocess.CompletedProcess(command, 124, "", "timeout")
-                    for key, _ in watched.select(timeout=min(1.0, remaining)):
+                    now = time.monotonic()
+                    wait_s = min(1.0, remaining, max(0.0, next_heartbeat - now))
+                    selected = watched.select(timeout=wait_s)
+                    if not selected and time.monotonic() >= next_heartbeat:
+                        elapsed = int(self.config.timeout_s - max(0.0, deadline - time.monotonic()))
+                        print(
+                            f"[GoalEvolve][codex] running elapsed_s={elapsed} "
+                            f"operation_timeout_s={self.config.timeout_s}",
+                            flush=True,
+                        )
+                        next_heartbeat += 30.0
+                    for key, _ in selected:
                         line = key.fileobj.readline()
                         if not line:
                             watched.unregister(key.fileobj)

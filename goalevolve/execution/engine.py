@@ -4,9 +4,10 @@ import json
 import math
 import re
 import shutil
+from random import Random
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -17,14 +18,41 @@ from ..core.io import atomic_json, load_json, sha256_json
 from ..core.models import CandidateResult, EvidenceVerdict, Hypothesis, Parent
 from ..planning.observations import ObservationMemory
 from ..planning.repository_graph import RepositoryGraphIndex
-from ..planning.historical_seeds import graph_resolvable_seeds
+from ..planning.parent_selection import (
+    ParentPortfolioEntry,
+    ParentSelectionPolicy,
+    ParentSelectionSettings,
+    normalize_tag,
+)
+from ..planning.historical_seeds import graph_resolvable_seeds, source_resolvable_seeds
 from ..planning.search_policy import SearchPolicyBuilder
-from ..core.plugins import Evaluator, Planner, PromotionPolicy, StudentEditor, Teacher, WorkspaceProvider
-from ..agents.markdown_protocol import parse_teacher_plan
+from ..core.plugins import (
+    Evaluator,
+    NarrativeSummarizer,
+    Planner,
+    PromotionPolicy,
+    StudentEditor,
+    Teacher,
+    WorkspaceProvider,
+)
+from ..agents.markdown_protocol import (
+    draft_signature_validation_errors,
+    parse_draft_signatures,
+    parse_teacher_plan,
+    render_teacher_plan,
+    teacher_plan_validation_errors,
+)
+from ..agents.teacher import requires_fresh_explorer_work, source_inspection_audit
 from ..agents.prompting import review_packet, student_packet, teacher_packet
+from ..epd_search import validate_explorer_retrieval_audit
 from .preflight import preflight_candidate
 from ..token_ledger import record_round_token_usage
-from ..planning.timing_recovery import record_schedule_memory, timing_recipe
+from ..planning.timing_recovery import (
+    recipe_for_source_hooks,
+    record_schedule_memory,
+    teacher_selectable_recipe_ids,
+    timing_recipe,
+)
 from .workspace import clone_source_tree
 from .teacher_assignment import (
     POWER_ONLY_EXECUTION_DIRECT_FILES,
@@ -72,6 +100,28 @@ def _partition_controller_assignment_errors(
     return tuple(dict.fromkeys(blocking)), tuple(dict.fromkeys(rejected))
 
 
+def _paper_card_ids_for_materialization(
+    teacher_plan_payload: Mapping[str, object],
+    current_paper_cards: Sequence[Mapping[str, object]],
+) -> tuple[str, ...]:
+    """Return the frozen card catalog, or the current one for old incomplete plans."""
+
+    card_rows = (
+        teacher_plan_payload.get("paper_cards")
+        if "paper_cards" in teacher_plan_payload
+        else current_paper_cards
+    )
+    if not isinstance(card_rows, Sequence) or isinstance(card_rows, (str, bytes)):
+        return ()
+    return tuple(
+        dict.fromkeys(
+            str(row.get("card_id") or "").strip()
+            for row in card_rows
+            if isinstance(row, Mapping) and str(row.get("card_id") or "").strip()
+        )
+    )
+
+
 def _validated_hypothesis_student_ids(
     hypotheses: Sequence[Hypothesis],
     configured_student_ids: Sequence[str],
@@ -104,18 +154,34 @@ class GoalEvolveEngine:
     workers: int = 4
     student_editor: StudentEditor | None = None
     teacher: Teacher | None = None
+    # The narrator is an observer-only fallback for a failed Student
+    # reflection turn.  It never participates in source editing, evidence
+    # classification, EPD lifecycle projection, or promotion.
+    narrator: NarrativeSummarizer | None = None
     max_campaign_rounds: int | None = None
     max_consecutive_no_promotion_rounds: int = 3
     prefer_execution_champion: bool = False
     epd_max_reinforcement_attempts: int = 2
     historical_seed_cards: tuple[dict[str, object], ...] = ()
+    historical_seed_revalidation_schedule: tuple[dict[str, object], ...] = ()
+    # None preserves compatibility for direct Engine callers: the historical
+    # ``repository_graph_enabled`` switch determines their mode. Configured
+    # campaigns always persist one explicit mode.
+    planning_mode: str | None = None
     repository_graph_enabled: bool = True
+    parent_selection: ParentSelectionSettings = field(default_factory=ParentSelectionSettings)
 
     def _epd(self) -> EvolutionProgramDatabase:
         return EvolutionProgramDatabase(
             self.state_root,
             max_reinforcement_attempts=self.epd_max_reinforcement_attempts,
         )
+
+    @property
+    def effective_planning_mode(self) -> str:
+        if self.planning_mode in {"ast_graph", "openroad_cards"}:
+            return self.planning_mode
+        return "ast_graph" if self.repository_graph_enabled else "openroad_cards"
 
     def _parent_repository_graph(
         self,
@@ -125,7 +191,7 @@ class GoalEvolveEngine:
         allowed_patch_roots: Sequence[str],
     ):
         """Return the parent AST graph only when the configured ablation enables it."""
-        if not self.repository_graph_enabled:
+        if self.effective_planning_mode != "ast_graph":
             return None
         return RepositoryGraphIndex(state_root=self.state_root).build_parent(
             source_root=source_root,
@@ -133,9 +199,108 @@ class GoalEvolveEngine:
             allowed_patch_roots=allowed_patch_roots,
         )
 
-    def _graph_resolvable_historical_seeds(self, graph) -> tuple[dict[str, object], ...]:
-        """Expose prior mechanism descriptions only when this parent resolves them."""
-        return graph_resolvable_seeds(graph, self.historical_seed_cards)
+    def _refresh_promoted_parent_repository_graph(self, *, parent: Parent) -> dict[str, object] | None:
+        """Persist the promoted parent's incremental graph before round commit.
+
+        A graph build may reuse every unchanged P0/ancestor file and parse
+        only the promoted diff.  Running it here makes an unsupported AST
+        runtime or malformed source fail in the promotion transaction, rather
+        than surprising the next round's Teacher after paid work has started.
+        """
+
+        if self.effective_planning_mode != "ast_graph":
+            return None
+        parent_source = self.state_root / "parents" / parent.source_hash / "source"
+        if not parent_source.is_dir():
+            # Lightweight/mock workspace providers may not materialize a
+            # source tree.  A real OpenROAD candidate always has one; that
+            # path is therefore strictly checked below.
+            return {
+                "status": "skipped_no_materialized_parent_source",
+                "source_hash": parent.source_hash,
+                "source_root": str(parent_source),
+            }
+        allowed_patch_roots = tuple(
+            getattr(self.evaluator, "config", object()).allowed_patch_roots
+        ) if hasattr(getattr(self.evaluator, "config", object()), "allowed_patch_roots") else ()
+        try:
+            graph = self._parent_repository_graph(
+                source_root=parent_source,
+                source_hash=parent.source_hash,
+                allowed_patch_roots=allowed_patch_roots,
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                "promoted_parent_repository_graph_refresh_failed:"
+                f"parent={parent.parent_id}:source_hash={parent.source_hash}:{type(exc).__name__}:{exc}"
+            ) from exc
+        audit: dict[str, object] = {
+            "status": "ready",
+            "parent_id": parent.parent_id,
+            "source_hash": graph.source_hash,
+            "base_source_hash": graph.base_source_hash,
+            "artifact_root": str(graph.artifact_root),
+            "reused_files": list(graph.reused_files),
+            "reparsed_files": list(graph.reparsed_files),
+        }
+        atomic_json(parent_source.parent / "repository_graph_audit.json", audit)
+        return audit
+
+    def _graph_resolvable_historical_seeds(
+        self,
+        graph,
+        *,
+        source_root: Path | None = None,
+    ) -> tuple[dict[str, object], ...]:
+        """Resolve historical cards within the selected planning mode."""
+        if self.effective_planning_mode == "ast_graph":
+            return graph_resolvable_seeds(graph, self.historical_seed_cards)
+        return (
+            source_resolvable_seeds(source_root, self.historical_seed_cards)
+            if source_root is not None
+            else ()
+        )
+
+    def _historical_seeds_for_round(
+        self,
+        *,
+        graph,
+        source_root: Path | None = None,
+        round_index: int,
+        decision_context: Mapping[str, object],
+    ) -> tuple[dict[str, object], ...]:
+        """Return only cards explicitly eligible for this parent and round.
+
+        An empty schedule intentionally preserves the historical R1 packet.
+        A nonempty P0-local schedule is for mechanisms that must inherit a
+        preceding promoted source; its stage check prevents a timing seed from
+        bypassing the existing power-first controller state machine.
+        """
+        resolved = self._graph_resolvable_historical_seeds(
+            graph, source_root=source_root
+        )
+        if not self.historical_seed_revalidation_schedule:
+            return resolved if round_index == 1 else ()
+        slot = next(
+            (
+                item
+                for item in self.historical_seed_revalidation_schedule
+                if int(item.get("round_index") or 0) == round_index
+            ),
+            None,
+        )
+        if slot is None:
+            return ()
+        active_stage = str(decision_context.get("stage") or "")
+        stages = tuple(str(stage) for stage in list(slot.get("stages") or ()))
+        if active_stage not in stages:
+            return ()
+        by_id = {str(seed.get("seed_id") or ""): seed for seed in resolved}
+        return tuple(
+            by_id[seed_id]
+            for seed_id in tuple(str(seed_id) for seed_id in list(slot.get("seed_ids") or ()))
+            if seed_id in by_id
+        )
 
     def initialize(self, *, baseline_metrics: dict[str, float], source_commit: str = "baseline", source_hash: str = "baseline") -> Parent:
         self.state_root.mkdir(parents=True, exist_ok=True)
@@ -166,6 +331,7 @@ class GoalEvolveEngine:
                 "student_editor": self.student_editor.name if self.student_editor else "none",
                 "evaluator": self.evaluator.name,
                 "workspace": self.workspace_provider.name,
+                "planning_mode": self.effective_planning_mode,
                 "repository_graph_enabled": self.repository_graph_enabled,
             },
         )
@@ -190,6 +356,7 @@ class GoalEvolveEngine:
                 dict(existing_contract.source_fingerprint) if existing_contract else dict(self.contract.source_fingerprint)
             ),
             "repository_graph_enabled": self.repository_graph_enabled,
+            "planning_mode": self.effective_planning_mode,
         }
         if entry not in entries:
             entries.append(entry)
@@ -212,6 +379,7 @@ class GoalEvolveEngine:
         for round_index in range(start, start + rounds):
             if self.max_campaign_rounds is not None and round_index > self.max_campaign_rounds:
                 break
+            parent = self._select_plateau_parent(round_index=round_index, parent=parent)
             parent = self.run_round(round_index=round_index, parent=parent)
             parent = self._adopt_execution_champion(parent)
             completion = self._completion_reason(round_index=round_index)
@@ -287,6 +455,146 @@ class GoalEvolveEngine:
                 }
         return None
 
+    def _parent_portfolio(self, parent: Parent) -> tuple[ParentPortfolioEntry, ...]:
+        """Recover valid parent snapshots and retain one entry per mechanism family."""
+        entries: dict[str, ParentPortfolioEntry] = {
+            parent.source_hash: ParentPortfolioEntry(parent, "unknown")
+        }
+        for summary_path in sorted((self.state_root / "rounds").glob("round_*/round.json")):
+            summary = load_json(summary_path, {}) or {}
+            parent_data = summary.get("parent_after") if isinstance(summary, Mapping) else None
+            if not isinstance(parent_data, Mapping):
+                continue
+            try:
+                candidate = Parent(**dict(parent_data))
+            except (TypeError, ValueError):
+                continue
+            if not (self.state_root / "parents" / candidate.source_hash / "source").is_dir():
+                continue
+            family = str(summary.get("promoted_mechanism_family") or "unknown")
+            existing = entries.get(candidate.source_hash)
+            if (
+                existing is None
+                or candidate.goal_distance < existing.parent.goal_distance
+                or (
+                    candidate.goal_distance == existing.parent.goal_distance
+                    and existing.mechanism_family == "unknown"
+                    and family != "unknown"
+                )
+            ):
+                entries[candidate.source_hash] = ParentPortfolioEntry(candidate, family)
+        ranked = sorted(
+            entries.values(), key=lambda entry: (entry.parent.goal_distance, entry.parent.parent_id)
+        )
+        selected: list[ParentPortfolioEntry] = []
+        used_families: set[str] = set()
+        for entry in ranked:
+            if entry.mechanism_family in used_families:
+                continue
+            selected.append(entry)
+            used_families.add(entry.mechanism_family)
+            if len(selected) == self.parent_selection.portfolio_size:
+                return tuple(selected)
+        for entry in ranked:
+            if entry in selected:
+                continue
+            selected.append(entry)
+            if len(selected) == self.parent_selection.portfolio_size:
+                break
+        return tuple(selected)
+
+    def _plateau_bottleneck_tag(self, parent: Parent) -> str:
+        _, residuals, _ = self.contract.evaluate(parent.metrics)
+        ranked = sorted(
+            (
+                (spec.weight * float(residuals.get(spec.name) or 0.0), spec.name)
+                for spec in self.contract.metrics
+            ),
+            reverse=True,
+        )
+        return normalize_tag(ranked[0][1]) if ranked else "unknown"
+
+    def _select_plateau_parent(self, *, round_index: int, parent: Parent) -> Parent:
+        """Apply Eqs. 4--5 before a new round, without discarding the champion."""
+        round_root = self.state_root / "rounds" / f"round_{round_index:03d}"
+        record_path = round_root / "parent_selection.json"
+        existing = load_json(record_path, {}) or {}
+        portfolio = self._parent_portfolio(parent)
+        by_parent_id = {entry.parent.parent_id: entry for entry in portfolio}
+        if isinstance(existing, Mapping) and str(existing.get("selected_parent_id") or "") in by_parent_id:
+            return by_parent_id[str(existing["selected_parent_id"])].parent
+
+        if not portfolio:
+            return parent
+        champion = min(
+            portfolio, key=lambda entry: (entry.parent.goal_distance, entry.parent.parent_id)
+        )
+        state_path = self.state_root / "knowledge" / "parent_selection.json"
+        state = load_json(state_path, {}) or {}
+        prior_best = state.get("best_distance") if isinstance(state, Mapping) else None
+        try:
+            prior_best_distance = float(prior_best)
+        except (TypeError, ValueError):
+            prior_best_distance = float("inf")
+        improved = champion.parent.goal_distance < (
+            prior_best_distance - self.parent_selection.improvement_threshold
+        )
+        rounds_since_improvement = (
+            0 if improved else int(state.get("rounds_since_improvement") or 0) + 1
+        )
+        plateau_active = rounds_since_improvement >= self.parent_selection.plateau_rounds
+        history = [str(item) for item in list(state.get("selection_history") or ())]
+        plateau_iteration = int(state.get("plateau_iteration") or 0)
+        selector = ParentSelectionPolicy(self.parent_selection)
+        probabilities = selector.probabilities(
+            portfolio=portfolio,
+            bottleneck_tag=self._plateau_bottleneck_tag(champion.parent),
+            selection_history=history,
+            plateau_iteration=plateau_iteration,
+        )
+        if plateau_active:
+            chosen = selector.sample(
+                portfolio=portfolio,
+                bottleneck_tag=self._plateau_bottleneck_tag(champion.parent),
+                selection_history=history,
+                plateau_iteration=plateau_iteration,
+                random_source=Random(self.parent_selection.seed + round_index),
+            )
+            history.append(chosen.mechanism_family)
+            plateau_iteration += 1
+        else:
+            chosen = champion
+            if improved:
+                plateau_iteration = 0
+        state_payload = {
+            "schema_version": "goalevolve.v2.parent-selection.v1",
+            "best_distance": champion.parent.goal_distance,
+            "rounds_since_improvement": rounds_since_improvement,
+            "plateau_iteration": plateau_iteration,
+            "selection_history": history[-self.parent_selection.history_window :],
+        }
+        atomic_json(state_path, state_payload)
+        atomic_json(
+            record_path,
+            {
+                **state_payload,
+                "round": round_index,
+                "plateau_active": plateau_active,
+                "bottleneck_tag": self._plateau_bottleneck_tag(champion.parent),
+                "portfolio": [
+                    {
+                        "parent": entry.parent.to_dict(),
+                        "mechanism_family": entry.mechanism_family,
+                        "tag": entry.tag,
+                        "probability": probabilities[entry.parent.parent_id],
+                    }
+                    for entry in portfolio
+                ],
+                "selected_parent_id": chosen.parent.parent_id,
+            },
+        )
+        return chosen.parent
+
     @staticmethod
     def _matching_teacher_idea(
         *,
@@ -325,6 +633,7 @@ class GoalEvolveEngine:
         diagnosis,
         portfolio: Mapping[str, object],
         decision_context: Mapping[str, object],
+        historical_seeds: Sequence[Mapping[str, object]] = (),
     ) -> tuple[tuple[Hypothesis, ...], dict[str, object]]:
         """Schedule role envelopes without allocating mechanisms to them."""
         previous = self._previous_round_diagnosis(round_index)
@@ -348,12 +657,18 @@ class GoalEvolveEngine:
                 portfolio={},
                 suspend_explorers=False,
             )
+        templates, assigned_seed_ids = self._seed_revalidation_templates(
+            templates=templates,
+            round_index=round_index,
+            historical_seeds=historical_seeds,
+        )
         schedule = {
             "schema_version": "goalevolve.v2.role-schedule.v1",
             "previous_dominant_bottleneck": previous_bottleneck or None,
             "dominant_bottleneck": current_bottleneck or None,
             "bottleneck_changed": changed,
             "explorers_suspended": changed,
+            "seed_revalidation_ids": list(assigned_seed_ids),
             "roles": [
                 {
                     "student_id": item.student_id,
@@ -365,6 +680,128 @@ class GoalEvolveEngine:
             ],
         }
         return templates, schedule
+
+    @staticmethod
+    def _seed_revalidation_templates(
+        *,
+        templates: Sequence[Hypothesis],
+        round_index: int,
+        historical_seeds: Sequence[Mapping[str, object]],
+    ) -> tuple[tuple[Hypothesis, ...], tuple[str, ...]]:
+        """Bind Explorer slots to graph-resolved historical seed cards.
+
+        Seed cards are only controller-provided experiment assignments: they
+        have no QoR authority and still require a new Student diff and full
+        official re-evaluation.  A nonempty campaign-local schedule may bind
+        a later seed to an Explorer while preserving any independently useful
+        EPD Integrator/Enhancer slots.
+        """
+        if not templates or not historical_seeds:
+            return tuple(templates), ()
+        seeded = list(templates)
+        assigned: list[str] = []
+        explorer_indices = [
+            index
+            for index, template in enumerate(seeded)
+            if template.student_role == "explorer"
+        ]
+        for index, raw_seed in zip(explorer_indices, historical_seeds, strict=False):
+            template = seeded[index]
+            seed = dict(raw_seed)
+            seed_id = str(seed.get("seed_id") or "").strip()
+            anchors = tuple(
+                str(anchor).strip()
+                for anchor in list(seed.get("source_anchors") or ())
+                if str(anchor).strip()
+            )
+            if not seed_id or not anchors:
+                continue
+            hooks = tuple(
+                dict.fromkeys(anchor.partition("::")[0].strip() for anchor in anchors)
+            )
+            requested_recipe_id = (
+                str(seed.get("timing_recipe_id") or "").strip()
+                or template.timing_recipe_id
+            )
+            # A role template starts with the ordinary per-Student timing
+            # allocation.  That allocation is deliberately diverse for the
+            # later power-then-timing stage, but a historical seed can be
+            # scheduled during the protected power-only stage too.  Do not
+            # carry an otherwise valid timing recipe into that different
+            # Controller command boundary: the Teacher can only name the
+            # active-mode menu, and the seed envelope must obey that same
+            # rule before it reaches the Teacher/Controller repair loop.
+            selectable_recipe_ids = teacher_selectable_recipe_ids(
+                template.evaluation_mode
+            )
+            if requested_recipe_id not in selectable_recipe_ids:
+                requested_recipe_id = "legacy_setup"
+            timing_recipe_id = recipe_for_source_hooks(
+                hooks,
+                requested_recipe_id,
+            )
+            expected_signals = tuple(
+                str(signal).strip()
+                for signal in list(seed.get("expected_signals") or ())
+                if str(signal).strip()
+            )
+            activation_signals = tuple(
+                str(signal).strip()
+                for signal in list(seed.get("activation_signals") or expected_signals)
+                if str(signal).strip()
+            )
+            option = {
+                # A seed is a Controller-authored candidate option, so it
+                # must remain selectable by the same Teacher sanitizer used
+                # for regular graph cards.  Keep its audit-only metadata
+                # below, but also serialize the complete immutable
+                # Hypothesis envelope rather than a partial display record.
+                "hypothesis_id": template.hypothesis_id,
+                "mechanism_family": f"seed_revalidation:{seed_id}",
+                "claim": str(seed.get("summary") or "").strip() or template.claim,
+                "retrieval_ids": (seed_id,),
+                "novelty_key": f"{template.novelty_key}:seed:{seed_id}",
+                "scope_evidence": template.scope_evidence,
+                "allowed_patch_paths": hooks,
+                "evaluation_mode": template.evaluation_mode,
+                "timing_recipe_id": timing_recipe_id,
+                "activation_signals": activation_signals,
+                "conclusive_nonactivation_patterns": template.conclusive_nonactivation_patterns,
+                "student_role": template.student_role,
+                "role_mode": "seed_revalidation",
+                "epd_record_ids": (),
+                "epd_idea_id": "",
+                "teacher_idea_reference": "",
+                "student_id": template.student_id,
+                "candidate_options": (),
+                "teacher_evolution_ideas": (),
+                "candidate_id": seed_id,
+                "seed_id": seed_id,
+                "source_anchors": anchors,
+                "source_hooks": hooks,
+                "decision_boundary": str(seed.get("decision_boundary") or "").strip(),
+                "summary": str(seed.get("summary") or "").strip(),
+                "expected_signals": expected_signals,
+                "reference_diff_paths": tuple(
+                    str(path).strip()
+                    for path in list(seed.get("reference_diff_paths") or ())
+                    if str(path).strip()
+                ),
+            }
+            materialization_mode = str(seed.get("materialization_mode") or "").strip()
+            if materialization_mode:
+                option["materialization_mode"] = materialization_mode
+                option["reference_parent_file_hashes"] = dict(
+                    seed.get("reference_parent_file_hashes") or {}
+                )
+            seeded[index] = replace(
+                template,
+                role_mode="seed_revalidation",
+                timing_recipe_id=timing_recipe_id,
+                candidate_options=(option,),
+            )
+            assigned.append(seed_id)
+        return tuple(seeded), tuple(assigned)
 
     def _previous_round_diagnosis(self, round_index: int) -> dict[str, object]:
         if round_index <= 1:
@@ -389,6 +826,40 @@ class GoalEvolveEngine:
             return ("tns", "timing", "timing_recovery")
         bottleneck = str(getattr(diagnosis, "dominant_bottleneck", "") or "")
         return tuple(dict.fromkeys((bottleneck.split("_")[0], "timing", "power")))
+
+    @staticmethod
+    def _teacher_graph_anchor_hints(
+        *,
+        decision_context: Mapping[str, object],
+        historical_seeds: Sequence[Mapping[str, object]] = (),
+    ) -> tuple[str, ...]:
+        """Keep known executed boundaries ahead of lexical graph ranking.
+
+        This is prompt localization only.  The repository graph still resolves
+        every anchor, and the controller's source admission rules remain the
+        sole authority for a Student's actual hook and evidence fields.
+        """
+        hints: list[str] = []
+        mode = str(decision_context.get("evaluation_mode") or "")
+        if mode in {"power_only", "power_then_timing"}:
+            hints.extend(
+                f"{path}::{symbol}"
+                for path, symbols in POWER_ONLY_EXECUTION_ENTRY_SYMBOLS.items()
+                for symbol in sorted(symbols)
+            )
+        if str(decision_context.get("execution_champion_recipe_id") or "") == "rmp_area_power":
+            hints.extend(
+                f"{path}::{symbol}"
+                for path, symbols in RMP_AREA_EXECUTION_ENTRY_SYMBOLS.items()
+                for symbol in sorted(symbols)
+            )
+        for seed in historical_seeds:
+            hints.extend(
+                str(anchor).strip()
+                for anchor in list(seed.get("source_anchors") or ())
+                if str(anchor).strip()
+            )
+        return tuple(dict.fromkeys(hints))
 
     def run_round(self, *, round_index: int, parent: Parent) -> Parent:
         context_factory = getattr(self.promotion_policy, "context", None)
@@ -437,6 +908,19 @@ class GoalEvolveEngine:
         atomic_json(round_root / "diagnosis.json", round_diagnosis.to_dict())
         retrieval_audit = getattr(self.planner, "retriever", None)
         audit = retrieval_audit.audit(state_root=self.state_root) if retrieval_audit else {}
+        paper_cards = (
+            retrieval_audit.paper_card_references(
+                parent=parent,
+                symptoms=self._teacher_reference_symptoms(
+                    diagnosis=round_diagnosis,
+                    decision_context=decision_context,
+                ),
+                state_root=self.state_root,
+            )
+            if retrieval_audit is not None
+            and hasattr(retrieval_audit, "paper_card_references")
+            else []
+        )
         # A completed Student flow is much more expensive than the controller
         # bookkeeping that follows it.  If the process died after evaluation
         # (for example while classifying a failed exact-recipe baseline), use
@@ -488,6 +972,60 @@ class GoalEvolveEngine:
                 source_hash=parent.source_hash,
                 allowed_patch_roots=allowed_patch_roots,
             )
+            role_templates, role_schedule = self._teacher_role_schedule(
+                round_index=round_index,
+                diagnosis=round_diagnosis,
+                portfolio=epd_portfolio,
+                decision_context=decision_context,
+                historical_seeds=self._historical_seeds_for_round(
+                    graph=repository_graph,
+                    source_root=parent_source,
+                    round_index=round_index,
+                    decision_context=decision_context,
+                ),
+            )
+            if (
+                str(teacher_plan_payload.get("planner_mode") or "")
+                == "seed_revalidation_fallback"
+            ):
+                # No Student was started for this rejected allocation.  A
+                # controller recipe derivation fix can therefore re-render
+                # the identical single-seed fallback without asking an
+                # unavailable Teacher to restate its source evidence.
+                saved_repairs = list(
+                    teacher_plan_payload.get("controller_assignment_repairs")
+                    or ()
+                )
+                recovered_seed_plan = self._seed_revalidation_external_teacher_fallback(
+                    templates=role_templates,
+                    diagnosis=round_diagnosis,
+                    failed_plan={
+                        "teacher_failure_kind": "external_turn_failure",
+                        "teacher_detail": str(
+                            dict(
+                                teacher_plan_payload.get(
+                                    "seed_revalidation_fallback"
+                                )
+                                or {}
+                            ).get("external_teacher_detail")
+                            or ""
+                        ),
+                    },
+                )
+                if recovered_seed_plan is not None:
+                    role_templates, refreshed_payload = recovered_seed_plan
+                    teacher_plan_payload.update(refreshed_payload)
+                    if saved_repairs:
+                        teacher_plan_payload["controller_assignment_repairs"] = saved_repairs
+                        teacher_plan_payload["controller_assignment_repair"] = saved_repairs[-1]
+                    teacher_plan_payload.pop("controller_assignment_errors", None)
+                    teacher_plan_payload["controller_recipe_recovery"] = {
+                        "authority": "single_controller_scheduled_seed_only",
+                        "reason": "rederived_seed_recipe_before_student_start",
+                    }
+                    recovered_markdown = str(
+                        refreshed_payload.get("teacher_markdown") or ""
+                    )
             parsed_plan = parse_teacher_plan(recovered_markdown)
             materialized = materialize_teacher_assignments(
                 assignments=tuple(
@@ -500,10 +1038,9 @@ class GoalEvolveEngine:
                 source_root=parent_source,
                 allowed_patch_roots=allowed_patch_roots,
                 historical_ideas=epd_database.ideas(),
-                paper_card_ids=tuple(
-                    str(row.get("card_id") or "")
-                    for row in list(teacher_plan_payload.get("paper_cards") or ())
-                    if isinstance(row, Mapping)
+                paper_card_ids=_paper_card_ids_for_materialization(
+                    teacher_plan_payload,
+                    paper_cards,
                 ),
                 repository_graph=repository_graph,
                 teacher_context={
@@ -543,6 +1080,12 @@ class GoalEvolveEngine:
                         role_templates,
                         power_reclaim_phase=power_reclaim_phase,
                     ),
+                    retrieval_audit=(
+                        dict(teacher_plan_payload.get("retrieval_audit") or {})
+                        if "retrieval_audit" in teacher_plan_payload
+                        else None
+                    ),
+                    decision_context=decision_context,
                     repair_index=len(recovery_repairs) + 1,
                 )
                 recovery_repairs.append(repair)
@@ -570,10 +1113,9 @@ class GoalEvolveEngine:
                     source_root=parent_source,
                     allowed_patch_roots=allowed_patch_roots,
                     historical_ideas=epd_database.ideas(),
-                    paper_card_ids=tuple(
-                        str(row.get("card_id") or "")
-                        for row in list(teacher_plan_payload.get("paper_cards") or ())
-                        if isinstance(row, Mapping)
+                    paper_card_ids=_paper_card_ids_for_materialization(
+                        teacher_plan_payload,
+                        paper_cards,
                     ),
                     repository_graph=repository_graph,
                     teacher_context={
@@ -649,8 +1191,19 @@ class GoalEvolveEngine:
                     allowed_patch_roots=allowed_patch_roots,
                 )
                 source_index = repository_graph.compact_index() if repository_graph else {}
+                historical_seeds = self._historical_seeds_for_round(
+                    graph=repository_graph,
+                    source_root=parent_source,
+                    round_index=round_index,
+                    decision_context=decision_context,
+                )
+                graph_anchor_hints = self._teacher_graph_anchor_hints(
+                    decision_context=decision_context,
+                    historical_seeds=historical_seeds,
+                )
                 repository_graph_packet = (
                     repository_graph.focus(
+                        anchor_hints=graph_anchor_hints,
                         metric_hints=self._teacher_reference_symptoms(
                             diagnosis=round_diagnosis,
                             decision_context=decision_context,
@@ -660,6 +1213,21 @@ class GoalEvolveEngine:
                     if repository_graph
                     else None
                 )
+                if repository_graph_packet is not None:
+                    # The compact packet tells the Teacher to open a focused
+                    # graph before inspecting live source.  It must therefore
+                    # name a real, immutable round artifact rather than the
+                    # parent graph's nonexistent default ``focus.json``.
+                    focused_graph_path = round_root / "repository_graph_focus.json"
+                    repository_graph_packet = dict(repository_graph_packet)
+                    repository_graph_packet["entry_chain"] = list(graph_anchor_hints)
+                    atomic_json(focused_graph_path, repository_graph_packet)
+                    repository_graph_packet = dict(
+                        load_json(focused_graph_path, {}) or {}
+                    )
+                    repository_graph_packet["focused_graph_path"] = str(
+                        focused_graph_path
+                    )
                 search_policy = SearchPolicyBuilder(self.state_root).build(
                     parent=parent,
                     diagnosis=round_diagnosis,
@@ -668,46 +1236,88 @@ class GoalEvolveEngine:
                     allowed_patch_roots=allowed_patch_roots,
                 )
                 SearchPolicyBuilder.persist(round_root=round_root, policy=search_policy)
-                retriever = getattr(self.planner, "retriever", None)
-                paper_cards = (
-                    retriever.paper_card_references(
-                        parent=parent,
-                        symptoms=self._teacher_reference_symptoms(
-                            diagnosis=round_diagnosis,
-                            decision_context=decision_context,
-                        ),
-                        state_root=self.state_root,
-                    )
-                    if retriever is not None and hasattr(retriever, "paper_card_references")
-                    else []
+                retriever = retrieval_audit
+                teacher_visible_seeds = historical_seeds
+                role_templates, role_schedule = self._teacher_role_schedule(
+                    round_index=round_index,
+                    diagnosis=round_diagnosis,
+                    portfolio=epd_portfolio,
+                    decision_context=decision_context,
+                    historical_seeds=teacher_visible_seeds,
                 )
-                historical_seeds = self._graph_resolvable_historical_seeds(
-                    repository_graph
-                )
-                teacher_plan = self.teacher.plan(
-                    state_root=self.state_root,
+                teacher_plan_payload = self._recover_completed_raw_teacher_plan(
                     round_root=round_root,
                     round_index=round_index,
-                    contract=self.contract,
                     parent=parent,
                     diagnosis=round_diagnosis,
-                    fallback=role_templates,
+                    role_templates=role_templates,
                     previous_review=previous_review,
                     decision_context=decision_context,
-                    source_index=source_index,
                     repository_graph=repository_graph_packet,
                     search_policy=search_policy,
-                    source_root=parent_source,
-                    paper_cards=paper_cards,
-                    historical_seeds=historical_seeds,
-                    execution_contracts=self._teacher_execution_contracts(
-                        role_templates,
-                        power_reclaim_phase=power_reclaim_phase,
-                    ),
                 )
-                teacher_plan_payload = teacher_plan.plan
+                if teacher_plan_payload is None:
+                    teacher_plan = self.teacher.plan(
+                        state_root=self.state_root,
+                        round_root=round_root,
+                        round_index=round_index,
+                        contract=self.contract,
+                        parent=parent,
+                        diagnosis=round_diagnosis,
+                        fallback=role_templates,
+                        previous_review=previous_review,
+                        decision_context=decision_context,
+                        source_index=source_index,
+                        repository_graph=repository_graph_packet,
+                        search_policy=search_policy,
+                        source_root=parent_source,
+                        paper_cards=paper_cards,
+                        historical_seeds=teacher_visible_seeds,
+                        execution_contracts=self._teacher_execution_contracts(
+                            role_templates,
+                            power_reclaim_phase=power_reclaim_phase,
+                        ),
+                    )
+                    teacher_plan_payload = teacher_plan.plan
+                    recovered_seed_plan = self._seed_revalidation_external_teacher_fallback(
+                        templates=role_templates,
+                        diagnosis=round_diagnosis,
+                        failed_plan=teacher_plan_payload,
+                    )
+                    if recovered_seed_plan is not None:
+                        role_templates, teacher_plan_payload = recovered_seed_plan
+                        role_schedule = {
+                            **role_schedule,
+                            "external_teacher_seed_recovery": True,
+                            "roles": [
+                                {
+                                    "student_id": item.student_id,
+                                    "role": item.student_role,
+                                    "role_mode": item.role_mode,
+                                    "epd_options": [dict(option) for option in item.candidate_options],
+                                }
+                                for item in role_templates
+                            ],
+                        }
+                else:
+                    print(
+                        f"[GoalEvolve][round={round_index:03d}][recovery] "
+                        "reuse_completed_raw_teacher_plan=true",
+                        flush=True,
+                    )
+                teacher_plan_payload["paper_cards"] = list(paper_cards)
                 if not bool(teacher_plan_payload.get("format_valid")):
-                    raise RuntimeError("teacher_markdown_format_invalid_after_repair")
+                    if str(teacher_plan_payload.get("teacher_failure_kind") or "") == "external_turn_failure":
+                        # Preserve a completed external-turn diagnostic before
+                        # aborting the round.  A later CLI retry can safely
+                        # plan again, while the failed provider response stays
+                        # auditable instead of disappearing with the exception.
+                        atomic_json(round_root / "teacher_plan.json", teacher_plan_payload)
+                        atomic_json(
+                            round_root / "teacher_plan.parsed.json",
+                            dict(teacher_plan_payload.get("parsed_markdown") or {}),
+                        )
+                    raise RuntimeError(self._teacher_plan_failure(teacher_plan_payload))
                 parsed_plan = dict(teacher_plan_payload.get("parsed_markdown") or {})
 
                 def materialize(plan: Mapping[str, object]):
@@ -762,6 +1372,12 @@ class GoalEvolveEngine:
                             role_templates,
                             power_reclaim_phase=power_reclaim_phase,
                         ),
+                        retrieval_audit=(
+                            dict(teacher_plan_payload.get("retrieval_audit") or {})
+                            if "retrieval_audit" in teacher_plan_payload
+                            else None
+                        ),
+                        decision_context=decision_context,
                         repair_index=repair_index,
                     )
                     controller_repairs.append(repaired)
@@ -806,7 +1422,7 @@ class GoalEvolveEngine:
                 teacher_plan_payload["repository_graph_enabled"] = self.repository_graph_enabled
                 teacher_plan_payload["search_policy"] = search_policy
                 teacher_plan_payload["paper_cards"] = paper_cards
-                teacher_plan_payload["historical_seeds"] = list(historical_seeds)
+                teacher_plan_payload["historical_seeds"] = list(teacher_visible_seeds)
                 cited_cards = [
                     str(card_id)
                     for idea in list(parsed_plan.get("evolution_idea_records") or ())
@@ -990,6 +1606,43 @@ class GoalEvolveEngine:
                 )
             )
         candidates.sort(key=lambda item: assigned_student_ids.index(item.student_id))
+        external_edit_failures = [
+            candidate
+            for candidate in candidates
+            if self._is_retryable_external_edit_failure(candidate)
+        ]
+        if external_edit_failures:
+            atomic_json(
+                round_root / "external_edit_retry.json",
+                {
+                    "schema_version": "goalevolve.v2.external-edit-retry.v1",
+                    "round": round_index,
+                    "parent_id": parent_at_start.parent_id,
+                    "parent_source_hash": parent_at_start.source_hash,
+                    "student_failures": [
+                        {
+                            "student_id": candidate.student_id,
+                            "hypothesis_id": candidate.hypothesis.hypothesis_id,
+                            "evaluation_error": candidate.evaluation_error,
+                            "artifacts": dict(candidate.artifacts),
+                        }
+                        for candidate in external_edit_failures
+                    ],
+                    "retry_authority": "same_teacher_plan_same_student",
+                },
+            )
+            candidates = [
+                candidate
+                for candidate in candidates
+                if candidate not in external_edit_failures
+            ]
+            if not candidates:
+                print(
+                    f"[GoalEvolve][round={round_index:03d}][recovery] "
+                    "external_edit_failure=true rerun=false",
+                    flush=True,
+                )
+                return parent
         rows: list[dict[str, Any]] = []
         for candidate in candidates:
             # Every evaluator receives the same minimum source/diff provenance
@@ -1084,6 +1737,9 @@ class GoalEvolveEngine:
             artifact = round_root / "students" / candidate.student_id / "artifacts"
             artifact.mkdir(parents=True, exist_ok=True)
             (artifact / "implementation.diff").write_text(candidate.implementation_diff, encoding="utf-8")
+            candidate.artifacts.setdefault(
+                "implementation_diff", str(artifact / "implementation.diff")
+            )
             atomic_json(artifact / "source_commit.json", {"source_commit": candidate.source_commit})
             atomic_json(artifact / "hypothesis.json", candidate.hypothesis.to_dict())
             atomic_json(artifact / "candidate.json", candidate.to_dict())
@@ -1115,9 +1771,32 @@ class GoalEvolveEngine:
                 + "\n",
                 encoding="utf-8",
             )
+            # Student reflection is an observer of the Controller's completed
+            # decision, not an input to it.  In particular, the raw source
+            # evaluation above does not yet know the exact-recipe no-diff
+            # baseline or the final lineage-admission verdict.  Record those
+            # immutable facts before EPD projection, so the next Teacher sees
+            # a reflection grounded in the same evidence that produced the
+            # persisted attempt.
+            self._record_student_reflection(
+                candidate=candidate,
+                parent=parent_at_start,
+                comparison_parent=comparison_parent,
+                verdict=verdict,
+                decision_context=decision_context,
+                student_id=candidate.student_id,
+                workspace=round_root / "students" / candidate.student_id / "workspace",
+                prompt_path=prompt_paths[candidate.student_id],
+                round_index=round_index,
+            )
+            # The reflection adds observer artifacts only.  Persist the
+            # candidate snapshot after that projection, but keep ``verdict``
+            # as the already-computed Controller authority.
+            atomic_json(artifact / "candidate.json", candidate.to_dict())
             rows.append({"candidate": candidate, "verdict": verdict, "comparison_parent": comparison_parent})
             epd_database.record(round_index=round_index, parent=comparison_parent, candidate=candidate, verdict=verdict)
         selected = self.promotion_policy.choose([(row["candidate"], row["verdict"]) for row in rows])
+        promotion_repository_graph: dict[str, object] | None = None
         if selected:
             candidate, verdict = selected
             parent = Parent(
@@ -1137,6 +1816,7 @@ class GoalEvolveEngine:
             if callable(promote_candidate):
                 candidate_source = Path(candidate.artifacts["candidate_source"]) if candidate.artifacts.get("candidate_source") else None
                 promote_candidate(state_root=self.state_root, parent=parent_at_start, candidate=parent, candidate_source=candidate_source, candidate_artifacts=candidate.artifacts)
+            promotion_repository_graph = self._refresh_promoted_parent_repository_graph(parent=parent)
             attempt_id = "EPD_" + sha256_json(
                 {"source": candidate.source_commit, "hypothesis": candidate.hypothesis.hypothesis_id}
             )[:16]
@@ -1206,7 +1886,11 @@ class GoalEvolveEngine:
             "token_usage": token_usage,
             "student_count": len(rows),
             "promoted_student": promoted,
+            "promoted_mechanism_family": (
+                selected[0].hypothesis.mechanism_family if selected else ""
+            ),
             "parent_after": parent.to_dict(),
+            "promoted_parent_repository_graph": promotion_repository_graph,
             "results": [{"student_id": row["candidate"].student_id, "hypothesis_id": row["candidate"].hypothesis.hypothesis_id, "timing_recipe_id": row["candidate"].hypothesis.timing_recipe_id, "comparison_parent": row["comparison_parent"].to_dict(), "verdict": row["verdict"].to_dict()} for row in rows],
         }
         atomic_json(round_root / "round.json", summary)
@@ -1331,6 +2015,153 @@ class GoalEvolveEngine:
         markdown = str(repair.get("teacher_markdown") or "").strip()
         return markdown
 
+    @staticmethod
+    def _teacher_plan_failure(payload: Mapping[str, object]) -> str:
+        """Preserve a provider failure instead of misclassifying it as Markdown."""
+        if str(payload.get("teacher_failure_kind") or "") == "external_turn_failure":
+            detail = str(payload.get("teacher_detail") or "codex_turn_failed").strip()
+            return f"teacher_external_turn_failed:{detail}"
+        return "teacher_markdown_format_invalid_after_repair"
+
+    @staticmethod
+    def _seed_revalidation_external_teacher_fallback(
+        *,
+        templates: Sequence[Hypothesis],
+        diagnosis,
+        failed_plan: Mapping[str, object],
+    ) -> tuple[tuple[Hypothesis, ...], dict[str, object]] | None:
+        """Recover one scheduled seed without substituting an Explorer plan.
+
+        An unavailable model may not broaden a deterministic recovery into a
+        new search.  This path is deliberately limited to one controller-bound
+        seed with a readable historical source pattern.  It emits the same
+        Markdown protocol consumed by normal assignment materialization, so a
+        fresh Student diff and the full evaluator gate remain mandatory.
+        """
+        if str(failed_plan.get("teacher_failure_kind") or "") != "external_turn_failure":
+            return None
+        seed_templates = tuple(
+            template
+            for template in templates
+            if template.student_role == "explorer"
+            and template.role_mode == "seed_revalidation"
+            and len(template.candidate_options) == 1
+        )
+        if len(seed_templates) != 1:
+            return None
+        template = seed_templates[0]
+        option = dict(template.candidate_options[0])
+        seed_id = str(option.get("candidate_id") or "").strip()
+        hooks = tuple(
+            str(item).strip()
+            for item in list(option.get("source_hooks") or ())
+            if str(item).strip()
+        )
+        anchors = tuple(
+            str(item).strip()
+            for item in list(option.get("source_anchors") or ())
+            if str(item).strip()
+        )
+        signals = tuple(
+            str(item).strip()
+            for item in list(option.get("expected_signals") or ())
+            if str(item).strip()
+        )
+        reference_diffs = tuple(
+            Path(str(item)).resolve()
+            for item in list(option.get("reference_diff_paths") or ())
+            if str(item).strip()
+        )
+        if (
+            not seed_id
+            or not hooks
+            or not anchors
+            or not signals
+            or not reference_diffs
+            or any(path.suffix != ".diff" or not path.is_file() for path in reference_diffs)
+        ):
+            return None
+        claim = str(option.get("summary") or option.get("claim") or template.claim).strip()
+        if not claim:
+            return None
+        idea_reference = "seed_revalidation_1"
+        falsification = (
+            "The scheduled source boundary does not emit its required "
+            "activation signals after a fresh official evaluation."
+        )
+        idea = {
+            "reference": idea_reference,
+            "idea": claim,
+            "predicted_stage_effect": "Revalidate the scheduled source decision boundary.",
+            "source_hooks": hooks,
+            "expected_signals": signals,
+                "activation_signals": tuple(
+                    str(item).strip()
+                    for item in list(option.get("activation_signals") or signals)
+                    if str(item).strip()
+                ),
+            "source_evidence": anchors,
+            "evaluation_recipe": template.timing_recipe_id,
+            "falsification_condition": falsification,
+            "priority": 0,
+        }
+        assignment = {
+            "student_id": template.student_id,
+            "role": template.student_role,
+            "candidate_id": seed_id,
+            "idea_reference": idea_reference,
+            "claim": claim,
+            "selection_rationale": "External Teacher unavailable; execute the single controller-scheduled seed revalidation.",
+            "source_hooks": hooks,
+            "expected_signals": signals,
+            "activation_signals": tuple(
+                str(item).strip()
+                for item in list(option.get("activation_signals") or signals)
+                if str(item).strip()
+            ),
+            "source_evidence": anchors,
+            "evaluation_recipe": template.timing_recipe_id,
+            "falsification_condition": falsification,
+        }
+        markdown = render_teacher_plan(
+            diagnosis_summary=(
+                "External Teacher unavailable; use only the already scheduled "
+                "seed revalidation. "
+                + str(getattr(diagnosis, "dominant_bottleneck", "") or "")
+            ),
+            parent_policy="Keep the checked parent; promotion remains controller-owned.",
+            evolution_ideas=(idea,),
+            assignments=(assignment,),
+        )
+        parsed = parse_teacher_plan(markdown)
+        errors = teacher_plan_validation_errors(
+            markdown,
+            required_roles=(template.student_role,),
+            require_explorer_ideas=False,
+            require_source_investigation=False,
+            require_evaluation_recipe=True,
+        )
+        if errors:
+            return None
+        payload = {
+            "schema_version": "goalevolve.v2.teacher_plan.v2",
+            "planner_mode": "seed_revalidation_fallback",
+            "teacher_ok": True,
+            "teacher_detail": "external_teacher_failure_recovered_by_single_scheduled_seed",
+            "format_valid": True,
+            "format_validation": [],
+            "teacher_markdown": markdown,
+            "parsed_markdown": parsed,
+            "hypotheses": [],
+            "seed_revalidation_fallback": {
+                "seed_id": seed_id,
+                "reference_diff_paths": [str(path) for path in reference_diffs],
+                "external_teacher_detail": str(failed_plan.get("teacher_detail") or ""),
+                "authority": "single_controller_scheduled_seed_only",
+            },
+        }
+        return (template,), payload
+
     def _configured_power_reclaim_phase(self) -> str:
         config = getattr(self.evaluator, "config", None)
         return str(getattr(config, "power_reclaim_phase", "") or "").strip()
@@ -1412,6 +2243,168 @@ class GoalEvolveEngine:
         return str(payload.get("teacher_markdown") or "").strip()
 
     @staticmethod
+    def _completed_codex_markdown(artifact_root: Path) -> str:
+        """Return a raw Codex result only when its event stream completed."""
+        message_path = artifact_root / "last_message.md"
+        events_path = artifact_root / "events.jsonl"
+        if not message_path.is_file() or not events_path.is_file():
+            return ""
+        completed = False
+        try:
+            for line in events_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+                event = json.loads(line)
+                if isinstance(event, Mapping) and event.get("type") == "turn.completed":
+                    completed = True
+        except (OSError, json.JSONDecodeError):
+            return ""
+        if not completed:
+            return ""
+        try:
+            return message_path.read_text(encoding="utf-8", errors="ignore").strip()
+        except OSError:
+            return ""
+
+    def _recover_completed_raw_teacher_plan(
+        self,
+        *,
+        round_root: Path,
+        round_index: int,
+        parent: Parent,
+        diagnosis,
+        role_templates: Sequence[Hypothesis],
+        previous_review: Mapping[str, object],
+        decision_context: Mapping[str, object],
+        repository_graph: Mapping[str, object] | None,
+        search_policy: Mapping[str, object],
+    ) -> dict[str, object] | None:
+        """Rebuild a plan payload from a completed pre-persistence Codex turn.
+
+        The runtime writes ``last_message.md`` before returning to the Engine.
+        A host interruption in that narrow interval must not discard a paid
+        plan, but the raw file is never authoritative by itself: it has to
+        satisfy the same Markdown, source-inspection, draft, and Controller
+        retrieval checks used by a live Codex Teacher plan.
+        """
+        if (round_root / "round.json").is_file() or (round_root / "teacher_plan.json").is_file():
+            return None
+        plan_root = round_root / "teacher" / "plan"
+        markdown = self._completed_codex_markdown(plan_root)
+        if not markdown:
+            return None
+        required_roles = tuple(item.student_role for item in role_templates)
+        required_student_roles = {
+            str(item.student_id): item.student_role
+            for item in role_templates
+            if str(item.student_id)
+        }
+        requires_explorer_ideas = requires_fresh_explorer_work(role_templates)
+        errors = teacher_plan_validation_errors(
+            markdown,
+            required_roles=required_roles,
+            required_student_roles=required_student_roles,
+            require_explorer_ideas=requires_explorer_ideas,
+            require_source_investigation=requires_explorer_ideas,
+            require_evaluation_recipe=True,
+        )
+        if errors:
+            return None
+
+        draft_signatures: tuple[dict[str, object], ...] = ()
+        retrieval_packet: dict[str, object] = {}
+        retrieval_audit: dict[str, object] = {}
+        validation_attempts: list[dict[str, object]] = []
+        if requires_explorer_ideas:
+            draft_root = round_root / "teacher" / "draft_signatures"
+            draft_markdown = self._completed_codex_markdown(draft_root)
+            if not draft_markdown:
+                return None
+            draft_signatures = parse_draft_signatures(draft_markdown)
+            draft_errors = draft_signature_validation_errors(draft_signatures)
+            validation_attempts.append(
+                {
+                    "attempt": "draft_signatures",
+                    "operation_id": f"r{round_index:03d}_teacher_draft_signatures",
+                    "errors": list(draft_errors),
+                }
+            )
+            if draft_errors:
+                return None
+            trace_path = round_root / "teacher_epd_retrieval_trace.jsonl"
+            packet_path = round_root / "teacher_epd_retrieval_packet.json"
+            raw_packet = load_json(packet_path, {}) or {}
+            if not isinstance(raw_packet, dict) or not trace_path.is_file():
+                return None
+            packet_signature_ids = tuple(
+                str(row.get("signature_id") or "").strip()
+                for row in list(raw_packet.get("signatures") or ())
+                if isinstance(row, Mapping)
+            )
+            signature_ids = tuple(
+                str(row.get("signature_id") or "").strip()
+                for row in draft_signatures
+            )
+            if packet_signature_ids != signature_ids:
+                return None
+            retrieval_audit = validate_explorer_retrieval_audit(
+                state_root=self.state_root,
+                signatures=draft_signatures,
+                trace_path=trace_path,
+            )
+            if not bool(retrieval_audit.get("accepted")):
+                return None
+            retrieval_packet = dict(raw_packet)
+            retrieval_packet["artifact_path"] = str(packet_path)
+
+        event_paths = tuple(
+            path
+            for path in sorted((round_root / "teacher").glob("**/events.jsonl"))
+            if path.is_file()
+        )
+        source_audit = source_inspection_audit(event_paths)
+        if requires_explorer_ideas and not bool(source_audit.get("satisfied")):
+            return None
+        validation_attempts.append(
+            {
+                "attempt": 0,
+                "operation_id": (
+                    f"r{round_index:03d}_teacher_plan_novelty_review"
+                    if requires_explorer_ideas
+                    else f"r{round_index:03d}_teacher_plan"
+                ),
+                "errors": [],
+            }
+        )
+        parsed = parse_teacher_plan(markdown)
+        return {
+            "schema_version": "goalevolve.v2.teacher_plan.v2",
+            "teacher_ok": True,
+            "teacher_detail": "recovered_completed_raw_teacher_plan",
+            "format_valid": True,
+            "format_validation": validation_attempts,
+            "format_repair_artifacts": [],
+            "source_inspection_audit": source_audit,
+            "draft_signatures": list(draft_signatures),
+            "retrieval_packet": retrieval_packet,
+            "retrieval_audit": retrieval_audit,
+            "diagnosis": diagnosis.to_dict(),
+            "epd": self._epd().teacher_summary(),
+            "observations": ObservationMemory(self.state_root).summary(),
+            "repository_graph": dict(repository_graph or {}),
+            "search_policy": dict(search_policy),
+            "previous_review": dict(previous_review),
+            "teacher_markdown": markdown,
+            "parsed_markdown": parsed,
+            "hypotheses": [],
+            "raw_teacher_artifact_recovery": {
+                "kind": "completed_raw_teacher_plan",
+                "plan_root": str(plan_root),
+                "draft_root": str(round_root / "teacher" / "draft_signatures"),
+                "source_inspection_event_paths": [str(path) for path in event_paths],
+                "retrieval_trace": str(round_root / "teacher_epd_retrieval_trace.jsonl"),
+            },
+        }
+
+    @staticmethod
     def _incomplete_teacher_plan(
         round_root: Path,
     ) -> tuple[list[Hypothesis], dict[str, object]] | None:
@@ -1428,6 +2421,11 @@ class GoalEvolveEngine:
         payload = load_json(path, {}) or {}
         if not isinstance(payload, dict):
             raise RuntimeError(f"incomplete_round_teacher_plan_invalid:{path}")
+        if str(payload.get("teacher_failure_kind") or "") == "external_turn_failure":
+            # No immutable allocation exists yet.  Keep the failed provider
+            # artifact for audit, but allow the next CLI invocation to obtain
+            # a fresh Teacher plan for this still-unstarted round.
+            return None
         hypotheses: list[Hypothesis] = []
         tuple_fields = {
             "source_hooks",
@@ -1471,6 +2469,16 @@ class GoalEvolveEngine:
                     f"incomplete_round_hypothesis_invalid:{path}:{exc}"
                 ) from exc
         if not hypotheses:
+            # A controller-level rejection is persisted before materialized
+            # hypotheses exist.  Keep a structurally valid Teacher Markdown
+            # plan recoverable so a fixed controller admission rule can
+            # revalidate the exact paid Teacher output without re-planning a
+            # different source experiment.  Other empty plans remain invalid.
+            if (
+                list(payload.get("controller_assignment_errors") or ())
+                and GoalEvolveEngine._recoverable_teacher_markdown(payload)
+            ):
+                return hypotheses, payload
             raise RuntimeError(f"incomplete_round_has_no_hypotheses:{path}")
         return hypotheses, payload
 
@@ -1527,6 +2535,23 @@ class GoalEvolveEngine:
             )
         return recovered
 
+    @staticmethod
+    def _is_retryable_external_edit_failure(candidate: CandidateResult) -> bool:
+        """Identify an editor transport failure before a source experiment exists.
+
+        A Codex invocation that never completed and produced no unified diff
+        has not tested the assigned mechanism.  It must not consume a recipe
+        baseline, enter EPD as a QoR result, or finalize the round.  The
+        incomplete round keeps its immutable Teacher plan and is retried with
+        the same Student on the next CLI invocation.
+        """
+
+        error = str(candidate.evaluation_error or "").lower()
+        return (
+            not candidate.implementation_diff.strip()
+            and error.startswith("codex_failed:")
+        )
+
     def _evaluate_parallel(self, *, parent: Parent, hypotheses, student_ids, prompt_paths: dict[str, Path], round_index: int) -> list[CandidateResult]:
         jobs = {}
         results: list[CandidateResult] = []
@@ -1575,7 +2600,12 @@ class GoalEvolveEngine:
         codex_reports: dict[str, object] = {"initial": edit.to_dict(), "repairs": []}
         candidate.artifacts["codex"] = json.dumps(codex_reports, sort_keys=True)
         candidate.artifacts.update(edit.artifacts)
-        max_repairs = int(getattr(getattr(self.student_editor, "config", None), "max_repair_attempts", 0))
+        exact_seed_materialization = self._is_exact_seed_materialization(hypothesis)
+        max_repairs = (
+            0
+            if exact_seed_materialization
+            else int(getattr(getattr(self.student_editor, "config", None), "max_repair_attempts", 0))
+        )
         repair_artifacts: dict[str, str] = {}
         for repair_attempt in range(1, max_repairs + 1):
             if not self._repairable_engineering_failure(candidate):
@@ -1626,7 +2656,10 @@ class GoalEvolveEngine:
         # return a candidate to its author when it worsens the parent's DRV;
         # inherited violations are a planning concern, not a source-level
         # regression introduced by this Student.
-        if self._repairable_constraint_failure(candidate=candidate, parent=parent):
+        if (
+            not exact_seed_materialization
+            and self._repairable_constraint_failure(candidate=candidate, parent=parent)
+        ):
             constraint_context = self._constraint_failure_context(candidate=candidate, workspace=workspace)
             repair_hypothesis = self._repair_hypothesis(
                 hypothesis=hypothesis,
@@ -1679,12 +2712,24 @@ class GoalEvolveEngine:
         provisional = self.promotion_policy.classify(
             contract=self.contract, parent=parent, candidate=candidate
         )
-        telemetry_incomplete = (
-            not provisional.mechanism_fired
-            and provisional.integrity_ok
+        if (
+            exact_seed_materialization
+            and provisional.state == "verified_qor_unattributed"
+            and not provisional.mechanism_fired
+        ):
+            # An exact reference transform is intentionally immutable after
+            # the verified zero-fuzz apply.  Missing entry telemetry must stay
+            # visible, but it is not an evaluation failure and cannot erase a
+            # complete official QoR gain.  In particular, an outcome counter
+            # may truthfully be zero after the policy has entered and examined
+            # work; seed cards now identify the entry subset separately.
+            candidate.artifacts["exact_seed_materialization_outcome"] = (
+                "missing_activation_signal_source_preserved_for_observation"
+            )
+        elif (
+            provisional.state == "verified_qor_unattributed"
             and not self._has_conclusive_nonactivation(candidate)
-        )
-        if provisional.state == "verified_qor_unattributed" or telemetry_incomplete:
+        ):
             # Instrumentation itself is a source edit.  Preserve the exact
             # tree and CandidateResult that produced the verified QoR before
             # asking the same Student to touch it.  A measurement-neutral
@@ -1850,8 +2895,8 @@ class GoalEvolveEngine:
                 )
                 # A previously unattributed QoR winner keeps its original
                 # result unless the instrumented run is at least as good.
-                # For a no-gain activation repair, retain the rerun itself so
-                # EPD/Teacher see whether the mechanism actually fired.
+                # Refuted candidates never enter this repair path: telemetry
+                # cannot establish an otherwise unmeasured QoR improvement.
                 if provisional.state != "verified_qor_unattributed":
                     candidate = repaired_candidate
                 elif (
@@ -1865,39 +2910,73 @@ class GoalEvolveEngine:
                     candidate = original_candidate
             else:
                 candidate = original_candidate
-        self._record_student_reflection(
-            candidate=candidate,
-            parent=parent,
-            student_id=student_id,
-            workspace=workspace,
-            prompt_path=prompt_path,
-            round_index=round_index,
-        )
         return candidate
+
+    @staticmethod
+    def _is_exact_seed_materialization(hypothesis: Hypothesis) -> bool:
+        """Keep only a materializable controller transform immutable after apply."""
+        if (
+            hypothesis.student_role != "explorer"
+            or hypothesis.role_mode != "seed_revalidation"
+            or len(hypothesis.candidate_options) != 1
+        ):
+            return False
+        option = dict(hypothesis.candidate_options[0])
+        if str(option.get("materialization_mode") or "").strip() != "exact_reference_patch":
+            return False
+        if not str(option.get("candidate_id") or option.get("seed_id") or "").strip():
+            return False
+        reference_paths = tuple(
+            str(path).strip()
+            for path in list(option.get("reference_diff_paths") or ())
+            if str(path).strip()
+        )
+        if len(reference_paths) != 1 or Path(reference_paths[0]).suffix != ".diff":
+            return False
+        parent_hashes = option.get("reference_parent_file_hashes")
+        return isinstance(parent_hashes, Mapping) and bool(parent_hashes)
 
     def _record_student_reflection(
         self,
         *,
         candidate: CandidateResult,
         parent: Parent,
+        comparison_parent: Parent | None = None,
+        verdict: EvidenceVerdict | None = None,
+        decision_context: Mapping[str, object] | None = None,
         student_id: str,
         workspace: Path,
         prompt_path: Path,
         round_index: int,
     ) -> None:
-        """Persist advisory Student reflection after the final source evaluation.
+        """Persist advisory Student reflection after the final Controller verdict.
 
-        It runs after every repair/evaluation decision but before the outer
-        controller records EPD. No reflection field is consulted by promotion
-        or the controller-owned ``epd_status`` mapping.
+        ``_edit_then_evaluate`` deliberately returns only raw source evidence.
+        This method runs once the Controller has measured any exact-recipe
+        no-diff parent and classified the final candidate, but before the EPD
+        record is projected.  No reflection field is consulted by promotion
+        or by the controller-owned ``epd_status`` mapping.
         """
+        evidence_path = self._write_student_reflection_evidence(
+            candidate=candidate,
+            parent=parent,
+            comparison_parent=comparison_parent,
+            verdict=verdict,
+            decision_context=decision_context,
+            workspace=workspace,
+        )
+        candidate.artifacts["student_reflection_controller_evidence"] = str(
+            evidence_path
+        )
         reporter = getattr(self.student_editor, "reflect", None)
+        reflection_failure = ""
         if not callable(reporter):
             detail = "reflection_unavailable:student_editor_has_no_reflect"
             reflection = "Student reflection was unavailable because this legacy test editor has no observer-only reflection operation."
             recommendation = "unavailable"
             artifacts: Mapping[str, str] = {}
             report_payload: Mapping[str, object] = {"ok": False, "detail": detail}
+            reflection_failure = detail
         else:
             try:
                 report = reporter(
@@ -1924,11 +3003,50 @@ class GoalEvolveEngine:
                     "ok": bool(getattr(report, "ok", False)),
                     "detail": str(getattr(report, "detail", "reflection_unavailable")),
                 }
+                if not bool(getattr(report, "ok", False)) or not reflection.strip():
+                    reflection_failure = str(
+                        getattr(report, "detail", "reflection_unavailable")
+                        or "reflection_unavailable"
+                    )
             except Exception as exc:
                 reflection = f"Student reflection was unavailable: {type(exc).__name__}."
                 recommendation = "unavailable"
                 artifacts = {}
                 report_payload = {"ok": False, "detail": f"reflection_exception:{type(exc).__name__}"}
+                reflection_failure = str(report_payload["detail"])
+
+        narrator_artifacts: Mapping[str, str] = {}
+        narrator_payload: Mapping[str, object] | None = None
+        if reflection_failure and self.narrator is not None:
+            try:
+                narrated = self.narrator.summarize(
+                    state_root=self.state_root,
+                    round_index=round_index,
+                    cwd=(workspace / "source") if (workspace / "source").is_dir() else workspace,
+                    purpose="student_reflection_fallback",
+                    evidence={
+                        "reflection_failure": reflection_failure,
+                        "controller_evidence_path": str(evidence_path),
+                    },
+                )
+                narrator_payload = {
+                    "ok": bool(getattr(narrated, "ok", False)),
+                    "detail": str(getattr(narrated, "detail", "")),
+                    "operation_id": str(getattr(narrated, "operation_id", "")),
+                    "thread_id": getattr(narrated, "thread_id", None),
+                }
+                narrator_artifacts = {
+                    str(key): str(value)
+                    for key, value in dict(getattr(narrated, "artifacts", {}) or {}).items()
+                }
+                narrated_text = str(getattr(narrated, "text", "") or "").strip()
+                if bool(getattr(narrated, "ok", False)) and narrated_text:
+                    reflection = narrated_text
+            except Exception as exc:
+                narrator_payload = {
+                    "ok": False,
+                    "detail": f"narrator_exception:{type(exc).__name__}",
+                }
         destination = workspace.parent / "artifacts" / "student_reflection.md"
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(reflection.strip() + "\n", encoding="utf-8")
@@ -1938,6 +3056,85 @@ class GoalEvolveEngine:
         candidate.artifacts.update(
             {f"student_reflection_{key}": value for key, value in artifacts.items()}
         )
+        if narrator_payload is not None:
+            candidate.artifacts["student_reflection_narrator_report"] = json.dumps(
+                narrator_payload, sort_keys=True
+            )
+            candidate.artifacts.update(
+                {
+                    f"student_reflection_narrator_{key}": value
+                    for key, value in narrator_artifacts.items()
+                }
+            )
+
+    @staticmethod
+    def _write_student_reflection_evidence(
+        *,
+        candidate: CandidateResult,
+        parent: Parent,
+        comparison_parent: Parent | None,
+        verdict: EvidenceVerdict | None,
+        decision_context: Mapping[str, object] | None,
+        workspace: Path,
+    ) -> Path:
+        """Write the Controller-owned evidence packet consumed by reflection.
+
+        Keeping this as a small file rather than mutating the Student prompt
+        lets the EPD retain exactly what the Student was allowed to observe.
+        It is intentionally written after verdict construction and contains no
+        authority for editing, lifecycle assignment, or promotion.
+        """
+        destination = workspace.parent / "artifacts" / "student_reflection_evidence.json"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        artifact_keys = (
+            "checkpoint_metrics",
+            "power_timing_cell_tradeoff",
+            "evaluation_log",
+            "metrics_csv",
+            "official_4of4_log",
+            "matched_recipe_baseline",
+            "preflight",
+            "execution",
+            "implementation_diff",
+        )
+        atomic_json(
+            destination,
+            {
+                "schema_version": "goalevolve.v2.student-reflection-evidence.v1",
+                "authority": "controller_observation_only",
+                "lineage_parent": parent.to_dict(),
+                "comparison_parent": (
+                    comparison_parent.to_dict()
+                    if comparison_parent is not None
+                    else {"status": "not_available_before_controller_classification"}
+                ),
+                "decision_context": dict(decision_context or {}),
+                "candidate": {
+                    "hypothesis_id": candidate.hypothesis.hypothesis_id,
+                    "metrics": dict(candidate.metrics),
+                    "phase_signals": dict(candidate.phase_signals),
+                    "official_checks": {
+                        check.name: {
+                            "passed": check.passed,
+                            "detail": check.detail,
+                        }
+                        for check in candidate.checks
+                    },
+                    "evaluation_error": candidate.evaluation_error,
+                    "evidence_artifacts": {
+                        key: candidate.artifacts[key]
+                        for key in artifact_keys
+                        if candidate.artifacts.get(key)
+                    },
+                },
+                "final_verdict": (
+                    verdict.to_dict()
+                    if verdict is not None
+                    else {"status": "not_available_before_controller_classification"}
+                ),
+            },
+        )
+        return destination
 
     @staticmethod
     def _repairable_engineering_failure(candidate: CandidateResult) -> bool:
@@ -2520,6 +3717,9 @@ class GoalEvolveEngine:
             candidate_source=student_root / "workspace" / "source",
             candidate_artifacts=artifacts,
         )
+        champion_repository_graph = self._refresh_promoted_parent_repository_graph(
+            parent=champion
+        )
         self._cache_execution_champion_baseline(
             champion=champion,
             candidate=candidate,
@@ -2540,6 +3740,7 @@ class GoalEvolveEngine:
             "source_attribution": "preserved_from_candidate_evidence",
             "admission": "strictly_smaller_frozen_three_metric_distance_with_build_flow_metrics_lec_zero_drv",
             "runtime_and_observer_scores_used": False,
+            "promoted_parent_repository_graph": champion_repository_graph,
         }
         history.append(decision)
         atomic_json(

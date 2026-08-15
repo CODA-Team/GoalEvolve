@@ -84,6 +84,7 @@ GoalEvolve/
 | AE-1 | Set up the project environment and check the release interfaces. |
 | AE-2 | Rebuild one released evolved OpenROAD source and replay its captured result. |
 | AE-3 | Launch a GoalEvolve campaign for a supplied design or rerun full source evolution. |
+| AE-4 | Evaluate the AES-evolved executable on the seven non-AES contest designs. |
 
 Use AE-1 and AE-2 to set up the release and reproduce one of its eight fixed
 OpenROAD artifacts.
@@ -161,8 +162,7 @@ PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner
 `--verbose` streams configure, build, and flow logs to the terminal. Each
 artifact preserves its recorded evaluation mode; its numerical tolerances and
 expected evidence are versioned in [release_manifest.json](artifact_evaluation/release_manifest.json).
-The selected modes include `power_then_timing`, NVDLA-A `power_only`, and
-NVDLA-C `timing_only`. See
+The selected modes include `power_then_timing` and NVDLA-C `timing_only`. See
 [AE2_SELECTIONS.md](artifact_evaluation/AE2_SELECTIONS.md) for all artifact
 IDs, source snapshots, Tcl schedules, QoR, and distances to target. Substitute
 any listed ID for `aes_r58_student1` to replay that design.
@@ -171,6 +171,28 @@ any listed ID for `aes_r58_student1` to replay that design.
 the prepared host environment can launch OpenROAD. A formal AE-2 replay never
 uses that external binary; it builds or reuses
 `outputs/ae2/<released-artifact>/build/bin/openroad` from the selected source.
+
+## AE-4: Reproduce cross-design transfer
+
+AE-4 uses the **locally rebuilt and passing** AES AE-2 executable on the seven
+non-AES designs.  It first verifies
+`outputs/ae2/aes_r58_student1/report/ae2_report.json`, then generates its
+evaluation-local RMP ABC Liberty from the bundled ASAP7 libraries.  No machine
+absolute path, prebuilt binary hash, or generated output is versioned.
+
+```bash
+source outputs/toolchain/activate.sh
+
+# Required once after cloning: build and pass AES AE-2 as shown above.
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" AE4/run_ae4.py prepare
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" AE4/run_ae4.py run --jobs 1
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" AE4/run_ae4.py collect
+```
+
+`--jobs 1` is the safe default for a shared host; raise it only when memory and
+CPU capacity permit parallel OpenROAD flows.  The 21 generated flows, logs and
+summaries are ignored under `AE4/results/`.  See [AE4/README.md](AE4/README.md)
+for the three schedules and the interpretation of the resulting report.
 
 ## AE-3: Run a new source-evolution campaign
 
@@ -259,6 +281,34 @@ PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli run \
 Run the same command again to append rounds to the same campaign. The shipped
 AES and JPEG profiles already have reviewed targets; see
 [experiments/README.md](experiments/README.md) for the other supplied designs.
+
+### P0-rooted AE-3 (recommended)
+
+The P0 command copies a reviewed template into a new isolated campaign,
+measures and freezes its baseline, then starts evolution.  `ast_graph` is the
+default evidence path; `openroad_cards` is the explicit no-AST ablation.  Both
+commands require the credential file configured above and a working host
+OpenROAD build environment from AE-1.
+
+```bash
+source outputs/toolchain/activate.sh
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli p0 list
+
+# AST-repository-graph campaign
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli p0 start \
+  --design aes_cipher_top --run-id aes_ast_10r --output-root outputs/p0_campaigns \
+  --planning-mode ast_graph --rounds 10
+
+# Comparable OpenROAD-card-only ablation; choose a different run ID.
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli p0 start \
+  --design aes_cipher_top --run-id aes_cards_10r --output-root outputs/p0_campaigns \
+  --planning-mode openroad_cards --rounds 10
+```
+
+Use `p0 status --campaign <campaign-directory>` to inspect a campaign and
+`p0 run --campaign <campaign-directory> --rounds N` to resume it.  Generated
+P0 campaigns stay under `outputs/` and are never a replacement for a fixed
+AE-2 artifact.
 
 ## Outputs and result inspection
 

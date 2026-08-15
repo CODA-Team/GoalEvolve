@@ -15,7 +15,11 @@ from .core.provenance import toolchain_fingerprint
 from .evaluation.promotion import PowerFirstPromotion, StrictEvidencePromotion
 from .execution.execution import ExecutionPolicy
 from .planning.scope import SourceScopeResolver
-from .planning.historical_seeds import load_historical_seed_cards
+from .planning.historical_seeds import (
+    load_historical_seed_cards,
+    load_historical_seed_revalidation_schedule,
+)
+from .planning.parent_selection import ParentSelectionSettings
 from .evaluation.contest2026 import Contest2026Config, Contest2026OpenROADEvaluator, _project_toolchain
 from .agents.codex_student import CodexStudentConfig, CodexStudentEditor, NoopStudentEditor
 from .agents.narrator import CodexNarrativeSummarizer, CodexNarratorConfig
@@ -34,6 +38,7 @@ DEFAULT_OPENROAD_SEED = Path(
 )
 DEFAULT_BENCHMARK_ROOT = Path(os.environ.get("GOALEVOLVE_BENCHMARK_ROOT", PROJECT_ROOT / "third_party" / "benchmarks" / "benchmarks"))
 DEFAULT_CREDENTIAL_ENV = PROJECT_ROOT / "config" / "credentials" / "goalevolve_codex.env"
+PLANNING_MODES = frozenset({"ast_graph", "openroad_cards"})
 
 
 @dataclass(frozen=True)
@@ -124,6 +129,7 @@ class ExperimentConfig:
     declared_power_reclaim_profile: PowerReclaimProfile | None = None
     enforce_declared_power_reclaim_profile: bool = False
     historical_seed_cards: tuple[dict[str, object], ...] = ()
+    historical_seed_revalidation_schedule: tuple[dict[str, object], ...] = ()
     allowed_patch_roots: tuple[str, ...] = ()
     require_cpp_patch: bool = True
     command_timeout_s: int = 7200
@@ -147,7 +153,12 @@ class ExperimentConfig:
     prefer_execution_champion: bool = False
     campaign_ready: bool | None = None
     epd_max_reinforcement_attempts: int = 2
+    # ``ast_graph`` is the P0 AST-assisted path. ``openroad_cards`` preserves
+    # the original card-and-live-source path without building or injecting an
+    # AST graph. Both use the same contracts, evaluator, and promotion policy.
+    planning_mode: str = "ast_graph"
     repository_graph_enabled: bool = True
+    parent_selection: ParentSelectionSettings = field(default_factory=ParentSelectionSettings)
 
 
 def _load_raw_config(path: Path) -> dict[str, Any]:
@@ -225,6 +236,30 @@ def load_config(path: Path) -> ExperimentConfig:
         and declared_power_reclaim_profile is None
     ):
         raise ValueError("ready contest profile requires declared_power_reclaim_profile")
+    historical_seed_cards = load_historical_seed_cards(
+        optional_path(raw.get("historical_seed_cards"))
+    )
+    historical_seed_revalidation_schedule = load_historical_seed_revalidation_schedule(
+        raw.get("historical_seed_revalidation_schedule"), historical_seed_cards
+    )
+    raw_planning_mode = raw.get("planning_mode")
+    if raw_planning_mode is None:
+        planning_mode = (
+            "ast_graph"
+            if bool(raw.get("repository_graph_enabled", True))
+            else "openroad_cards"
+        )
+    else:
+        planning_mode = str(raw_planning_mode).strip()
+    if planning_mode not in PLANNING_MODES:
+        raise ValueError(
+            "planning_mode must be one of: " + ", ".join(sorted(PLANNING_MODES))
+        )
+    raw_graph_enabled = bool(raw.get("repository_graph_enabled", planning_mode == "ast_graph"))
+    if raw_graph_enabled != (planning_mode == "ast_graph"):
+        raise ValueError(
+            "repository_graph_enabled must agree with planning_mode"
+        )
     return ExperimentConfig(
         design=design,
         state_root=optional_path(raw.get("state_root")) or (PROJECT_ROOT / "outputs" / "ae3" / design),
@@ -246,9 +281,8 @@ def load_config(path: Path) -> ExperimentConfig:
         power_reclaim_max_moves=power_reclaim_max_moves,
         declared_power_reclaim_profile=declared_power_reclaim_profile,
         enforce_declared_power_reclaim_profile=enforce_declared_power_reclaim_profile,
-        historical_seed_cards=load_historical_seed_cards(
-            optional_path(raw.get("historical_seed_cards"))
-        ),
+        historical_seed_cards=historical_seed_cards,
+        historical_seed_revalidation_schedule=historical_seed_revalidation_schedule,
         students=tuple(raw.get("students") or ("student_1", "student_2", "student_3", "student_4")),
         allowed_patch_roots=tuple(raw.get("allowed_patch_roots") or ()),
         require_cpp_patch=bool(raw.get("require_cpp_patch", True)),
@@ -277,7 +311,9 @@ def load_config(path: Path) -> ExperimentConfig:
         prefer_execution_champion=bool(raw.get("prefer_execution_champion", False)),
         campaign_ready=bool(raw["campaign_ready"]) if "campaign_ready" in raw else None,
         epd_max_reinforcement_attempts=max(0, int(raw.get("epd_max_reinforcement_attempts", 2))),
-        repository_graph_enabled=bool(raw.get("repository_graph_enabled", True)),
+        planning_mode=planning_mode,
+        repository_graph_enabled=raw_graph_enabled,
+        parent_selection=ParentSelectionSettings(**dict(raw.get("parent_selection") or {})),
     )
 
 

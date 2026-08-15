@@ -252,7 +252,23 @@ class PowerFirstPromotion:
         # Stage-1 preference relation: a smaller sum can hide a worse worst
         # unresolved power target.  Select with the same lexicographic vector
         # that admission uses so the promoted low-power lineage is coherent.
-        return min(valid, key=lambda row: self._power_key_from_candidate(row[0])) if valid else None
+        if not valid:
+            return None
+        # Power remains the entire Stage-1 ordering relation.  TNS is only a
+        # legal secondary key after the normalized leakage/dynamic vector is
+        # exactly equal, so it cannot suppress an otherwise better power
+        # candidate.  This keeps equally powered lineages from needlessly
+        # inheriting extra timing debt (for example the R1 63.19 ns versus
+        # 62.41 ns revalidation tie) while preserving the explicit TNS
+        # safety ceiling enforced in ``classify``.
+        return min(
+            valid,
+            key=lambda row: (
+                *self._power_key_from_candidate(row[0]),
+                self._tns_key_from_candidate(row[0]),
+                row[0].student_id,
+            ),
+        )
 
     def _power_key_from_candidate(self, candidate: CandidateResult) -> tuple[float, float, float, float]:
         # The contract is intentionally not stored on CandidateResult.  The
@@ -266,6 +282,10 @@ class PowerFirstPromotion:
         except (TypeError, ValueError):
             pass
         return (float("inf"),) * 4
+
+    def _tns_key_from_candidate(self, candidate: CandidateResult) -> float:
+        tns = self._number(candidate.metrics.get("tns_abs_ns"))
+        return tns if tns is not None else float("inf")
 
     def _adaptive_tradeoff_verdict(
         self,

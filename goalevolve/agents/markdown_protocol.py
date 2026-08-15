@@ -42,22 +42,58 @@ def _items(value: str) -> tuple[str, ...]:
     if not value or value.strip().lower() in {"none", "n/a", "-"}:
         return ()
     values = []
-    for item in value.split(","):
+    for item in re.split(r"[;,]", value):
         normalized = item.strip().strip("`").strip()
         if normalized:
             values.append(normalized)
     return tuple(values)
 
 
+def _recipe_id(value: str) -> str:
+    """Normalize Markdown code formatting without altering a recipe identifier."""
+
+    normalized = value.strip()
+    if len(normalized) >= 2 and normalized.startswith("`") and normalized.endswith("`"):
+        return normalized[1:-1].strip()
+    return normalized
+
+
+def _candidate_id(value: str) -> str:
+    """Normalize whole-value inline-code presentation around a Candidate ID."""
+
+    normalized = value.strip()
+    if len(normalized) >= 2 and normalized.startswith("`") and normalized.endswith("`"):
+        return normalized[1:-1].strip()
+    return normalized
+
+
+def _draft_signature_id(value: str) -> str:
+    """Extract the controller-issued ``draft_N`` key from Teacher prose."""
+
+    normalized = value.strip().strip("`").strip()
+    match = re.search(r"\bdraft_\d+\b", normalized, flags=re.IGNORECASE)
+    return match.group(0).lower() if match else normalized
+
+
 def _source_hook_items(value: str) -> tuple[str, ...]:
-    """Parse source paths with semicolons preferred and comma compatibility."""
+    """Parse source-file fences with semicolons preferred and comma compatibility.
+
+    Teacher plans commonly copy an AST anchor (``path::symbol``) into the
+    human-readable Source Hooks line.  Execution fences are files, however;
+    the symbol belongs in Source Evidence and is independently verified by
+    the Controller.  Accept that readable shorthand without weakening the
+    evidence requirement.
+    """
     if not value or value.strip().lower() in {"none", "n/a", "-"}:
         return ()
-    return tuple(
-        normalized
-        for item in re.split(r"[;,]", value)
-        if (normalized := item.strip().strip("`").strip())
-    )
+    paths: list[str] = []
+    for item in re.split(r"[;,]", value):
+        normalized = item.strip().strip("`").strip()
+        if not normalized:
+            continue
+        path, separator, _ = normalized.partition("::")
+        paths.append(path.strip() if separator else normalized)
+    return tuple(paths)
 
 
 def _source_evidence_items(value: str) -> tuple[str, ...]:
@@ -111,20 +147,26 @@ def _evolution_idea_records(section: str) -> tuple[dict[str, object], ...]:
                 "expected_signals": _items(_field(block, "Expected Signals")),
                 "activation_signals": _items(_field(block, "Activation Signals")),
                 "source_evidence": _source_evidence_items(_field(block, "Source Evidence")),
-                "evaluation_recipe": _field(block, "Evaluation Recipe"),
+                "evaluation_recipe": _recipe_id(_field(block, "Evaluation Recipe")),
                 "falsification_condition": _field(block, "Falsification Condition"),
                 "internal_cpp_scheduling_suggestion": _field(
                     block, "Internal C++ Scheduling Suggestion"
                 ),
                 "paper_card_ids": _items(_field(block, "Paper Card References")),
                 "priority": _field(block, "Priority"),
-                "draft_signature_id": _field(block, "Draft Signature"),
-                "epd_search_query": _field(block, "EPD Search Query"),
+                "draft_signature_id": _draft_signature_id(
+                    _field(block, "Draft Signature")
+                ),
+                "epd_search_query": _draft_signature_id(
+                    _field(block, "EPD Search Query")
+                ),
                 "retrieved_historical_ideas": _items(
                     _field(block, "Retrieved Historical Ideas")
                 ),
                 "opened_epd_records": _items(_field(block, "Opened EPD Records")),
-                "nearest_historical_idea": _field(block, "Nearest Historical Idea"),
+                "nearest_historical_idea": _field(
+                    block, "Nearest Historical Idea"
+                ).strip().strip("`"),
                 "semantic_overlap": _field(block, "Semantic Overlap"),
                 "material_difference": _field(block, "Material Difference"),
                 "novelty_conclusion": _field(block, "Novelty Conclusion"),
@@ -183,15 +225,15 @@ def parse_teacher_plan(text: str) -> dict[str, object]:
             {
                 "student_id": heading,
                 "role": _field(block, "Role").lower(),
-                "candidate_id": _field(block, "Candidate"),
-                "idea_reference": _field(block, "EPD Idea"),
+                "candidate_id": _candidate_id(_field(block, "Candidate")),
+                "idea_reference": _candidate_id(_field(block, "EPD Idea")),
                 "claim": _field(block, "Claim"),
                 "selection_rationale": _field(block, "Selection Rationale"),
                 "source_hooks": _source_hook_items(_field(block, "Source Hooks")),
                 "expected_signals": _items(_field(block, "Expected Signals")),
                 "activation_signals": _items(_field(block, "Activation Signals")),
                 "source_evidence": _source_evidence_items(_field(block, "Source Evidence")),
-                "evaluation_recipe": _field(block, "Evaluation Recipe"),
+                "evaluation_recipe": _recipe_id(_field(block, "Evaluation Recipe")),
                 "falsification_condition": _field(block, "Falsification Condition"),
                 "internal_cpp_scheduling_suggestion": _field(
                     block, "Internal C++ Scheduling Suggestion"
@@ -285,7 +327,6 @@ def teacher_plan_validation_errors(
     the Controller's separate responsibility.
     """
     required_roles = tuple(str(role).strip().lower() for role in required_roles)
-    require_source_investigation = require_source_investigation or "explorer" in required_roles
     required_sections = [
         "Diagnosis Summary",
         "Evolution Ideas",

@@ -49,6 +49,20 @@ _PLACEMENT_FAILURE = re.compile(
 # It is build metadata, never an algorithmic source edit or an allowed patch.
 _GENERATED_SOURCE_METADATA = frozenset({Path("include/ord/Version.hh")})
 
+# ``estimate_parasitics`` invalidates timing, but the pinned OpenSTA builds do
+# not consistently invalidate their per-instance power cache.  Changing and
+# immediately restoring the global activity model invalidates both activity
+# propagation and instance power without changing the model used by reports.
+_POWER_CACHE_REFRESH_TCL = (
+    "set_power_activity -global -activity 0.1 -duty 0.5",
+    "unset_power_activity -global",
+)
+
+
+def _fresh_stage_qor_tcl(*, parasitics_command: str) -> list[str]:
+    """Return the fixed pre-report boundary for authoritative stage QoR."""
+    return [parasitics_command, *_POWER_CACHE_REFRESH_TCL]
+
 
 def _project_toolchain() -> tuple[dict[str, str] | None, tuple[str, ...]]:
     """Use the matching OpenROAD/ORFS environment activated by the caller."""
@@ -719,15 +733,22 @@ class Contest2026OpenROADEvaluator:
         metrics = _read_metrics(metrics_csv) if parsed.ok and metrics_csv.is_file() else {}
         required = {spec.name for spec in contract.metrics}
         metrics_ok = parsed.ok and required.issubset(metrics)
+        placement_ok = False
+        placement_detail = "flow_or_metrics_failed"
         lec_ok = False
         lec_detail = "flow_or_metrics_failed"
         official_log = output / "official_4of4.log"
         if flow.ok and metrics_ok:
-            lec_ok, lec_detail = official_four_check(pre_opt=self.config.benchmark_dir, post_opt=output, output_log=official_log, policy=self.config.execution_policy, environment=self.config.toolchain_environment)
+            placement_ok, placement_detail = _placement_legal(log)
+            if placement_ok:
+                lec_ok, lec_detail = official_four_check(pre_opt=self.config.benchmark_dir, post_opt=output, output_log=official_log, policy=self.config.execution_policy, environment=self.config.toolchain_environment)
+            else:
+                lec_detail = "placement_failed"
         checks = [
             {"name": "build", "passed": True, "detail": str(binary)},
             {"name": "flow", "passed": flow.ok, "detail": flow.resource_error or "official_openroad_flow"},
             {"name": "metrics", "passed": metrics_ok, "detail": "official_parse_log" if metrics_ok else f"missing_metrics:{','.join(sorted(required - set(metrics)))}"},
+            {"name": "placement", "passed": placement_ok, "detail": placement_detail},
             {"name": "lec", "passed": lec_ok, "detail": lec_detail},
         ]
         sfinal_artifact = _observe_sfinal(design=self.config.design, benchmark_dir=self.config.benchmark_dir, output=output)
@@ -808,20 +829,27 @@ class Contest2026OpenROADEvaluator:
             required = {spec.name for spec in contract.metrics}
             metrics_ok = parsed.ok and required.issubset(metrics)
             official_log = output / "official_4of4.log"
+            placement_ok = False
+            placement_detail = "flow_or_metrics_failed"
             lec_ok = False
             lec_detail = "flow_or_metrics_failed"
             if flow.ok and metrics_ok:
-                lec_ok, lec_detail = official_four_check(
-                    pre_opt=self.config.benchmark_dir,
-                    post_opt=output,
-                    output_log=official_log,
-                    policy=self.config.execution_policy,
-                    environment=self.config.toolchain_environment,
-                )
+                placement_ok, placement_detail = _placement_legal(log)
+                if placement_ok:
+                    lec_ok, lec_detail = official_four_check(
+                        pre_opt=self.config.benchmark_dir,
+                        post_opt=output,
+                        output_log=official_log,
+                        policy=self.config.execution_policy,
+                        environment=self.config.toolchain_environment,
+                    )
+                else:
+                    lec_detail = "placement_failed"
             checks = [
                 {"name": "build", "passed": True, "detail": str(binary)},
                 {"name": "flow", "passed": flow.ok, "detail": flow.resource_error or "official_openroad_flow"},
                 {"name": "metrics", "passed": metrics_ok, "detail": "official_parse_log" if metrics_ok else f"missing_metrics:{','.join(sorted(required - set(metrics)))}"},
+                {"name": "placement", "passed": placement_ok, "detail": placement_detail},
                 {"name": "lec", "passed": lec_ok, "detail": lec_detail},
             ]
             sfinal_artifact = _observe_sfinal(design=self.config.design, benchmark_dir=self.config.benchmark_dir, output=output)
@@ -1677,7 +1705,7 @@ class Contest2026OpenROADEvaluator:
                 f"puts \"GOALEVOLVE_CHECKPOINT_BEGIN {stage}\"",
                 f"puts [format \"GOALEVOLVE_CHECKPOINT_METRIC {stage} tns_abs_ns %.12g\" [total_negative_slack -max]]",
                 f"puts [format \"GOALEVOLVE_CHECKPOINT_METRIC {stage} wns_abs_ns %.12g\" [worst_slack -max]]",
-                "report_power",
+                "report_power -digits 12",
                 f"write_verilog {_escape_tcl(output / (stage + '.v'))}",
                 f"write_db {_escape_tcl(output / (stage + '.odb'))}",
                 f"puts \"GOALEVOLVE_CHECKPOINT_END {stage}\"",
@@ -1871,16 +1899,18 @@ class Contest2026OpenROADEvaluator:
             # throw Tcl.  Always legalize before the one authoritative check:
             # an initial failing probe would otherwise remain in the log and
             # could be contradicted by a fabricated "legal" marker later.
-            # The DPL commands below are the public OpenROAD/ORFS Tcl forms:
-            # first legalize, then improve locally, mirror for physical
-            # quality, and legalize once more before the authoritative check.
-            # The sequence is intentionally controller-owned so a Student C++
-            # mechanism cannot leave a routability-sensitive placement state.
+            # The controller owns the complete, fixed detailed-placement
+            # sequence.  Post-placement QoR is measured only after it has
+            # completed and placement parasitics have been re-estimated.
+            "set_placement_padding -global -left 0 -right 0",
             "detailed_placement",
-            "improve_placement",
+            "improve_placement -max_displacement {5 1}",
             "optimize_mirroring",
-            "detailed_placement",
             "check_placement -verbose",
+            # Follow the official evaluation protocol: placement RC is
+            # estimated before global-routing layers are configured; the
+            # M2--M9 (or design-specific) setup belongs to global routing.
+            *_fresh_stage_qor_tcl(parasitics_command="estimate_parasitics -placement"),
             *checkpoint("post_placement"),
             f"write_def {_escape_tcl(output / (self.config.design + '.def'))}",
             f"write_verilog {_escape_tcl(output / (self.config.design + '.v'))}",
@@ -1888,7 +1918,7 @@ class Contest2026OpenROADEvaluator:
             "if {[info exists route_clock_layers]} { set clock_layers $route_clock_layers } else { set clock_layers M2-M9 }",
             "set_routing_layers -signal $signal_layers -clock $clock_layers",
             "global_route -skip_large_fanout_nets 300 -allow_congestion -congestion_iterations 50",
-            "estimate_parasitics -global_routing",
+            *_fresh_stage_qor_tcl(parasitics_command="estimate_parasitics -global_routing"),
             *checkpoint("post_route"),
             "puts \"===== METRICS =====\"",
             f"puts \"design:                 {self.config.design}\"",
@@ -1897,7 +1927,7 @@ class Contest2026OpenROADEvaluator:
             "report_units",
             "report_tns",
             "report_wns -digits 4",
-            "report_power",
+            "report_power -digits 12",
             "report_check_types -max_slew -violators",
             "report_check_types -max_capacitance -violators",
             "report_check_types -max_fanout -violators",

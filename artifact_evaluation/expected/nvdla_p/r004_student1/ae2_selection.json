@@ -1,5 +1,12 @@
 {
   "artifact_id": "nvdla_p_r4_student1",
+  "cache_safe_replay_metrics": {
+    "dynamic_power_pw": 38231478000.0,
+    "leakage_power_pw": 256406000.0,
+    "measurement_boundary": "post_route_global_route_estimate_parasitics_cache_refreshed",
+    "tns_abs_ns": 163.493983868,
+    "total_power_pw": 38487884000.0
+  },
   "contract": {
     "baseline_metrics": {
       "dynamic_power_pw": 37726000000.0,
@@ -46,24 +53,24 @@
   "goal_distances": {
     "dynamic_power_pw": {
       "baseline": 37726000000.0,
-      "normalized_residual": 0.03562529820283094,
+      "normalized_residual": 0.04854683772464613,
       "target": 36400000000.0,
-      "unmet_target_percent": 3.6923076923076925,
-      "value": 37744000000.0
+      "unmet_target_percent": 5.031532967032967,
+      "value": 38231478000.0
     },
     "leakage_power_pw": {
       "baseline": 274000000.0,
-      "normalized_residual": 0.6912408759124088,
+      "normalized_residual": 0.6927226277372263,
       "target": 66600000.0,
-      "unmet_target_percent": 284.38438438438436,
-      "value": 256000000.0
+      "unmet_target_percent": 284.99399399399397,
+      "value": 256406000.0
     },
     "tns_abs_ns": {
       "baseline": 166.51,
       "normalized_residual": 0.0,
       "target": 246.0,
       "unmet_target_percent": 0.0,
-      "value": 165.79
+      "value": 163.493983868
     }
   },
   "parent": {
@@ -116,7 +123,7 @@
       }
     ],
     "evaluation_mode": "power_then_timing",
-    "goal_distance": 0.2434964340778101,
+    "goal_distance": 0.2470898218206241,
     "hypothesis": {
       "activation_signals": [
         "rmp_area_attempted"
@@ -169,10 +176,10 @@
     "legacy": false,
     "metrics": {
       "drv_count": 0.0,
-      "dynamic_power_pw": 37744000000.0,
-      "leakage_power_pw": 256000000.0,
+      "dynamic_power_pw": 38231478000.0,
+      "leakage_power_pw": 256406000.0,
       "runtime_s": 1074.0,
-      "tns_abs_ns": 165.79
+      "tns_abs_ns": 163.493983868
     },
     "parent_id": "round_004:student_1",
     "phase_signals": {
@@ -199,10 +206,10 @@
   },
   "recorded_flow_metrics": {
     "drv_count": 0.0,
-    "dynamic_power_pw": 37744000000.0,
-    "leakage_power_pw": 256000000.0,
+    "dynamic_power_pw": 38231478000.0,
+    "leakage_power_pw": 256406000.0,
     "runtime_s": 1074.0,
-    "tns_abs_ns": 165.79
+    "tns_abs_ns": 163.493983868
   },
   "schema": "goalevolve.ae2-selection.v1"
 }

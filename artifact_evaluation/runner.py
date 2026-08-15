@@ -317,6 +317,15 @@ def ae2(*, artifact: dict[str, Any], openroad: Path | None, jobs: int, rebuild: 
     )
     print(f"[AE-2] Running post-route flow. Log: {output / 'evaluation.log'}", flush=True)
     flow_rc = _run([str(openroad), "-exit", str(tcl)], cwd=output, env=environment, log=output / "evaluation.log", live=verbose)
+    checkpoint_metrics: dict[str, Any] = {}
+    if flow_rc == 0:
+        from goalevolve.evaluation.contest2026 import _checkpoint_metrics
+
+        checkpoint_metrics = _checkpoint_metrics(output / "evaluation.log")
+        (output / "checkpoint_metrics.json").write_text(
+            json.dumps(checkpoint_metrics, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     metrics_csv = output / "metrics.csv"
     if metrics_csv.exists():
         metrics_csv.unlink()
@@ -370,6 +379,7 @@ def ae2(*, artifact: dict[str, Any], openroad: Path | None, jobs: int, rebuild: 
         "parser_returncode": parser_rc,
         "official_check_returncode": official_rc,
         "official_check_detail": official_detail,
+        "checkpoint_metrics": checkpoint_metrics,
         "comparisons": comparisons,
     }
     result["passed"] = flow_rc == 0 and parser_rc == 0 and official_rc == 0 and all(row["passed"] for row in comparisons.values())

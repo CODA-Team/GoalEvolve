@@ -7,9 +7,56 @@ from typing import Mapping, Sequence
 from ..core.io import load_json
 from ..core.contracts import GoalContract
 from ..core.models import EvidenceVerdict, Hypothesis, Parent
+from ..planning.cross_design_experience import cross_design_experience_packet
+
+
+def _assigned_hypothesis_view(hypothesis: Hypothesis) -> dict[str, object]:
+    """Expose one Student's executable assignment, never its peer menu."""
+
+    payload = hypothesis.to_dict()
+    view = {
+        key: payload[key]
+        for key in (
+            "hypothesis_id",
+            "mechanism_family",
+            "claim",
+            "source_hooks",
+            "expected_signals",
+            "activation_signals",
+            "scope_evidence",
+            "allowed_patch_paths",
+            "evaluation_mode",
+            "timing_recipe_id",
+            "student_role",
+            "role_mode",
+            "epd_record_ids",
+            "epd_idea_id",
+            "teacher_idea_reference",
+            "student_id",
+        )
+        if key in payload
+    }
+    if hypothesis.role_mode == "seed_revalidation" and len(hypothesis.candidate_options) == 1:
+        seed = dict(hypothesis.candidate_options[0])
+        view["assigned_seed_revalidation"] = {
+            key: seed[key]
+            for key in (
+                "candidate_id",
+                "seed_id",
+                "source_anchors",
+                "decision_boundary",
+                "summary",
+                "reference_diff_paths",
+            )
+            if key in seed
+        }
+    return view
 
 
 def teacher_packet(*, contract: GoalContract, parent: Parent, round_index: int, retrieval_audit: dict[str, object], decision_context: dict[str, object] | None = None) -> str:
+    cross_design_experience = cross_design_experience_packet(
+        decision_context=decision_context,
+    )
     return "\n".join(
         [
             "# GoalEvolve v2 Teacher Packet",
@@ -28,6 +75,10 @@ def teacher_packet(*, contract: GoalContract, parent: Parent, round_index: int, 
             "",
             "## Active Decision Stage",
             json.dumps(decision_context or {"mode": "single_stage"}, ensure_ascii=False, indent=2),
+            "",
+            "## Cross-Design Iteration Experience",
+            "These checked-in lessons are advisory process constraints. They never provide a patch, alter the frozen contract, or replace Controller promotion.",
+            json.dumps(cross_design_experience, ensure_ascii=False, indent=2),
             "",
             "## Required Decision",
             "Assign independent mechanisms. Every assignment must name source hooks, predicted phase signals, a falsification condition, and protected metrics.",
@@ -61,6 +112,11 @@ def student_packet(
         enhancement_eligible_record_ids=enhancement_eligible_record_ids,
     )
     teacher_handoff = _teacher_handoff(hypothesis)
+    assigned_hypothesis = _assigned_hypothesis_view(hypothesis)
+    seed_reference = _seed_reference_packet(assigned_hypothesis)
+    cross_design_experience = cross_design_experience_packet(
+        decision_context=decision_context,
+    )
     return "\n".join(
         [
             "# GoalEvolve v2 Student Packet",
@@ -69,7 +125,9 @@ def student_packet(
             f"parent_goal_distance: {parent.goal_distance:.8f}",
             "",
             "## Assigned Hypothesis",
-            json.dumps(hypothesis.to_dict(), ensure_ascii=False, indent=2),
+            json.dumps(assigned_hypothesis, ensure_ascii=False, indent=2),
+            "",
+            *seed_reference,
             "",
             *role_packet,
             "",
@@ -77,6 +135,10 @@ def student_packet(
             "",
             "## Active Decision Stage",
             json.dumps(decision_context or {"mode": "single_stage"}, ensure_ascii=False, indent=2),
+            "",
+            "## Cross-Design Iteration Experience",
+            "These checked-in lessons are advisory constraints from completed official-flow campaigns. Apply the stage-relevant Student rule to the assigned hypothesis, then verify it against the live parent. They never authorize a patch outside the assignment, change the QoR contract, or bypass Controller promotion.",
+            json.dumps(cross_design_experience, ensure_ascii=False, indent=2),
             "",
             "## Mandatory Evidence",
             "Return a source diff, source commit, phase-signal values, frozen-contract metrics, and exactly these checks: build, flow, metrics, lec. A verified QoR gain can be promoted after 4/4 checks even when telemetry is missing; mark it unattributed and make repairing that telemetry a follow-up obligation.",
@@ -95,6 +157,23 @@ def student_packet(
             "After the Controller completes the build/flow/evidence evaluation, you will be resumed as this same Student identity for one observer-style reflection turn. Summarize in one evidence-grounded paragraph: intended mechanism, actual implementation, whether it activated, stage and final QoR effects, failure attribution, reusable lesson, an avoid-next-time mechanism, limitation, and bounded next reinforcement. From evidence, recommend exactly one of validated|promising|invalid|unactivated as the EPD lifecycle classification. The Controller alone decides promotion and never accepts a reflection as a substitute for official 4/4 evidence.",
         ]
     )
+
+
+def _seed_reference_packet(assigned_hypothesis: Mapping[str, object]) -> list[str]:
+    """Render only the assigned seed's source-pattern paths for a Student."""
+
+    seed = assigned_hypothesis.get("assigned_seed_revalidation")
+    if not isinstance(seed, Mapping):
+        return []
+    paths = [str(path).strip() for path in list(seed.get("reference_diff_paths") or ()) if str(path).strip()]
+    if not paths:
+        return []
+    return [
+        "## Seed Reference Discipline",
+        "Before editing, read every listed historical implementation diff and port only the compatible bounded source mechanism after inspecting the live parent. These paths are source-pattern references only: do not infer or import historical QoR, parent identity, promotion, Tcl, or recipe behavior.",
+        "The bounded revalidation diff must change the actual admitted, ordered, or committed cell set at the card's stated decision boundary. A trigger-only, environment-only, or telemetry-only change is not a seed revalidation: first identify the live candidate/admission/ordering/commit decision, then change that decision while preserving its existing timing, electrical, legality, and rollback guards.",
+        json.dumps({"reference_diff_paths": paths}, ensure_ascii=False, indent=2),
+    ]
 
 
 def _role_packet(
@@ -152,7 +231,12 @@ def _role_packet(
             json.dumps({"mechanism_cards": selected_cards, "attempts": [_record_directory_row(record=record, epd_root=root, mechanism_card_path=mechanism_card_paths.get(str(record.get("record_id") or ""), "")) for record in records]}, ensure_ascii=False, indent=2),
         ]
     if hypothesis.student_role == "enhancer" and hypothesis.role_mode == "epd_enhancement":
-        enhancer_directory = [row for row in directory if row.get("epd_status") == "promising"]
+        enhancer_directory = [
+            row
+            for row in directory
+            if row.get("epd_status") == "promising"
+            or bool(row.get("inherited_by_current_parent"))
+        ]
         if enhancement_eligible_record_ids is not None:
             eligible_ids = {str(record_id) for record_id in enhancement_eligible_record_ids}
             enhancer_directory = [
@@ -160,7 +244,7 @@ def _role_packet(
             ]
         return [
             "## Enhancer Operating Protocol",
-            "You are strengthening one promising source-backed mechanism. First read its complete idea, attempt, Student reflection, metrics, and diff through the dossier paths; identify whether candidate quality, debt, downstream reversal, commit/rollback guard, objective mismatch, or interaction caused the missed retention. Make one bounded refinement inside the mechanism boundary, not a restart of a suppressed patch or unrelated rewrite.",
+            "You are strengthening one source-backed mechanism with unresolved evidence or one validated mechanism already inherited by the current parent. First read its complete idea, attempt, Student reflection, metrics, and diff through the dossier paths; identify whether candidate quality, debt, downstream reversal, commit/rollback guard, objective mismatch, or interaction caused the missed retention. For an inherited mechanism, the parent already contains its prior patch: name the existing decision that changes the actual candidate/cell set, then make one bounded refinement to that admission, ordering, or commit decision. Do not spend the turn on trigger-only, environment-only, or telemetry-only changes when the selected cell set would remain unchanged. Do not restart a suppressed patch or make an unrelated rewrite.",
             "## Enhancer Candidate Directory",
             json.dumps(enhancer_directory, ensure_ascii=False, indent=2),
             "## Previous-round Enhancer Dossier",
@@ -199,6 +283,7 @@ def _record_directory_row(
         "record_id": record_id,
         "idea_id": idea_id,
         "epd_status": record.get("epd_status"),
+        "inherited_by_current_parent": bool(record.get("inherited_by_current_parent")),
         "source_hooks": list(record.get("source_hooks") or ()),
         "idea_path": str(epd_root / "ideas" / idea_id / "idea.json") if epd_root is not None and idea_id else "",
         "mechanism_card_path": mechanism_card_path,

@@ -13,6 +13,11 @@ OBSERVER_ONLY_METRICS = frozenset(
 )
 
 
+def normalization_epsilon(baseline: float) -> float:
+    """Return the frozen positive epsilon_i used by Eq. (1)."""
+    return max(abs(float(baseline)), 1.0)
+
+
 @dataclass(frozen=True)
 class MetricSpec:
     """One frozen target. `minimize=True` means lower values are better."""
@@ -28,7 +33,7 @@ class MetricSpec:
     def residual(self, value: float | None) -> float | None:
         if value is None:
             return None
-        scale = max(abs(self.baseline - self.target), abs(self.baseline), 1.0)
+        scale = max(abs(self.baseline - self.target), normalization_epsilon(self.baseline))
         if self.minimize:
             raw = (float(value) - self.target - self.tolerance) / scale
         else:
@@ -73,7 +78,6 @@ class GoalContract:
         residuals: dict[str, float | None] = {}
         missing: list[str] = []
         weighted = 0.0
-        total_weight = 0.0
         for spec in self.metrics:
             raw = metrics.get(spec.name)
             try:
@@ -86,11 +90,9 @@ class GoalContract:
                 missing.append(spec.name)
                 # Missing data cannot be compensated by unrelated QoR terms.
                 weighted += spec.weight
-                total_weight += spec.weight
                 continue
             weighted += spec.weight * residual
-            total_weight += spec.weight
-        return weighted / max(total_weight, 1e-12), residuals, missing
+        return weighted, residuals, missing
 
     def hard_violations(self, metrics: Mapping[str, Any]) -> list[str]:
         violations: list[str] = []

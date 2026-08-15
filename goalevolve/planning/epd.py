@@ -407,6 +407,8 @@ class EvolutionProgramDatabase:
                     "dependencies": [],
                     "known_conflicts": [],
                     "parent_compatibility": [],
+                    "inherited": False,
+                    "inherited_parent_ids": [],
                     "observed_qor_effects": [],
                     "downstream_retention": [],
                     "student_reflection_paths": [],
@@ -419,6 +421,11 @@ class EvolutionProgramDatabase:
             bundle = dict(attempt.get("source_change_bundle") or {})
             card["source_write_set"] = sorted(set([*card["source_write_set"], *[str(item) for item in list(bundle.get("modified_files") or ()) if item]]))
             card["parent_compatibility"].append(str(attempt.get("parent_id") or ""))
+            if bool(idea.get("inherited")):
+                card["inherited"] = True
+                inherited_parent_id = str(idea.get("inherited_parent_id") or "")
+                if inherited_parent_id:
+                    card["inherited_parent_ids"].append(inherited_parent_id)
             card["observed_qor_effects"].append({"record_id": record_id, "metrics": dict(attempt.get("metrics") or {}), "distance_gain": attempt.get("distance_gain")})
             card["downstream_retention"].append({"record_id": record_id, "checkpoint_effects": dict(attempt.get("checkpoint_metrics") or {})})
             card["student_reflection_paths"].append(str(reflection_path))
@@ -431,11 +438,12 @@ class EvolutionProgramDatabase:
         for mechanism_id, card in sorted(mechanism_rows.items()):
             card["state_read_set"] = [item for item in card["state_read_set"] if item]
             card["parent_compatibility"] = sorted(set(item for item in card["parent_compatibility"] if item))
+            card["inherited_parent_ids"] = sorted(set(card["inherited_parent_ids"]))
             card["student_reflection_paths"] = sorted(set(card["student_reflection_paths"]))
             card["implementation_artifact_paths"] = sorted(set(card["implementation_artifact_paths"]))
             card_path = root / "mechanisms" / mechanism_id / "mechanism_card.json"
             atomic_json(card_path, card)
-            mechanism_manifest.append({"mechanism_id": mechanism_id, "path": str(card_path), "status": card["status"]})
+            mechanism_manifest.append({"mechanism_id": mechanism_id, "path": str(card_path), "status": card["status"], "inherited": bool(card["inherited"])})
 
         indexes = root / "indexes"
         self._atomic_text(indexes / "idea_catalog.jsonl", self._jsonl(catalog))
@@ -457,7 +465,7 @@ class EvolutionProgramDatabase:
             round_root = root / "round_views" / f"round_{round_index:03d}"
             round_ideas = [row for row in catalog if int(ideas_by_id[str(row["idea_id"])].get("proposed_round") or 0) == round_index]
             atomic_json(round_root / "explorer_view.json", {"round_index": round_index, "epd_root": str(root), "idea_catalog": str(indexes / "idea_catalog.jsonl"), "retrieval_corpus": str(indexes / "retrieval_corpus.jsonl"), "full_manifest": str(root / "manifest.json"), "search_tool": "python -m goalevolve.epd_search", "ideas": round_ideas})
-            atomic_json(round_root / "enhancer_view.json", {"round_index": round_index, "candidates": [row for row in mechanism_manifest if row["status"] == "promising"]})
+            atomic_json(round_root / "enhancer_view.json", {"round_index": round_index, "candidates": [row for row in mechanism_manifest if row["status"] == "promising" or bool(row.get("inherited"))]})
             atomic_json(round_root / "integrator_view.json", {"round_index": round_index, "candidates": [row for row in mechanism_manifest if row["status"] in {"validated", "promising"}]})
 
         atomic_json(
@@ -948,9 +956,10 @@ class EvolutionProgramDatabase:
 
         An Integrator combines only two distinct validated mechanisms that
         are not already part of the current parent's source lineage. An
-        Enhancer is deliberately narrower in another direction: only a
-        promising attempt has an unresolved but positive result worth spending
-        its bounded reinforcement budget on.
+        Enhancer handles either a promising attempt with unresolved positive
+        evidence, or a validated mechanism already inherited by the current
+        parent. The latter cannot be integrated again, but it can receive a
+        bounded refinement from the source that actually contains it.
         """
         ideas_by_id = {
             str(idea.get("idea_id") or ""): idea
@@ -958,8 +967,12 @@ class EvolutionProgramDatabase:
             if str(idea.get("idea_id") or "")
         }
         lineage_parent_ids, lineage_source_hashes = self._current_parent_lineage(parent)
+        all_records = self.records()
+        refuted_integration_sets, refuted_enhancement_records = self._refuted_role_keys(
+            all_records
+        )
         attempts = []
-        for row in self.records():
+        for row in all_records:
             if str(row.get("mechanism_family") or "") == "baseline":
                 continue
             status = str(row.get("epd_status") or "invalid")
@@ -967,6 +980,12 @@ class EvolutionProgramDatabase:
                 continue
             normalized = self._role_record(row=row, contract=contract, parent=parent)
             if normalized is not None:
+                idea = ideas_by_id.get(str(normalized.get("idea_id") or ""), {})
+                normalized["inherited_by_current_parent"] = self._idea_is_inherited_by_lineage(
+                    idea,
+                    lineage_parent_ids=lineage_parent_ids,
+                    lineage_source_hashes=lineage_source_hashes,
+                )
                 attempts.append(normalized)
         descendant_stats = self._descendant_stats()
         for row in attempts:
@@ -992,22 +1011,36 @@ class EvolutionProgramDatabase:
             row
             for row in attempts
             if row["epd_status"] == "validated"
-            and not self._idea_is_inherited_by_lineage(
-                ideas_by_id.get(str(row.get("idea_id") or ""), {}),
-                lineage_parent_ids=lineage_parent_ids,
-                lineage_source_hashes=lineage_source_hashes,
-            )
+            and not bool(row.get("inherited_by_current_parent"))
         ]
-        integration_candidates = self._integration_candidates(integration_records)
+        integration_candidates = [
+            candidate
+            for candidate in self._integration_candidates(integration_records)
+            if frozenset(candidate) not in refuted_integration_sets
+        ]
         enhancement_candidates = [
             str(row["record_id"])
             for row in attempts
-            if row["epd_status"] == "promising" and self._idea_can_reinforce(str(row.get("idea_id") or ""))
+            if (
+                (
+                    row["epd_status"] == "promising"
+                    and self._activation_observed(row)
+                )
+                or (
+                    row["epd_status"] == "validated"
+                    and bool(row.get("inherited_by_current_parent"))
+                )
+            )
+            and str(row["record_id"]) not in refuted_enhancement_records
+            and self._idea_can_reinforce(
+                str(row.get("idea_id") or ""),
+                allow_inherited_validated=bool(row.get("inherited_by_current_parent")),
+            )
         ]
         pending_ideas = self.pending_explorer_ideas(parent=parent, limit=limit)
         return {
             "schema_version": EPD_SCHEMA_VERSION,
-            "selection_rule": "Integrator: validated source-backed attempts not inherited by the current parent lineage; Enhancer: promising attempts within the idea reinforcement budget; Explorer: Teacher-ranked pending ideas.",
+            "selection_rule": "Integrator: validated source-backed attempts not inherited by the current parent lineage, excluding a fully evaluated refuted record set; Enhancer: activated promising attempts or current-parent-inherited validated mechanisms within the idea reinforcement budget, excluding a fully evaluated refuted refinement; Explorer: Teacher-ranked pending ideas.",
             # Role construction must retain every eligible source-backed
             # attempt. Teacher summaries remain compact separately; truncating
             # this execution view would silently make old valid records
@@ -1020,8 +1053,20 @@ class EvolutionProgramDatabase:
             "integration_record_ids": integration_candidates[0] if integration_candidates else [],
             "enhancement_record_ids": enhancement_candidates[:1],
             "integration_candidates": integration_candidates,
-            "integration_eligible_record_ids": [str(row["record_id"]) for row in integration_records],
+            "integration_eligible_record_ids": list(
+                dict.fromkeys(
+                    record_id
+                    for candidate in integration_candidates
+                    for record_id in candidate
+                )
+            ),
             "enhancement_candidates": enhancement_candidates,
+            "refuted_role_keys": {
+                "integration_record_sets": [
+                    sorted(record_ids) for record_ids in sorted(refuted_integration_sets, key=sorted)
+                ],
+                "enhancement_record_ids": sorted(refuted_enhancement_records),
+            },
             "pending_explorer_ideas": pending_ideas,
         }
 
@@ -1134,15 +1179,24 @@ class EvolutionProgramDatabase:
             "source_change_bundle": dict(row.get("source_change_bundle") or {}),
         }
 
-    def _idea_can_reinforce(self, idea_id: str) -> bool:
+    def _idea_can_reinforce(
+        self,
+        idea_id: str,
+        *,
+        allow_inherited_validated: bool = False,
+    ) -> bool:
         if not idea_id:
             return False
         try:
             idea = self.idea(idea_id)
         except KeyError:
             return False
+        status = str(idea.get("status") or "")
+        is_reinforceable = status == "promising" or (
+            allow_inherited_validated and status == "validated"
+        )
         return (
-            str(idea.get("status") or "") == "promising"
+            is_reinforceable
             and int(idea.get("reinforcement_attempts") or 0)
             < int(idea.get("max_reinforcement_attempts") or self.max_reinforcement_attempts)
         )
@@ -1166,6 +1220,74 @@ class EvolutionProgramDatabase:
             if pair not in candidates:
                 candidates.append(pair)
         return candidates
+
+    @staticmethod
+    def _activation_observed(row: Mapping[str, object]) -> bool:
+        """Require the recorded mechanism, rather than QoR alone, to have fired."""
+        activation_signals = tuple(
+            str(signal)
+            for signal in list(
+                row.get("activation_signals") or row.get("expected_signals") or ()
+            )
+            if signal
+        )
+        phase_signals = {
+            str(name): float(value)
+            for name, value in dict(row.get("phase_signals") or {}).items()
+            if isinstance(value, (int, float))
+        }
+        return bool(activation_signals) and all(
+            abs(phase_signals.get(signal, 0.0)) > 0.0
+            for signal in activation_signals
+        )
+
+    @classmethod
+    def _refuted_role_keys(
+        cls,
+        records: Sequence[Mapping[str, object]],
+    ) -> tuple[set[frozenset[str]], set[str]]:
+        """Return role inputs consumed by a complete, mechanism-fired refutation.
+
+        The child must carry a real implementation artifact and activated
+        signals. This prevents a compile failure or telemetry-only attempt from
+        suppressing an otherwise useful EPD mechanism, while preventing the
+        exact same exhausted combination from occupying the next role slot.
+        """
+        integration_sets: set[frozenset[str]] = set()
+        enhancement_records: set[str] = set()
+        for child in records:
+            if (
+                str(child.get("epd_status") or "") != "invalid"
+                or str(child.get("evidence_state") or "") != "refuted"
+                or not cls._activation_observed(child)
+            ):
+                continue
+            artifacts = dict(child.get("artifacts") or {})
+            diff_path = str(
+                artifacts.get("implementation_diff")
+                or cls._recover_diff_artifact(artifacts)
+                or ""
+            )
+            if not diff_path or not Path(diff_path).is_file():
+                continue
+            record_ids = tuple(
+                str(record_id)
+                for record_id in list(child.get("epd_record_ids") or ())
+                if record_id
+            )
+            if (
+                str(child.get("student_role") or "") == "integrator"
+                and str(child.get("role_mode") or "") == "epd_integration"
+                and len(record_ids) >= 2
+            ):
+                integration_sets.add(frozenset(record_ids))
+            elif (
+                str(child.get("student_role") or "") == "enhancer"
+                and str(child.get("role_mode") or "") == "epd_enhancement"
+                and len(record_ids) == 1
+            ):
+                enhancement_records.add(record_ids[0])
+        return integration_sets, enhancement_records
 
     def _refresh_ideas(self, *, ideas: list[dict[str, object]], attempts: list[Mapping[str, object]]) -> None:
         now = int(time.time())

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from artifact_evaluation.verify_openroad_snapshot import snapshot_metadata
+from goalevolve.evaluation.contest2026 import _fresh_stage_qor_tcl
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -133,6 +134,65 @@ SELECTIONS = (
 )
 
 
+# Fresh replays after `_refresh_stage_qor_reports()` made post-placement and
+# post-route power cache-safe.  Values are the authoritative post-route
+# measurements in the normal parser unit (absolute TNS in ns, power in pW).
+# Keep this curation input explicit and apply it atomically to every public
+# record that the AE-2 runner, selection document, and paper-facing summaries
+# consume.  Runtime and electrical-violation telemetry remain historical
+# observer fields because the cache refresh does not change them.
+CACHE_SAFE_REPLAY_METRICS: dict[str, dict[str, float]] = {
+    "aes_r58_student1": {
+        "tns_abs_ns": 15.572590769,
+        "dynamic_power_pw": 335_607_141_000.0,
+        "leakage_power_pw": 29_093_000.0,
+        "total_power_pw": 335_636_234_000.0,
+    },
+    "ariane_r11_student3": {
+        "tns_abs_ns": 688.536962490,
+        "dynamic_power_pw": 588_058_613_000.0,
+        "leakage_power_pw": 17_935_077_000.0,
+        "total_power_pw": 605_993_690_000.0,
+    },
+    "jpeg_r16_student1": {
+        "tns_abs_ns": 51.175317876,
+        "dynamic_power_pw": 270_427_704_000.0,
+        "leakage_power_pw": 114_525_000.0,
+        "total_power_pw": 270_542_229_000.0,
+    },
+    "mempool_aes_r58_parent": {
+        "tns_abs_ns": 2714.686920100,
+        "dynamic_power_pw": 249_586_381_000.0,
+        "leakage_power_pw": 3_059_457_000.0,
+        "total_power_pw": 252_645_838_000.0,
+    },
+    "nvdla_a_r16_student1": {
+        "tns_abs_ns": 90.640386651,
+        "dynamic_power_pw": 144_228_574_000.0,
+        "leakage_power_pw": 285_284_000.0,
+        "total_power_pw": 144_513_858_000.0,
+    },
+    "nvdla_c_rmp_path_cone_halo_timing": {
+        "tns_abs_ns": 7.247678218,
+        "dynamic_power_pw": 584_086_037_000.0,
+        "leakage_power_pw": 17_259_404_000.0,
+        "total_power_pw": 601_345_441_000.0,
+    },
+    "nvdla_m_r11_student1": {
+        "tns_abs_ns": 14.209663182,
+        "dynamic_power_pw": 39_473_305_000.0,
+        "leakage_power_pw": 38_326_000.0,
+        "total_power_pw": 39_511_631_000.0,
+    },
+    "nvdla_p_r4_student1": {
+        "tns_abs_ns": 163.493983868,
+        "dynamic_power_pw": 38_231_478_000.0,
+        "leakage_power_pw": 256_406_000.0,
+        "total_power_pw": 38_487_884_000.0,
+    },
+}
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     return dict(json.loads(path.read_text(encoding="utf-8")))
 
@@ -192,6 +252,102 @@ proc goalevolve_path {recorded_path} {
     return header + body
 
 
+def _refresh_stage_qor_reports(tcl: str) -> str:
+    """Normalize the two authoritative post-optimization QoR boundaries.
+
+    Historical campaigns reported power before detailed placement and then
+    reused OpenSTA's instance-power cache after placement/global-route RC was
+    re-estimated.  Keep the recorded optimization schedule intact, but make
+    every newly imported AE-2 replay use the fixed controller-owned tail.
+    """
+    lines = tcl.splitlines()
+
+    def index_exact(value: str, *, start: int = 0) -> int:
+        for index in range(start, len(lines)):
+            if lines[index].strip() == value:
+                return index
+        raise ValueError(f"recorded Tcl is missing required stage marker: {value}")
+
+    placement_begin = index_exact('puts "GOALEVOLVE_CHECKPOINT_BEGIN post_placement"')
+    placement_start = max(
+        index
+        for index in range(placement_begin)
+        if lines[index].strip() == "detailed_placement"
+    )
+    route_begin = index_exact(
+        'puts "GOALEVOLVE_CHECKPOINT_BEGIN post_route"',
+        start=placement_begin,
+    )
+    if not any(
+        lines[index].strip().startswith("set_routing_layers ")
+        for index in range(placement_begin, route_begin)
+    ):
+        raise ValueError("recorded Tcl is missing global-route layer setup")
+    placement_tail = [
+        "set_placement_padding -global -left 0 -right 0",
+        "detailed_placement",
+        "improve_placement -max_displacement {5 1}",
+        "optimize_mirroring",
+        "check_placement -verbose",
+        *_fresh_stage_qor_tcl(parasitics_command="estimate_parasitics -placement"),
+    ]
+    lines[placement_start:placement_begin] = placement_tail
+
+    placement_begin = index_exact('puts "GOALEVOLVE_CHECKPOINT_BEGIN post_placement"')
+    placement_end = index_exact(
+        'puts "GOALEVOLVE_CHECKPOINT_END post_placement"',
+        start=placement_begin,
+    )
+    route_begin = index_exact(
+        'puts "GOALEVOLVE_CHECKPOINT_BEGIN post_route"',
+        start=placement_end,
+    )
+    route_start = next(
+        index
+        for index in range(placement_end, route_begin)
+        if lines[index].strip().startswith("global_route ")
+    )
+    route_command = lines[route_start].strip()
+    route_tail = [
+        route_command,
+        *_fresh_stage_qor_tcl(parasitics_command="estimate_parasitics -global_routing"),
+    ]
+    lines[route_start:route_begin] = route_tail
+
+    def normalize_power_report(stage: str) -> None:
+        begin = index_exact(f'puts "GOALEVOLVE_CHECKPOINT_BEGIN {stage}"')
+        end = index_exact(f'puts "GOALEVOLVE_CHECKPOINT_END {stage}"', start=begin)
+        report_indexes = [
+            index
+            for index in range(begin + 1, end)
+            if lines[index].strip().startswith("report_power")
+        ]
+        for index in reversed(report_indexes):
+            del lines[index]
+        end = index_exact(f'puts "GOALEVOLVE_CHECKPOINT_END {stage}"', start=begin)
+        insertion = next(
+            (
+                index
+                for index in range(begin + 1, end)
+                if lines[index].strip().startswith(("write_verilog ", "write_db "))
+            ),
+            end,
+        )
+        lines.insert(insertion, "report_power -digits 12")
+
+    normalize_power_report("post_placement")
+    normalize_power_report("post_route")
+
+    # The official parser consumes the last power table in the log.  Preserve
+    # that convention while avoiding low-precision output in the final table.
+    metrics_begin = index_exact('puts "===== METRICS ====="')
+    for index in range(metrics_begin, len(lines)):
+        if lines[index].strip() == "report_power":
+            lines[index] = "report_power -digits 12"
+            break
+    return "\n".join(lines) + "\n"
+
+
 def _residual(value: float, baseline: float, target: float) -> float:
     return max(0.0, value - target) / max(abs(baseline - target), abs(baseline), 1.0)
 
@@ -203,6 +359,83 @@ def _unmet_percent(value: float, target: float) -> float:
 def _copy_file(source: Path, destination: Path) -> None:
     if source.is_file():
         shutil.copy2(source, destination)
+
+
+def refresh_cache_safe_replay_records() -> dict[str, dict[str, float]]:
+    """Synchronize fixed AE-2 expectations with cache-safe replay evidence.
+
+    This is deliberately separate from historical source import: it leaves
+    source snapshots, Tcl schedules, parent IDs, and observer telemetry intact
+    while replacing only the three final decision metrics made authoritative by
+    the corrected post-route reporting tail.
+    """
+    selected = {selection.artifact_id: selection for selection in SELECTIONS}
+    if set(selected) != set(CACHE_SAFE_REPLAY_METRICS):
+        raise RuntimeError("cache-safe metric set does not match the eight released selections")
+    for artifact_id, selection in selected.items():
+        values = dict(CACHE_SAFE_REPLAY_METRICS[artifact_id])
+        decision = {key: values[key] for key in ("tns_abs_ns", "dynamic_power_pw", "leakage_power_pw")}
+        expected = EXPECTED_ROOT / selection.expected_relative
+        selection_path = expected / "ae2_selection.json"
+        candidate_path = expected / "candidate.json"
+        metrics_path = expected / "metrics.json"
+        csv_path = expected / "metrics.csv"
+        record = _read_json(selection_path)
+        parent_metrics = dict(record["parent"]["metrics"])
+        parent_metrics.update(decision)
+        record["parent"]["metrics"] = parent_metrics
+        recorded = dict(record.get("recorded_flow_metrics") or {})
+        recorded.update(decision)
+        record["recorded_flow_metrics"] = recorded
+        record["cache_safe_replay_metrics"] = {
+            **decision,
+            "total_power_pw": values["total_power_pw"],
+            "measurement_boundary": "post_route_global_route_estimate_parasitics_cache_refreshed",
+        }
+        contract_metrics = {item["name"]: item for item in record["contract"]["metrics"]}
+        normalized = {
+            name: {
+                "value": parent_metrics[name],
+                "baseline": item["baseline"],
+                "target": item["target"],
+                "normalized_residual": _residual(parent_metrics[name], item["baseline"], item["target"]),
+                "unmet_target_percent": _unmet_percent(parent_metrics[name], item["target"]),
+            }
+            for name, item in contract_metrics.items()
+        }
+        record["goal_distances"] = normalized
+        record["parent"]["goal_distance"] = sum(
+            float(row["normalized_residual"]) for row in normalized.values()
+        ) / max(len(normalized), 1)
+        _write_json(selection_path, record)
+
+        candidate = _read_json(candidate_path)
+        candidate_metrics = dict(candidate["metrics"])
+        candidate_metrics.update(decision)
+        candidate["metrics"] = candidate_metrics
+        _write_json(candidate_path, candidate)
+
+        metrics = _read_json(metrics_path)
+        decision_metrics = dict(metrics["decision_metrics"])
+        decision_metrics.update(decision)
+        metrics["decision_metrics"] = decision_metrics
+        _write_json(metrics_path, metrics)
+
+        with csv_path.open(encoding="utf-8", newline="") as stream:
+            reader = csv.DictReader(stream)
+            fieldnames = list(reader.fieldnames or ())
+            rows = list(reader)
+        if not rows or not fieldnames:
+            raise RuntimeError(f"missing metrics rows: {csv_path}")
+        for row in rows:
+            row["tns"] = f"{-decision['tns_abs_ns']:.12g}"
+            row["leakage_power"] = f"{decision['leakage_power_pw']:.12g}"
+            row["total_power"] = f"{values['total_power_pw']:.12g}"
+        with csv_path.open("w", encoding="utf-8", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=fieldnames, lineterminator="\n")
+            writer.writeheader()
+            writer.writerows(rows)
+    return CACHE_SAFE_REPLAY_METRICS
 
 
 def import_selection(reference: Path, selection: Selection, *, copy_sources: bool) -> dict[str, Any]:
@@ -302,11 +535,13 @@ def import_selection(reference: Path, selection: Selection, *, copy_sources: boo
         _copy_file(tcl_root / "evaluate.tcl", expected / "evaluate.original.tcl")
         benchmark_root = "/home/haixuliu/MLCAD26/MLCAD26-Contest-Scripts-Benchmarks"
         output_root = str(tcl_root)
-        portable_tcl = _portable_tcl(
-            original_tcl,
-            benchmark_root=benchmark_root,
-            output_root=output_root,
-            project_root="/home/haixuliu/MLCAD26/GoalEvolve_v2",
+        portable_tcl = _refresh_stage_qor_reports(
+            _portable_tcl(
+                original_tcl,
+                benchmark_root=benchmark_root,
+                output_root=output_root,
+                project_root="/home/haixuliu/MLCAD26/GoalEvolve_v2",
+            )
         )
         (expected / "evaluate.tcl").write_text(portable_tcl, encoding="utf-8")
         for name in ("metrics.csv",):
@@ -353,9 +588,21 @@ def import_selection(reference: Path, selection: Selection, *, copy_sources: boo
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--reference", required=True, type=Path)
+    parser.add_argument("--reference", type=Path)
     parser.add_argument("--copy-sources", action="store_true")
+    parser.add_argument(
+        "--refresh-cache-safe-records",
+        action="store_true",
+        help="replace fixed AE-2 decision expectations with cache-safe replay measurements",
+    )
     args = parser.parse_args()
+    if args.refresh_cache_safe_records:
+        if args.reference is not None or args.copy_sources:
+            parser.error("--refresh-cache-safe-records cannot be combined with import arguments")
+        print(json.dumps(refresh_cache_safe_replay_records(), indent=2, sort_keys=True))
+        return 0
+    if args.reference is None:
+        parser.error("--reference is required when importing a historical record tree")
     artifacts = {selection.artifact_id: import_selection(args.reference.resolve(), selection, copy_sources=args.copy_sources) for selection in SELECTIONS}
     _write_json(PROJECT_ROOT / "artifact_evaluation" / "release_manifest.json", {"schema": "goalevolve.release-manifest.v1", "artifacts": artifacts})
     return 0

@@ -1,5 +1,12 @@
 {
   "artifact_id": "mempool_aes_r58_parent",
+  "cache_safe_replay_metrics": {
+    "dynamic_power_pw": 249586381000.0,
+    "leakage_power_pw": 3059457000.0,
+    "measurement_boundary": "post_route_global_route_estimate_parasitics_cache_refreshed",
+    "tns_abs_ns": 2714.6869201,
+    "total_power_pw": 252645838000.0
+  },
   "contract": {
     "baseline_metrics": {
       "dynamic_power_pw": 275930000000.0,
@@ -46,35 +53,35 @@
   "goal_distances": {
     "dynamic_power_pw": {
       "baseline": 275930000000.0,
-      "normalized_residual": 0.23534954517450077,
+      "normalized_residual": 0.23406799188199906,
       "target": 185000000000.0,
-      "unmet_target_percent": 35.1027027027027,
-      "value": 249940000000.0
+      "unmet_target_percent": 34.9115572972973,
+      "value": 249586381000.0
     },
     "leakage_power_pw": {
       "baseline": 3070000000.0,
-      "normalized_residual": 0.6026058631921825,
+      "normalized_residual": 0.602428990228013,
       "target": 1210000000.0,
-      "unmet_target_percent": 152.89256198347107,
-      "value": 3060000000.0
+      "unmet_target_percent": 152.84768595041322,
+      "value": 3059457000.0
     },
     "tns_abs_ns": {
       "baseline": 3680.33,
-      "normalized_residual": 0.24347001491714057,
+      "normalized_residual": 0.23494820304157502,
       "target": 1850.0000000000002,
-      "unmet_target_percent": 48.43513513513513,
-      "value": 2746.05
+      "unmet_target_percent": 46.7398335189189,
+      "value": 2714.6869201
     }
   },
   "parent": {
     "evaluation_mode": "power_then_timing",
-    "goal_distance": 0.36047514109460793,
+    "goal_distance": 0.35714839505052903,
     "metrics": {
       "drv_count": 814.0,
-      "dynamic_power_pw": 249940000000.0,
-      "leakage_power_pw": 3060000000.0,
+      "dynamic_power_pw": 249586381000.0,
+      "leakage_power_pw": 3059457000.0,
       "runtime_s": 491.0,
-      "tns_abs_ns": 2746.05
+      "tns_abs_ns": 2714.6869201
     },
     "parent_id": "preexperiment:aes_best_r58_target_1850",
     "source_commit": "d231bd8f98d2a0adb8369002b2c1e7aa8e7877ed",
@@ -97,10 +104,10 @@
   },
   "recorded_flow_metrics": {
     "drv_count": 814.0,
-    "dynamic_power_pw": 249940000000.0,
-    "leakage_power_pw": 3060000000.0,
+    "dynamic_power_pw": 249586381000.0,
+    "leakage_power_pw": 3059457000.0,
     "runtime_s": 491.0,
-    "tns_abs_ns": 2746.05
+    "tns_abs_ns": 2714.6869201
   },
   "schema": "goalevolve.ae2-selection.v1"
 }
