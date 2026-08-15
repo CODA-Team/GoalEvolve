@@ -150,6 +150,12 @@ provider credential；项目不会自动创建、读取或配置 API key。若�
 `make setup` 成功后会生成 `outputs/toolchain/activate.sh`。AE-2 和 AE-3 所需的
 OpenROAD 构建依赖、环境脚本和动态库由用户准备的 workspace 负责维护。
 
+README 中的 `sudo ./etc/DependencyInstaller.sh -base` 只安装宿主机 package，
+因此需要管理员允许的 sudo session。若共享服务器已经提供列出的 compiler 和 OpenROAD
+构建依赖、但不提供 sudo，跳过这一条 `-base` 即可，继续执行
+`./etc/DependencyInstaller.sh -common -local`；缺失的系统 package 应由管理员安装，
+不要绕过权限策略。
+
 ## AE-3：新鲜进化
 
 从 [config/credentials/goalevolve_codex.env.example](config/credentials/goalevolve_codex.env.example) 建立被忽略的 `config/credentials/goalevolve_codex.env`，并执行 `chmod 600 config/credentials/goalevolve_codex.env`。GoalEvolve 永远不读取 `~/.codex`，而是从这个项目文件创建隔离的 Teacher/Student home。所有 design 共用的模型和推理强度位于 `config/codex.json`，当前为 `gpt-5.6-terra` 与 `xhigh`。

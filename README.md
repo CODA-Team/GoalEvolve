@@ -130,6 +130,12 @@ export OPENROAD_EXE="$P0_BUILD/build/bin/openroad"
 make check
 ```
 
+`-base` installs host packages and therefore requires an administrator-enabled
+`sudo` session. If the host already provides the listed compiler and OpenROAD
+build dependencies but does not grant `sudo` (a common shared-server setup),
+skip only that `-base` line and run `-common -local`; ask the administrator to
+install any missing host package rather than trying to work around privileges.
+
 `make check` runs the AE-1 preflight. It verifies the release manifest, p0 and
 fixed-source snapshots, benchmark inputs, ASAP7 data, official parser/checker,
 and Python interface. A separately prepared compatible OpenROAD environment can
