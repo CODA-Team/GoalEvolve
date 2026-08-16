@@ -21,6 +21,7 @@
   "promotion": "power_first_promotion",
   "power_stage_tns_ceiling_ns": 60.0,
   "power_stage_protected_rounds": 10,
+  "max_consecutive_no_promotion_rounds": 10,
   "power_reclaim_phase": "early_forced_reclaim",
   "power_reclaim_proportion_percent": 80.0,
   "power_reclaim_max_moves": 0,

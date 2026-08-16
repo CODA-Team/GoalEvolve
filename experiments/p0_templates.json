@@ -2,9 +2,9 @@
   "schema_version": "goalevolve.p0-template-registry.v1",
   "designs": {
     "aes_cipher_top": {
-      "template": "aes_cipher_top/p0_ast_recovery_20260810_baseline.local.json",
+      "template": "aes_cipher_top/evolve.json",
       "target_policy_ready": true,
-      "description": "P0 AST campaign; first 8 rounds force power recovery and permit TNS up to 80 ns."
+      "description": "P0 campaign with the reviewed AES target policy; the first 10 rounds enforce the 60 ns power-stage timing ceiling."
     },
     "ariane": {
       "template": "ariane/evolve.json",

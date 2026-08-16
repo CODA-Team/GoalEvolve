@@ -24,6 +24,7 @@ class P0CampaignTests(unittest.TestCase):
         self.assertTrue(report["ast_repository_graph_ready"])
         aes = next(item for item in report["designs"] if item["design"] == "aes_cipher_top")
         self.assertTrue(aes["target_policy_ready"])
+        self.assertEqual(aes["template"], "experiments/aes_cipher_top/evolve.json")
 
     def test_aes_p0_init_copies_policy_into_a_private_runtime_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -38,8 +39,8 @@ class P0CampaignTests(unittest.TestCase):
             self.assertFalse(profile["campaign_ready"])
             self.assertEqual(profile["planning_mode"], "ast_graph")
             self.assertTrue(profile["repository_graph_enabled"])
-            self.assertEqual(profile["power_stage_tns_ceiling_ns"], 80.0)
-            self.assertEqual(profile["power_stage_protected_rounds"], 8)
+            self.assertEqual(profile["power_stage_tns_ceiling_ns"], 60.0)
+            self.assertEqual(profile["power_stage_protected_rounds"], 10)
             self.assertTrue(str(profile["source_root"]).endswith("openroad_power/p0/source"))
             self.assertEqual(Path(profile["state_root"]), root / "campaign")
             graph_root = root / "campaign" / "knowledge" / "repository_graph" / "p0"
