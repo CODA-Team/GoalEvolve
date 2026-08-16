@@ -61,6 +61,96 @@ class AssignmentMaterialization:
     errors: tuple[str, ...]
 
 
+def canonicalize_card_only_explorer_provenance(
+    *,
+    plan: Mapping[str, object],
+    retrieval_audit: Mapping[str, object] | None,
+) -> tuple[dict[str, object], tuple[dict[str, object], ...]]:
+    """Copy immutable retrieval provenance into card-only Explorer ideas.
+
+    In ``openroad_cards`` mode the Teacher is allowed to inspect the live
+    parent, but it must not become the authority for IDs emitted by the
+    Controller's EPD retrieval trace.  A Controller repair frequently changes
+    an assignment while preserving its draft signature.  Requiring the model
+    to retype the trace IDs made a one-character transcription error abort an
+    otherwise executable round.
+
+    The caller deliberately invokes this only for card-only campaigns.  AST
+    campaigns retain their existing verbatim graph/provenance path.  Semantic
+    novelty prose remains Teacher-authored; only the trace-owned ID fields and
+    query token are canonicalized from the accepted audit row.
+    """
+    normalized = dict(plan)
+    signatures = (
+        dict(retrieval_audit.get("signatures") or {})
+        if isinstance(retrieval_audit, Mapping)
+        else {}
+    )
+    explorer_references = {
+        str(row.get("idea_reference") or "").strip()
+        for row in list(plan.get("assignments") or ())
+        if isinstance(row, Mapping)
+        and str(row.get("role") or "").strip().lower() == "explorer"
+        and str(row.get("idea_reference") or "").strip()
+    }
+    updates: list[dict[str, object]] = []
+    records: list[object] = list(plan.get("evolution_idea_records") or ())
+    rewritten_records: list[object] = []
+    for raw in records:
+        if not isinstance(raw, Mapping):
+            rewritten_records.append(raw)
+            continue
+        idea = dict(raw)
+        reference = str(idea.get("reference") or "").strip()
+        signature_id = str(idea.get("draft_signature_id") or "").strip()
+        trace_row = dict(signatures.get(signature_id) or {})
+        if (
+            reference not in explorer_references
+            or not signature_id
+            or not bool(trace_row.get("accepted"))
+        ):
+            rewritten_records.append(idea)
+            continue
+        result_ids = _items(trace_row.get("result_ids"))
+        opened_ids = _items(trace_row.get("opened_idea_ids"))
+        nearest = str(idea.get("nearest_historical_idea") or "").strip()
+        canonical_nearest = (
+            nearest
+            if nearest in set(result_ids)
+            else (result_ids[0] if result_ids else "none")
+        )
+        canonical = {
+            "epd_search_query": signature_id,
+            "retrieved_historical_ideas": result_ids,
+            "opened_epd_records": opened_ids,
+            "nearest_historical_idea": canonical_nearest,
+        }
+        amended = {
+            field: value
+            for field, value in canonical.items()
+            if (
+                _items(idea.get(field))
+                if field in {"retrieved_historical_ideas", "opened_epd_records"}
+                else str(idea.get(field) or "").strip()
+            )
+            != value
+        }
+        idea.update(canonical)
+        rewritten_records.append(idea)
+        if amended:
+            updates.append(
+                {
+                    "idea_reference": reference,
+                    "draft_signature_id": signature_id,
+                    "fields": sorted(amended),
+                    "authority": "controller_retrieval_audit",
+                }
+            )
+    if records:
+        normalized["evolution_idea_records"] = rewritten_records
+    return normalized, tuple(updates)
+
+
 def build_role_templates(
     *,
     student_ids: Sequence[str],

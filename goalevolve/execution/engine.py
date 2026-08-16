@@ -60,6 +60,7 @@ from .teacher_assignment import (
     RMP_AREA_EXECUTION_DIRECT_FILES,
     RMP_AREA_EXECUTION_ENTRY_SYMBOLS,
     build_role_templates,
+    canonicalize_card_only_explorer_provenance,
     materialize_teacher_assignments,
 )
 from ..evaluation.leaderboard import update_unified_leaderboard
@@ -98,6 +99,107 @@ def _partition_controller_assignment_errors(
         else:
             blocking.append(error)
     return tuple(dict.fromkeys(blocking)), tuple(dict.fromkeys(rejected))
+
+
+_CARD_ONLY_DROPPABLE_EXPLORER_ERRORS = frozenset(
+    {
+        "missing_explorer_draft_signature",
+        "explorer_retrieval_audit_rejected",
+        "missing_explorer_novelty_evidence",
+        "explorer_search_query_mismatch",
+        "explorer_novelty_evidence_not_in_trace",
+        "explorer_nearest_idea_not_in_trace",
+    }
+)
+
+
+def _card_only_droppable_explorer_ids(
+    *,
+    errors: Sequence[str],
+    templates: Sequence[Hypothesis],
+) -> tuple[str, ...]:
+    """Return Explorer IDs only when every error is trace-provenance-only.
+
+    This is intentionally narrower than general Explorer admission failures.
+    A bad source anchor, recipe, role, or duplicate mechanism remains a hard
+    error.  For card-only EPD provenance, however, the Controller can safely
+    omit just the malformed fresh Explorer after repair exhaustion and retain
+    the other independently materialized Students.
+    """
+    explorer_ids = {
+        str(template.student_id)
+        for template in templates
+        if template.student_role == "explorer" and str(template.student_id)
+    }
+    rejected: list[str] = []
+    for raw in errors:
+        error = str(raw)
+        matched = next(
+            (
+                student_id
+                for student_id in explorer_ids
+                if any(
+                    error == f"{code}:{student_id}"
+                    for code in _CARD_ONLY_DROPPABLE_EXPLORER_ERRORS
+                )
+            ),
+            "",
+        )
+        if not matched:
+            return ()
+        rejected.append(matched)
+    return tuple(dict.fromkeys(rejected)) if rejected else ()
+
+
+def _drop_card_only_explorer_assignments(
+    *,
+    plan: Mapping[str, object],
+    student_ids: Sequence[str],
+) -> tuple[dict[str, object], tuple[str, ...]]:
+    """Remove card-only provenance-invalid Explorer rows and their ideas."""
+    dropped_ids = {str(student_id) for student_id in student_ids if str(student_id)}
+    normalized = deepcopy(dict(plan))
+    assignments = [
+        dict(row)
+        for row in list(plan.get("assignments") or ())
+        if isinstance(row, Mapping)
+    ]
+    dropped_references = tuple(
+        dict.fromkeys(
+            str(row.get("idea_reference") or "").strip()
+            for row in assignments
+            if str(row.get("student_id") or "").strip() in dropped_ids
+            and str(row.get("role") or "").strip().lower() == "explorer"
+            and str(row.get("idea_reference") or "").strip()
+        )
+    )
+    normalized["assignments"] = [
+        row
+        for row in assignments
+        if str(row.get("student_id") or "").strip() not in dropped_ids
+    ]
+    normalized["evolution_idea_records"] = [
+        dict(row)
+        for row in list(plan.get("evolution_idea_records") or ())
+        if isinstance(row, Mapping)
+        and str(row.get("reference") or "").strip() not in set(dropped_references)
+    ]
+    return normalized, dropped_references
+
+
+def _canonical_card_only_plan_provenance(
+    *,
+    planning_mode: str,
+    plan: Mapping[str, object],
+    retrieval_audit: Mapping[str, object] | None,
+) -> tuple[dict[str, object], tuple[dict[str, object], ...]]:
+    """Apply retrieval-ID canonicalization only to the card-only ablation."""
+    if planning_mode != "openroad_cards":
+        return dict(plan), ()
+    return canonicalize_card_only_explorer_provenance(
+        plan=plan,
+        retrieval_audit=retrieval_audit,
+    )
 
 
 def _paper_card_ids_for_materialization(
@@ -1026,7 +1128,29 @@ class GoalEvolveEngine:
                     recovered_markdown = str(
                         refreshed_payload.get("teacher_markdown") or ""
                     )
-            parsed_plan = parse_teacher_plan(recovered_markdown)
+            card_only_recovery_normalizations: list[dict[str, object]] = []
+
+            def canonicalize_recovered_card_only_provenance(
+                plan: Mapping[str, object], *, origin: str
+            ) -> dict[str, object]:
+                normalized, changes = _canonical_card_only_plan_provenance(
+                    planning_mode=self.effective_planning_mode,
+                    plan=plan,
+                    retrieval_audit=(
+                        dict(teacher_plan_payload.get("retrieval_audit") or {})
+                        if "retrieval_audit" in teacher_plan_payload
+                        else None
+                    ),
+                )
+                card_only_recovery_normalizations.extend(
+                    {**dict(change), "origin": origin} for change in changes
+                )
+                return normalized
+
+            parsed_plan = canonicalize_recovered_card_only_provenance(
+                parse_teacher_plan(recovered_markdown),
+                origin="recovered_teacher_plan",
+            )
             materialized = materialize_teacher_assignments(
                 assignments=tuple(
                     item for item in list(parsed_plan.get("assignments") or ()) if isinstance(item, Mapping)
@@ -1101,7 +1225,10 @@ class GoalEvolveEngine:
                     atomic_json(round_root / "teacher_plan.json", teacher_plan_payload)
                     raise RuntimeError("incomplete_round_controller_repair_turn_failed")
                 recovered_markdown = str(repair.get("teacher_markdown") or "").strip()
-                parsed_plan = parse_teacher_plan(recovered_markdown)
+                parsed_plan = canonicalize_recovered_card_only_provenance(
+                    parse_teacher_plan(recovered_markdown),
+                    origin=f"recovery_repair_{len(recovery_repairs):02d}",
+                )
                 materialized = materialize_teacher_assignments(
                     assignments=tuple(
                         item for item in list(parsed_plan.get("assignments") or ()) if isinstance(item, Mapping)
@@ -1138,7 +1265,69 @@ class GoalEvolveEngine:
                 )
             if recovery_rejected_explorers:
                 teacher_plan_payload["rejected_explorer_assignments"] = list(recovery_rejected_explorers)
+            if recovery_blocking_errors and self.effective_planning_mode == "openroad_cards":
+                dropped_student_ids = _card_only_droppable_explorer_ids(
+                    errors=recovery_blocking_errors,
+                    templates=role_templates,
+                )
+                if dropped_student_ids:
+                    parsed_plan, _ = _drop_card_only_explorer_assignments(
+                        plan=parsed_plan,
+                        student_ids=dropped_student_ids,
+                    )
+                    active_templates = tuple(
+                        template
+                        for template in role_templates
+                        if template.student_id not in set(dropped_student_ids)
+                    )
+                    materialized = materialize_teacher_assignments(
+                        assignments=tuple(
+                            item
+                            for item in list(parsed_plan.get("assignments") or ())
+                            if isinstance(item, Mapping)
+                        ),
+                        evolution_ideas=tuple(
+                            item
+                            for item in list(parsed_plan.get("evolution_idea_records") or ())
+                            if isinstance(item, Mapping)
+                        ),
+                        templates=active_templates,
+                        source_root=parent_source,
+                        allowed_patch_roots=allowed_patch_roots,
+                        historical_ideas=epd_database.ideas(),
+                        paper_card_ids=_paper_card_ids_for_materialization(
+                            teacher_plan_payload,
+                            paper_cards,
+                        ),
+                        repository_graph=repository_graph,
+                        teacher_context={
+                            "diagnosis_summary": parsed_plan.get("diagnosis_summary"),
+                            "parent_policy": parsed_plan.get("parent_policy"),
+                            "power_reclaim_phase": decision_context.get("power_reclaim_phase"),
+                        },
+                        explorer_retrieval_audit=(
+                            dict(teacher_plan_payload.get("retrieval_audit") or {})
+                            if "retrieval_audit" in teacher_plan_payload
+                            else None
+                        ),
+                    )
+                    if materialized.hypotheses and not materialized.errors:
+                        recovery_blocking_errors = ()
+                        teacher_plan_payload["card_only_dropped_explorer_assignments"] = [
+                            {
+                                "student_id": student_id,
+                                "reason": "provenance_invalid_after_controller_repairs",
+                            }
+                            for student_id in dropped_student_ids
+                        ]
+            if card_only_recovery_normalizations:
+                teacher_plan_payload["card_only_provenance_normalizations"] = (
+                    card_only_recovery_normalizations
+                )
             if recovery_blocking_errors:
+                if self.effective_planning_mode == "openroad_cards":
+                    teacher_plan_payload["teacher_markdown"] = recovered_markdown
+                    teacher_plan_payload["parsed_markdown"] = parsed_plan
                 teacher_plan_payload["controller_assignment_errors"] = list(recovery_blocking_errors)
                 atomic_json(round_root / "teacher_plan.json", teacher_plan_payload)
                 raise RuntimeError(
@@ -1318,9 +1507,33 @@ class GoalEvolveEngine:
                             dict(teacher_plan_payload.get("parsed_markdown") or {}),
                         )
                     raise RuntimeError(self._teacher_plan_failure(teacher_plan_payload))
-                parsed_plan = dict(teacher_plan_payload.get("parsed_markdown") or {})
+                card_only_provenance_normalizations: list[dict[str, object]] = []
 
-                def materialize(plan: Mapping[str, object]):
+                def canonicalize_card_only_provenance(
+                    plan: Mapping[str, object], *, origin: str
+                ) -> dict[str, object]:
+                    normalized, changes = _canonical_card_only_plan_provenance(
+                        planning_mode=self.effective_planning_mode,
+                        plan=plan,
+                        retrieval_audit=(
+                            dict(teacher_plan_payload.get("retrieval_audit") or {})
+                            if "retrieval_audit" in teacher_plan_payload
+                            else None
+                        ),
+                    )
+                    card_only_provenance_normalizations.extend(
+                        {**dict(change), "origin": origin} for change in changes
+                    )
+                    return normalized
+
+                parsed_plan = canonicalize_card_only_provenance(
+                    dict(teacher_plan_payload.get("parsed_markdown") or {}),
+                    origin="teacher_plan",
+                )
+
+                def materialize(
+                    plan: Mapping[str, object], *, templates: Sequence[Hypothesis] = role_templates
+                ):
                     return materialize_teacher_assignments(
                         assignments=tuple(
                             item for item in list(plan.get("assignments") or ()) if isinstance(item, Mapping)
@@ -1328,7 +1541,7 @@ class GoalEvolveEngine:
                         evolution_ideas=tuple(
                             item for item in list(plan.get("evolution_idea_records") or ()) if isinstance(item, Mapping)
                         ),
-                        templates=role_templates,
+                        templates=templates,
                         source_root=parent_source,
                         allowed_patch_roots=allowed_patch_roots,
                         historical_ideas=epd_database.ideas(),
@@ -1389,7 +1602,10 @@ class GoalEvolveEngine:
                         controller_errors = format_errors
                         prior_markdown = str(repaired.get("teacher_markdown") or prior_markdown)
                         continue
-                    parsed_plan = dict(repaired.get("parsed_markdown") or {})
+                    parsed_plan = canonicalize_card_only_provenance(
+                        dict(repaired.get("parsed_markdown") or {}),
+                        origin=f"repair_{repair_index:02d}",
+                    )
                     materialized = materialize(parsed_plan)
                     blocking_errors, newly_rejected = _partition_controller_assignment_errors(
                         errors=materialized.errors,
@@ -1410,10 +1626,62 @@ class GoalEvolveEngine:
                     teacher_plan_payload["rejected_explorer_assignments"] = list(
                         rejected_explorer_assignments
                     )
+                if controller_errors and self.effective_planning_mode == "openroad_cards":
+                    dropped_student_ids = _card_only_droppable_explorer_ids(
+                        errors=controller_errors,
+                        templates=role_templates,
+                    )
+                    if dropped_student_ids:
+                        dropped_references_by_student = {
+                            str(row.get("student_id") or "").strip(): str(
+                                row.get("idea_reference") or ""
+                            ).strip()
+                            for row in list(parsed_plan.get("assignments") or ())
+                            if isinstance(row, Mapping)
+                            and str(row.get("student_id") or "").strip()
+                            in set(dropped_student_ids)
+                        }
+                        parsed_plan, _ = _drop_card_only_explorer_assignments(
+                            plan=parsed_plan,
+                            student_ids=dropped_student_ids,
+                        )
+                        active_templates = tuple(
+                            template
+                            for template in role_templates
+                            if template.student_id not in set(dropped_student_ids)
+                        )
+                        salvaged = materialize(parsed_plan, templates=active_templates)
+                        if salvaged.hypotheses and not salvaged.errors:
+                            materialized = salvaged
+                            controller_errors = []
+                            teacher_plan_payload["card_only_dropped_explorer_assignments"] = [
+                                {
+                                    "student_id": student_id,
+                                    "reason": "provenance_invalid_after_controller_repairs",
+                                    "idea_reference": dropped_references_by_student.get(
+                                        student_id, ""
+                                    ),
+                                }
+                                for student_id in dropped_student_ids
+                            ]
+                if card_only_provenance_normalizations:
+                    teacher_plan_payload["card_only_provenance_normalizations"] = (
+                        card_only_provenance_normalizations
+                    )
                 if controller_errors:
+                    if self.effective_planning_mode == "openroad_cards":
+                        # Keep the last repaired raw Markdown and the exact
+                        # parsed payload used by the Controller, rather than
+                        # leaving an initial Teacher plan at the top level.
+                        teacher_plan_payload["teacher_markdown"] = prior_markdown
+                        teacher_plan_payload["parsed_markdown"] = parsed_plan
                     teacher_plan_payload["controller_assignment_errors"] = controller_errors
                     atomic_json(round_root / "teacher_plan.json", teacher_plan_payload)
                     raise RuntimeError("teacher_assignment_rejected_after_repair:" + ";".join(controller_errors))
+                if self.effective_planning_mode == "openroad_cards":
+                    teacher_plan_payload["parsed_markdown"] = parsed_plan
+                    if controller_repairs:
+                        teacher_plan_payload["teacher_markdown"] = prior_markdown
                 hypotheses = list(materialized.hypotheses)
                 teacher_plan_payload["hypotheses"] = [item.to_dict() for item in hypotheses]
                 teacher_plan_payload["role_schedule"] = role_schedule

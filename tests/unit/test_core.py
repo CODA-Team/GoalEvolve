@@ -937,6 +937,116 @@ Keep the checked parent.
         self.assertIn("explorer_retrieval_audit_rejected:student_1", rejected.errors)
         self.assertEqual(accepted.errors, ())
 
+    def test_card_only_provenance_is_canonicalized_from_retrieval_audit(self) -> None:
+        from goalevolve.execution.engine import _canonical_card_only_plan_provenance
+        from goalevolve.execution.teacher_assignment import (
+            canonicalize_card_only_explorer_provenance,
+        )
+
+        plan = {
+            "assignments": [
+                {
+                    "student_id": "student_1",
+                    "role": "explorer",
+                    "idea_reference": "idea_1",
+                }
+            ],
+            "evolution_idea_records": [
+                {
+                    "reference": "idea_1",
+                    "draft_signature_id": "draft_1",
+                    "epd_search_query": "transcribed_wrong_query",
+                    "retrieved_historical_ideas": ["IDEA_TYPO"],
+                    "opened_epd_records": ["IDEA_a9eb5595d168ef79"],
+                    "nearest_historical_idea": "IDEA_TYPO",
+                    "semantic_overlap": "Teacher-authored semantic explanation.",
+                    "material_difference": "Teacher-authored bounded difference.",
+                    "novelty_conclusion": "Teacher-authored conclusion.",
+                }
+            ],
+        }
+        audit = {
+            "signatures": {
+                "draft_1": {
+                    "accepted": True,
+                    "result_ids": ["IDEA_36541a52c29169e8", "IDEA_a9eb5595d168ed79"],
+                    "opened_idea_ids": ["IDEA_36541a52c29169e8", "IDEA_a9eb5595d168ed79"],
+                }
+            }
+        }
+
+        normalized, updates = canonicalize_card_only_explorer_provenance(
+            plan=plan,
+            retrieval_audit=audit,
+        )
+
+        idea = normalized["evolution_idea_records"][0]
+        self.assertEqual(idea["epd_search_query"], "draft_1")
+        self.assertEqual(
+            idea["retrieved_historical_ideas"],
+            ("IDEA_36541a52c29169e8", "IDEA_a9eb5595d168ed79"),
+        )
+        self.assertEqual(
+            idea["opened_epd_records"],
+            ("IDEA_36541a52c29169e8", "IDEA_a9eb5595d168ed79"),
+        )
+        self.assertEqual(idea["nearest_historical_idea"], "IDEA_36541a52c29169e8")
+        self.assertEqual(idea["semantic_overlap"], "Teacher-authored semantic explanation.")
+        self.assertEqual(
+            plan["evolution_idea_records"][0]["opened_epd_records"],
+            ["IDEA_a9eb5595d168ef79"],
+        )
+        self.assertEqual(updates[0]["authority"], "controller_retrieval_audit")
+        ast_plan, ast_updates = _canonical_card_only_plan_provenance(
+            planning_mode="ast_graph",
+            plan=plan,
+            retrieval_audit=audit,
+        )
+        self.assertEqual(ast_updates, ())
+        self.assertEqual(
+            ast_plan["evolution_idea_records"][0]["opened_epd_records"],
+            ["IDEA_a9eb5595d168ef79"],
+        )
+
+    def test_card_only_provenance_error_can_drop_only_its_explorer(self) -> None:
+        from goalevolve.execution.engine import (
+            _card_only_droppable_explorer_ids,
+            _drop_card_only_explorer_assignments,
+        )
+
+        templates = tuple(
+            replace(self.hypothesis, student_id=f"student_{index}", student_role="explorer")
+            for index in range(1, 3)
+        )
+        errors = ("explorer_novelty_evidence_not_in_trace:student_1",)
+        dropped = _card_only_droppable_explorer_ids(errors=errors, templates=templates)
+        self.assertEqual(dropped, ("student_1",))
+        self.assertEqual(
+            _card_only_droppable_explorer_ids(
+                errors=("invalid_evaluation_recipe:student_1:bad_recipe",),
+                templates=templates,
+            ),
+            (),
+        )
+        plan, references = _drop_card_only_explorer_assignments(
+            plan={
+                "assignments": [
+                    {"student_id": "student_1", "role": "explorer", "idea_reference": "idea_1"},
+                    {"student_id": "student_2", "role": "explorer", "idea_reference": "idea_2"},
+                ],
+                "evolution_idea_records": [
+                    {"reference": "idea_1", "idea": "invalid provenance"},
+                    {"reference": "idea_2", "idea": "retain this candidate"},
+                ],
+            },
+            student_ids=dropped,
+        )
+        self.assertEqual(references, ("idea_1",))
+        self.assertEqual([row["student_id"] for row in plan["assignments"]], ["student_2"])
+        self.assertEqual(
+            [row["reference"] for row in plan["evolution_idea_records"]], ["idea_2"]
+        )
+
     def test_controller_keeps_epd_roles_when_only_explorer_assignment_is_rejected(self) -> None:
         from goalevolve.execution.engine import _partition_controller_assignment_errors
 
@@ -1074,6 +1184,9 @@ Keep the checked parent.
         evaluator = RecordingEvaluator()
         initial_plan = plan_payload(repaired=False)
         repaired_plan = plan_payload(repaired=True)
+        repaired_plan["evolution_idea_records"][0]["opened_epd_records"] = (
+            "IDEA_NEAR_typo",
+        )
 
         class RepairingTeacher:
             name = "codex_teacher"
@@ -1147,6 +1260,8 @@ Keep the checked parent.
                 IsolatedWorkspace(source),
                 StrictEvidencePromotion(),
                 teacher=teacher,
+                planning_mode="openroad_cards",
+                repository_graph_enabled=False,
             )
             engine.initialize(baseline_metrics=dict(self.parent.metrics))
             engine.run(rounds=1)
@@ -1196,6 +1311,13 @@ Keep the checked parent.
             {"student_1", "student_2", "student_3", "student_4"},
         )
         self.assertIn("controller_assignment_repair", persisted_plan)
+        self.assertEqual(
+            persisted_plan["parsed_markdown"]["evolution_idea_records"][0][
+                "opened_epd_records"
+            ],
+            ["IDEA_NEAR_1"],
+        )
+        self.assertTrue(persisted_plan["card_only_provenance_normalizations"])
 
     def test_engine_schedules_a_surviving_hypothesis_with_its_own_student_id(self) -> None:
         class FourthStudentPlanner:
