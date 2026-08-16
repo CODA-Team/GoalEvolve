@@ -109,6 +109,10 @@ make setup
 make setup INSTALL_CODEX_CLI=1
 ```
 
+The release repository requires GitHub access. If your account uses an SSH
+key (or an HTTPS token cannot be entered from a non-interactive shell), clone
+with `git clone git@github.com:CODA-Team/GoalEvolve.git` instead.
+
 Copy and build p0 to prepare the matching OpenROAD executable. This keeps the
 frozen source snapshot unchanged; the dependency installer uses `sudo` only for
 host packages, while `-local` keeps downloaded build dependencies under the
