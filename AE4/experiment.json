@@ -8,49 +8,37 @@
     "source_hash": "97b7321cbe1f55057befde8ce2daa7b2ed51908faa49cea1f6b70692d5b09d99"
   },
   "benchmark_root": "third_party/benchmarks",
-  "rmp_liberty": {
-    "generated_path": "AE4/results/_generated/rmp_standard_cells.lib"
-  },
   "schedule_order": [
-    "baseline_flow",
-    "aes_schedule",
-    "design_schedule"
+    "baseline_flow"
   ],
   "designs": {
     "ariane": {
       "table1_baseline": {"tns_ns": -7568.43, "leakage_uw": 17900.0, "dynamic_uw": 640100.0},
-      "baseline_source": "benchmarks/ariane/metrics.csv",
-      "design_schedule_source": "artifact_evaluation/expected/ariane/r011_student3/evaluate.original.tcl"
+      "baseline_source": "benchmarks/ariane/metrics.csv"
     },
     "jpeg_encoder": {
       "table1_baseline": {"tns_ns": -48.77, "leakage_uw": 174.0, "dynamic_uw": 293826.0},
-      "baseline_source": "benchmarks/jpeg_encoder/metrics.csv",
-      "design_schedule_source": "artifact_evaluation/expected/jpeg_encoder/r016_student1/evaluate.original.tcl"
+      "baseline_source": "benchmarks/jpeg_encoder/metrics.csv"
     },
     "mempool_group": {
       "table1_baseline": {"tns_ns": -3680.33, "leakage_uw": 3070.0, "dynamic_uw": 275930.0},
-      "baseline_source": "benchmarks/mempool_group/metrics.csv",
-      "design_schedule_source": "artifact_evaluation/expected/mempool_group/aes_r58_parent/evaluate.original.tcl"
+      "baseline_source": "benchmarks/mempool_group/metrics.csv"
     },
     "nvdla_a": {
       "table1_baseline": {"tns_ns": -203.23, "leakage_uw": 321.0, "dynamic_uw": 164679.0},
-      "baseline_source": "benchmarks/nvdla_a/metrics.csv",
-      "design_schedule_source": "artifact_evaluation/expected/nvdla_a/r016_student1/evaluate.original.tcl"
+      "baseline_source": "benchmarks/nvdla_a/metrics.csv"
     },
     "nvdla_c": {
       "table1_baseline": {"tns_ns": -55.58, "leakage_uw": 17300.0, "dynamic_uw": 583700.0},
-      "baseline_source": "benchmarks/nvdla_c/metrics.csv",
-      "design_schedule_source": "artifact_evaluation/expected/nvdla_c/rmp_path_cone_halo_timing/evaluate.original.tcl"
+      "baseline_source": "benchmarks/nvdla_c/metrics.csv"
     },
     "nvdla_m": {
       "table1_baseline": {"tns_ns": -13.99, "leakage_uw": 61.5, "dynamic_uw": 44538.5},
-      "baseline_source": "benchmarks/nvdla_m/metrics.csv",
-      "design_schedule_source": "artifact_evaluation/expected/nvdla_m/r011_student1/evaluate.original.tcl"
+      "baseline_source": "benchmarks/nvdla_m/metrics.csv"
     },
     "nvdla_p": {
       "table1_baseline": {"tns_ns": -198.18, "leakage_uw": 306.0, "dynamic_uw": 39694.0},
-      "baseline_source": "benchmarks/nvdla_p/metrics.csv",
-      "design_schedule_source": "artifact_evaluation/expected/nvdla_p/r004_student1/evaluate.original.tcl"
+      "baseline_source": "benchmarks/nvdla_p/metrics.csv"
     }
   }
 }

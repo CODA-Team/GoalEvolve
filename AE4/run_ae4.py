@@ -16,9 +16,6 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from goalevolve.evaluation.contest2026 import _write_rmp_combined_liberty
-
-
 AE4_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = AE4_ROOT.parent
 CONFIG_PATH = AE4_ROOT / "experiment.json"
@@ -29,116 +26,6 @@ BASELINE_FLOW = [
     "repair_design",
     "repair_timing -setup",
 ]
-
-AES_SCHEDULE = [
-    "repair_design",
-    "repair_power -phase early_forced_reclaim -proportion 80",
-    "set ::env(RSZ_GOAL_TNS_ABS_S) 1.1999e-08",
-    "repair_timing -setup -phases {MT1 TNS LAST_GASP CRIT_VT_SWAP} -sequence {vt_swap sizeup swap sizeup_match buffer} -repair_tns 40 -max_repairs_per_pass 2 -max_passes 2 -max_iterations 2",
-    "file mkdir [file join $ae4_out rmp_delay_restructure]",
-    "set ::env(RMP_MAX_TRIED_CLOUDS) 4",
-    "set ::env(RMP_MAX_ACCEPTED_CLOUDS) 1",
-    "set ::env(RMP_MAX_CLOUDS) 4",
-    "set ::env(RMP_ENDPOINT_PATH_COUNT) 4",
-    "set ::env(RMP_UNIQUE_ENDPOINTS) 1",
-    "set ::env(RMP_SKIP_DUPLICATE_CLOUDS) 1",
-    "set ::env(RMP_UNION_ENDPOINT_PATHS) 1",
-    "set ::env(RMP_EXPAND_SIDE_FANIN_LEVELS) 2",
-    "set ::env(RMP_EXPAND_SIDE_FANIN_MAX_ADD) 24",
-    "set ::env(RMP_PATH_CONE_ONLY) 1",
-    "set ::env(RMP_STA_SELECT_BEST_MODE) 1",
-    "set ::env(RMP_GUARD_MIN_TNS_IMPROVE_NS) 0.001",
-    "set ::env(RMP_GUARD_MIN_WNS_IMPROVE_NS) 0.0",
-    "set ::env(RMP_TIMING_TELEMETRY) 1",
-    "restructure -liberty_file $ae4_rmp_lib -target timing -slack_threshold 0 -depth_threshold 16 -work_dir [file join $ae4_out rmp_delay_restructure]",
-    "repair_timing -setup -phases {MT1 TNS LAST_GASP CRIT_VT_SWAP} -sequence {vt_swap sizeup swap sizeup_match buffer} -repair_tns 40 -max_repairs_per_pass 2 -max_passes 2 -max_iterations 2",
-]
-
-DESIGN_SCHEDULES = {
-    "ariane": [
-        "repair_design",
-        "set ::env(RSZ_POWER_STAGE_TNS_CEILING_S) 1.5e-05",
-        "repair_power -phase early_forced_reclaim -proportion 80 -max_moves 300",
-        "set ::env(RSZ_GOAL_TNS_ABS_S) 1.85e-06",
-        "repair_timing -setup -phases {MT1 TNS LAST_GASP CRIT_VT_SWAP} -sequence {vt_swap sizeup swap sizeup_match buffer} -repair_tns 1 -max_repairs_per_pass 2 -max_passes 2 -max_iterations 2",
-    ],
-    "jpeg_encoder": [
-        "repair_design",
-        "set ::env(RSZ_POWER_STAGE_TNS_CEILING_S) 2e-07",
-        "repair_power -phase early_forced_reclaim -proportion 80",
-        "set ::env(RSZ_GOAL_TNS_ABS_S) 5.3e-08",
-        "repair_timing -setup -phases {MT1 TNS LAST_GASP CRIT_VT_SWAP} -sequence {vt_swap sizeup swap sizeup_match buffer} -repair_tns 40 -max_repairs_per_pass 2 -max_passes 2 -max_iterations 2",
-        "repair_power -phase mid_area_reclaim -proportion 15 -max_moves 300",
-        "repair_timing -setup -phases {MT1 TNS LAST_GASP CRIT_VT_SWAP} -sequence {vt_swap sizeup swap sizeup_match buffer} -repair_tns 40 -max_repairs_per_pass 2 -max_passes 2 -max_iterations 2",
-    ],
-    "mempool_group": [
-        "repair_design -max_utilization 90 -slew_margin 10 -cap_margin 10",
-        "set ::env(RSZ_POWER_STAGE_TNS_CEILING_S) 5e-06",
-        "set ::env(RSZ_TIMING_RECIPE_ID) {mt1_sampled}",
-        "set ::env(RSZ_REPAIR_POWER_MAX_TNS_EXPAND_RATIO) 1.5",
-        "set ::env(RSZ_REPAIR_POWER_MAX_TARGETS) 1000",
-        "set ::env(RSZ_REPAIR_POWER_TRIAL_LIMIT) 600",
-        "repair_power -phase early_forced_reclaim -proportion 50 -max_moves 100 -max_tns_expand_ratio 1.5",
-        "set ::env(RSZ_GOAL_TNS_ABS_S) 1.85e-06",
-        "repair_timing -setup -phases {MT1 TNS LAST_GASP CRIT_VT_SWAP} -sequence {vt_swap sizeup swap sizeup_match buffer} -repair_tns 1 -max_repairs_per_pass 2 -max_passes 2 -max_iterations 2",
-        "repair_design -max_utilization 90 -slew_margin 10 -cap_margin 10",
-    ],
-    "nvdla_a": [
-        "set ::env(RSZ_POWER_STAGE_TNS_CEILING_S) 2.94e-07",
-        "set ::env(RSZ_TIMING_RECIPE_ID) {mt1_deep}",
-        "set ::env(RSZ_REPAIR_POWER_MAX_TNS_EXPAND_RATIO) 0.4",
-        "repair_power -phase early_forced_reclaim -proportion 80 -max_moves 600 -max_tns_expand_ratio 0.4",
-        "set ::env(RSZ_GOAL_TNS_ABS_S) 2.94e-07",
-        "repair_timing -setup -phases {MT1 TNS LAST_GASP CRIT_VT_SWAP} -sequence {vt_swap sizeup swap sizeup_match buffer} -repair_tns 40 -max_repairs_per_pass 2 -max_passes 2 -max_iterations 2",
-    ],
-    "nvdla_c": [
-        "repair_design",
-        "set ::env(RSZ_GOAL_TNS_ABS_S) 1e-08",
-        "repair_timing -setup -phases {MT1 TNS LAST_GASP CRIT_VT_SWAP} -sequence {vt_swap sizeup swap sizeup_match buffer} -repair_tns 40 -max_repairs_per_pass 2 -max_passes 2 -max_iterations 2",
-    ],
-    "nvdla_m": [
-        "set ::env(RSZ_POWER_STAGE_TNS_CEILING_S) 1.8e-08",
-        "set ::env(RSZ_TIMING_RECIPE_ID) {rmp_path_cone_halo_sampled}",
-        "set ::env(RSZ_REPAIR_POWER_MAX_TNS_EXPAND_RATIO) 0.25",
-        "repair_power -phase early_forced_reclaim -proportion 80 -max_tns_expand_ratio 0.25",
-        "set ::env(RSZ_GOAL_TNS_ABS_S) 1.04e-08",
-        "file mkdir [file join $ae4_out rmp_delay_restructure]",
-        "set ::env(RMP_MAX_TRIED_CLOUDS) 4",
-        "set ::env(RMP_MAX_ACCEPTED_CLOUDS) 1",
-        "set ::env(RMP_MAX_CLOUDS) 4",
-        "set ::env(RMP_ENDPOINT_PATH_COUNT) 4",
-        "set ::env(RMP_UNIQUE_ENDPOINTS) 1",
-        "set ::env(RMP_SKIP_DUPLICATE_CLOUDS) 1",
-        "set ::env(RMP_UNION_ENDPOINT_PATHS) 1",
-        "set ::env(RMP_EXPAND_SIDE_FANIN_LEVELS) 1",
-        "set ::env(RMP_EXPAND_SIDE_FANIN_MAX_ADD) 16",
-        "set ::env(RMP_PATH_CONE_ONLY) 1",
-        "set ::env(RMP_STA_SELECT_BEST_MODE) 1",
-        "set ::env(RMP_GUARD_MIN_TNS_IMPROVE_NS) 0.001",
-        "set ::env(RMP_GUARD_MIN_WNS_IMPROVE_NS) 0.0",
-        "set ::env(RMP_TIMING_TELEMETRY) 1",
-        "restructure -liberty_file $ae4_rmp_lib -target timing -slack_threshold 0 -depth_threshold 16 -work_dir [file join $ae4_out rmp_delay_restructure]",
-        "repair_timing -setup -phases {MT1 TNS LAST_GASP CRIT_VT_SWAP} -sequence {vt_swap sizeup swap sizeup_match buffer} -repair_tns 1 -max_repairs_per_pass 2 -max_passes 2 -max_iterations 2",
-        "repair_design",
-    ],
-    "nvdla_p": [
-        "repair_design -max_utilization 90 -slew_margin 10 -cap_margin 10",
-        "set ::env(RSZ_POWER_STAGE_TNS_CEILING_S) 2.46e-07",
-        "set ::env(RSZ_REPAIR_POWER_MAX_TNS_EXPAND_RATIO) 1",
-        "repair_power -phase early_forced_reclaim -proportion 80",
-        "file mkdir [file join $ae4_out rmp_area_restructure]",
-        "set ::env(RMP_MAX_TRIED_CLOUDS) 4",
-        "set ::env(RMP_MAX_ACCEPTED_CLOUDS) 1",
-        "set ::env(RMP_MAX_CLOUDS) 4",
-        "set ::env(RMP_UNIQUE_ENDPOINTS) 1",
-        "set ::env(RMP_SKIP_DUPLICATE_CLOUDS) 1",
-        "set ::env(RMP_AREA_POWER_RECIPE) 1",
-        "set ::env(RMP_AREA_POWER) 1",
-        "set ::env(RMP_AREA_TELEMETRY) 1",
-        "restructure -liberty_file $ae4_rmp_lib -target area -slack_threshold 0 -depth_threshold 16 -work_dir [file join $ae4_out rmp_area_restructure]",
-        "repair_design -max_utilization 90 -slew_margin 10 -cap_margin 10",
-    ],
-}
 
 
 def sha256(path: Path) -> str:
@@ -174,32 +61,22 @@ def source_binary_path(config: dict) -> Path:
     return project_path(config["source_binary"]["path"])
 
 
-def rmp_liberty_path(config: dict) -> Path:
-    return project_path(config["rmp_liberty"]["generated_path"])
-
-
-def schedule_for(design: str, schedule: str) -> list[str]:
-    if schedule == "baseline_flow":
-        return BASELINE_FLOW
-    if schedule == "aes_schedule":
-        return AES_SCHEDULE
-    if schedule == "design_schedule":
-        return DESIGN_SCHEDULES[design]
-    raise ValueError(f"unknown schedule: {schedule}")
+def schedule_for(schedule: str) -> list[str]:
+    if schedule != "baseline_flow":
+        raise ValueError(f"unknown schedule: {schedule}")
+    return BASELINE_FLOW
 
 
 def tcl_for(config: dict, design: str, schedule: str, run_root: Path) -> str:
     inputs_root = benchmark_root(config)
     design_root = inputs_root / "benchmarks" / design
     asap7 = inputs_root / "asap7"
-    rmp_lib = rmp_liberty_path(config)
-    steps = schedule_for(design, schedule)
+    steps = schedule_for(schedule)
     lines = [
         f"# AE4 design={design} schedule={schedule}",
         f"# AES AE2 artifact={config['source_binary']['ae2_artifact']}",
         "set ae4_start [clock seconds]",
         f"set ae4_out {{{run_root}}}",
-        f"set ae4_rmp_lib {{{rmp_lib}}}",
         f"foreach lef [lsort [glob -nocomplain {{{asap7 / 'lef'}/*.lef}}]] {{ read_lef $lef }}",
         f"foreach lib [lsort [glob -nocomplain {{{asap7 / 'lib'}/*.lib}}]] {{ read_liberty $lib }}",
         f"read_def {{{design_root / (design + '.def.gz')}}}",
@@ -245,7 +122,7 @@ def tcl_for(config: dict, design: str, schedule: str, run_root: Path) -> str:
 
 
 def validate_inputs(config: dict) -> dict:
-    """Validate the released AE2 prerequisite and materialize portable RMP input.
+    """Validate the released AE2 prerequisite for the fixed baseline flow.
 
     An AE4 binary is intentionally not checksum-pinned: rebuilding the exact
     frozen source on another host changes ELF bytes.  Instead an AE2 report
@@ -254,7 +131,6 @@ def validate_inputs(config: dict) -> dict:
     """
     binary = source_binary_path(config)
     report_path = project_path(config["source_binary"]["report"])
-    rmp_lib = rmp_liberty_path(config)
     if not os.access(binary, os.X_OK):
         raise FileNotFoundError(
             "AES AE2 executable is missing. Run the README AE2 command for "
@@ -285,11 +161,6 @@ def validate_inputs(config: dict) -> dict:
         )
 
     inputs_root = benchmark_root(config)
-    lib_files = sorted((inputs_root / "asap7" / "lib").glob("*.lib"))
-    _write_rmp_combined_liberty(lib_files, rmp_lib.parent)
-    if not rmp_lib.is_file():
-        raise RuntimeError(f"failed to materialize the RMP Liberty: {rmp_lib}")
-
     provenance = {
         "source_binary": {
             **config["source_binary"],
@@ -298,12 +169,6 @@ def validate_inputs(config: dict) -> dict:
             "ae2_report_sha256": sha256(report_path),
             "portable_tcl_sha256": sha256(expected_tcl),
         },
-        "rmp_liberty": {
-            **config["rmp_liberty"],
-            "resolved_path": str(rmp_lib),
-            "observed_sha256": sha256(rmp_lib),
-        },
-        "design_schedule_sources": {},
         "table1_baseline_sources": {},
     }
     for design, entry in config["designs"].items():
@@ -311,13 +176,6 @@ def validate_inputs(config: dict) -> dict:
             path = inputs_root / "benchmarks" / design / f"{design}.{suffix}"
             if not path.is_file():
                 raise FileNotFoundError(path)
-        source = PROJECT_ROOT / entry["design_schedule_source"]
-        if not source.is_file():
-            raise FileNotFoundError(source)
-        provenance["design_schedule_sources"][design] = {
-            "path": str(source),
-            "sha256": sha256(source),
-        }
         baseline_source = inputs_root / entry["baseline_source"]
         provenance["table1_baseline_sources"][design] = {
             "path": str(baseline_source),
@@ -342,7 +200,7 @@ def prepare(config: dict) -> list[tuple[str, str, Path]]:
                 {
                     "design": design,
                     "schedule": schedule,
-                    "schedule_commands": schedule_for(design, schedule),
+                    "schedule_commands": schedule_for(schedule),
                     "tcl": str(tcl),
                     "tcl_sha256": sha256(tcl),
                     "binary": config["source_binary"],
@@ -463,11 +321,9 @@ def absolute_improvement(metric: str, baseline: float, value: float) -> float:
 
 
 def schedule_label(schedule: str) -> str:
-    return {
-        "baseline_flow": "Baseline flow",
-        "aes_schedule": "AES schedule",
-        "design_schedule": "Design schedule",
-    }[schedule]
+    if schedule != "baseline_flow":
+        raise ValueError(f"unknown schedule: {schedule}")
+    return "Baseline flow"
 
 
 def aggregate_rows(config: dict, rows: list[dict]) -> list[dict]:
@@ -610,13 +466,9 @@ def write_reports(config: dict, rows: list[dict]) -> None:
                 "",
                 "## Interpretation",
                 "",
-                "For the primary cross-design source-transfer claim, use `baseline_flow`. It is the",
-                "only schedule that introduces no AES-specific or target-design-specific optimization",
-                "policy, so improvements can be attributed to the AES-evolved OpenROAD source under a",
-                "stock schedule. `aes_schedule` is a schedule-portability stress test; `design_schedule`",
-                "is a source-plus-target-schedule upper-bound/control and is not pure source-transfer evidence.",
-                "The AES schedule's runtime is reported only as portability telemetry; it never enters",
-                "the frozen QoR comparison or the recommendation.",
+                "Every result uses `baseline_flow`: no AES-specific or target-design-specific",
+                "optimization policy is injected, so the comparison isolates the AES-evolved",
+                "OpenROAD source under a stock schedule.",
             ]
         )
     (RESULTS_ROOT / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
