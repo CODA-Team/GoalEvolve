@@ -74,6 +74,10 @@ PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner
 
 AE-2 使用版本匹配、且在当前 shell 已激活的 OpenROAD 执行可移植的已捕获 Tcl、官方 parser 与 4/4 checker，然后与 `artifact_evaluation/expected/aes_cipher_top/r058_student1/metrics.json` 对比 TNS、dynamic power、leakage。该结果的阶段是 `global_route + estimate_parasitics`，不是 detailed routing。
 
+这一步是**已选结果的重放，不是重新运行自动进化**：不会创建新的 Teacher/Student candidate，
+也不会改变论文中已经选定的结果。之所以仍须重新编译，是因为每个已选 artifact 都对应一份
+不同的 OpenROAD C++ 源码快照；在干净主机上必须编译该冻结源码，才能测量其捕获的 flow。
+
 ## AE-4：跨 design transfer
 
 AE-4 必须在 AES AE-2 已经成功之后运行。它使用本机刚刚 rebuild 且通过 AE-2 的

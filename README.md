@@ -149,6 +149,12 @@ its captured post-route flow, and compares its metrics and official 4/4
 validity result with the fixed evidence. Required benchmark inputs, ASAP7 data,
 the checker, and the frozen sources are included in the repository.
 
+This is a **replay of an already selected result, not a new evolution run**:
+it creates no Teacher/Student candidates and never changes the paper selection.
+The rebuild is necessary because the selected result is a source-code change to
+OpenROAD; each artifact must be compiled from its own immutable C++ snapshot
+before its captured flow can be measured on a clean host.
+
 First confirm that the p0 executable prepared by AE-1 starts in the current
 environment. Then AE-2 stages and builds the selected artifact's own frozen
 OpenROAD source before replaying its Tcl:
