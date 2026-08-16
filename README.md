@@ -113,6 +113,10 @@ The release repository requires GitHub access. If your account uses an SSH
 key (or an HTTPS token cannot be entered from a non-interactive shell), clone
 with `git clone git@github.com:CODA-Team/GoalEvolve.git` instead.
 
+On a shared server, a concurrent Conda operation can transiently lock
+libmamba's metadata database. `make setup` automatically retries with Conda's
+classic solver in that case; no manual cache deletion is needed.
+
 Copy and build p0 to prepare the matching OpenROAD executable. This keeps the
 frozen source snapshot unchanged; the dependency installer uses `sudo` only for
 host packages, while `-local` keeps downloaded build dependencies under the

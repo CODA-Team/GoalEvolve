@@ -62,7 +62,15 @@ fi
 
 if [[ ! -x "${CONDA_PREFIX}/bin/python" ]]; then
     printf '[INFO] Creating project-local Python environment: %s\n' "${CONDA_PREFIX}"
-    CONDA_PKGS_DIRS="${CONDA_PACKAGES_DIR}" "${CONDA_COMMAND}" env create --yes --prefix "${CONDA_PREFIX}" --file "${CONDA_ENVIRONMENT_FILE}"
+    # libmamba stores shard metadata in a cache shared by all Conda commands
+    # on a host.  On multi-user machines a concurrent solver can briefly lock
+    # that SQLite database.  Retry through Conda's classic solver, which does
+    # not use the libmamba shard cache, while retaining the same environment
+    # file and project-local package cache.
+    if ! CONDA_PKGS_DIRS="${CONDA_PACKAGES_DIR}" "${CONDA_COMMAND}" env create --yes --prefix "${CONDA_PREFIX}" --file "${CONDA_ENVIRONMENT_FILE}"; then
+        printf '%s\n' '[WARN] Default Conda solver failed; retrying setup with the classic solver.' >&2
+        CONDA_SOLVER=classic CONDA_PKGS_DIRS="${CONDA_PACKAGES_DIR}" "${CONDA_COMMAND}" env create --yes --prefix "${CONDA_PREFIX}" --file "${CONDA_ENVIRONMENT_FILE}"
+    fi
 fi
 
 CONDA_RUN=("${CONDA_COMMAND}" run --no-capture-output --prefix "${CONDA_PREFIX}")
