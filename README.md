@@ -128,7 +128,8 @@ cd "$P0_BUILD"
 # already provide the matching native dependencies.
 sudo ./etc/DependencyInstaller.sh -base
 ./etc/DependencyInstaller.sh -common -local
-./etc/Build.sh
+# AE-1 needs the production executable; project-level validation is `make check` below.
+./etc/Build.sh -no-tests
 cd -
 
 export OPENROAD_EXE="$P0_BUILD/build/bin/openroad"
@@ -145,6 +146,11 @@ native dependency bundle, skip **both** installer lines and run `Build.sh`
 directly. This avoids downloading duplicate packages into `$HOME/.local`; it
 does not replace the requirement that the host dependency versions be
 compatible with the frozen p0 source.
+
+Use `Build.sh -no-tests` for the release replay. It builds the production
+OpenROAD executable needed by AE-1/AE-2/AE-3 while avoiding optional upstream
+C++ unit-test targets. GoalEvolve's own release checks are run separately by
+`make check` below.
 
 `make check` runs the AE-1 preflight. It verifies the release manifest, p0 and
 fixed-source snapshots, benchmark inputs, ASAP7 data, official parser/checker,

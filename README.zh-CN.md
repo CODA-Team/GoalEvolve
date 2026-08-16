@@ -168,6 +168,10 @@ dependency bundle，可跳过 **两条** `DependencyInstaller.sh` 命令，直�
 `Build.sh`。这样不会在 `$HOME/.local` 重复下载依赖；它不免除宿主机依赖必须与
 冻结 p0 源码兼容的要求。
 
+release replay 应使用 `./etc/Build.sh -no-tests`：它构建 AE-1/AE-2/AE-3 所需的
+生产 OpenROAD 可执行文件，而不构建可选的 upstream C++ unit-test target。
+GoalEvolve 自身的 release 检查由后续的 `make check` 独立执行。
+
 ## AE-3：新鲜进化
 
 从 [config/credentials/goalevolve_codex.env.example](config/credentials/goalevolve_codex.env.example) 建立被忽略的 `config/credentials/goalevolve_codex.env`，并执行 `chmod 600 config/credentials/goalevolve_codex.env`。GoalEvolve 永远不读取 `~/.codex`，而是从这个项目文件创建隔离的 Teacher/Student home。所有 design 共用的模型和推理强度位于 `config/codex.json`，当前为 `gpt-5.6-terra` 与 `xhigh`。
