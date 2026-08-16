@@ -441,11 +441,86 @@ def parse_teacher_review(text: str) -> dict[str, object]:
                 "rationale": _field(block, "Rationale"),
             }
         )
+    causal_ledger = []
+    for heading, block in _blocks(_section(text, "QoR Causal Ledger")):
+        causal_ledger.append(
+            {
+                "student_id": _field(block, "Student") or heading,
+                "leakage_delta": _field(block, "Leakage Delta"),
+                "dynamic_delta": _field(block, "Dynamic Delta"),
+                "tns_delta": _field(block, "TNS Delta"),
+                "responsible_stage": _field(block, "Responsible Stage"),
+                "cell_reversion_handoff_evidence": _field(
+                    block, "Cell-Reversion/Handoff Evidence"
+                ),
+                "next_mechanism_requirement": _field(
+                    block, "Next Mechanism Requirement"
+                ),
+            }
+        )
     return {
         "round_assessment": _section(text, "Round Assessment"),
         "mechanism_actions": actions,
+        "qor_causal_ledger": causal_ledger,
         "next_round_constraints": _section(text, "Next Round Constraints"),
     }
+
+
+def teacher_review_ledger_validation_errors(
+    text: str,
+    *,
+    required_student_ids: Iterable[str],
+) -> tuple[str, ...]:
+    """Require one complete causal ledger row for each evaluated Student.
+
+    The ledger is advisory and never changes promotion, but an omitted or
+    partial row would otherwise silently discard the evidence needed by the
+    next Teacher/Student handoff.  Keep this validation separate from the
+    plan protocol: a failed review is repaired non-blockingly and never
+    invalidates an already committed QoR result.
+    """
+
+    expected = tuple(
+        dict.fromkeys(
+            str(student_id).strip()
+            for student_id in required_student_ids
+            if str(student_id).strip()
+        )
+    )
+    if not expected:
+        return ()
+    parsed = parse_teacher_review(text)
+    ledger = [
+        dict(row)
+        for row in list(parsed.get("qor_causal_ledger") or ())
+        if isinstance(row, Mapping)
+    ]
+    by_student: dict[str, list[dict[str, object]]] = {}
+    for row in ledger:
+        student_id = str(row.get("student_id") or "").strip()
+        if student_id:
+            by_student.setdefault(student_id, []).append(row)
+    errors: list[str] = []
+    required_fields = (
+        "leakage_delta",
+        "dynamic_delta",
+        "tns_delta",
+        "responsible_stage",
+        "cell_reversion_handoff_evidence",
+        "next_mechanism_requirement",
+    )
+    for student_id in expected:
+        rows = by_student.get(student_id, [])
+        if not rows:
+            errors.append(f"missing_qor_causal_ledger:{student_id}")
+            continue
+        if len(rows) > 1:
+            errors.append(f"duplicate_qor_causal_ledger:{student_id}")
+            continue
+        for field in required_fields:
+            if not str(rows[0].get(field) or "").strip():
+                errors.append(f"missing_qor_causal_ledger_field:{student_id}:{field}")
+    return tuple(dict.fromkeys(errors))
 
 
 def render_teacher_plan(

@@ -641,6 +641,11 @@ def materialize_teacher_assignments(
                 teacher_selection_rationale=rationale,
                 teacher_evolution_ideas=all_teacher_ideas,
                 teacher_predicted_stage_effect=predicted_effect,
+                teacher_qor_causal_ledger=tuple(
+                    dict(item)
+                    for item in list(context.get("qor_causal_ledger") or ())
+                    if isinstance(item, Mapping)
+                ),
                 teacher_internal_cpp_scheduling_suggestion=internal_cpp_scheduling_suggestion,
                 candidate_options=template.candidate_options,
             )

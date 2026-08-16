@@ -10,6 +10,28 @@ from ..core.models import EvidenceVerdict, Hypothesis, Parent
 from ..planning.cross_design_experience import cross_design_experience_packet
 
 
+def _power_pair_discipline(decision_context: Mapping[str, object] | None) -> list[str]:
+    """Render the Stage-1 co-primary-power instruction for Teacher and Student.
+
+    Promotion continues to own the paired lexicographic ordering.  This packet
+    makes the intended causal discipline unambiguous before a model chooses a
+    source mechanism, so a leakage-only or dynamic-only narrative cannot be
+    mistaken for completion of the protected power phase.
+    """
+
+    context = dict(decision_context or {})
+    if str(context.get("stage") or "") != "power_reclaim":
+        return []
+    pair = context.get("power_pair_objective")
+    pair_view = dict(pair) if isinstance(pair, Mapping) else {}
+    return [
+        "## Power-First Pair Discipline",
+        "For every protected power-first round, leakage power and dynamic power are co-primary objectives. The stage is not complete until both targets are met; a result reaching either one target is still a power-stage parent when the other remains unresolved.",
+        "For each proposed or implemented mechanism, explicitly reason about the expected effect on both power metrics through the same cell-set/VT/size/buffer/admission decision, name any expected trade-off, and preserve telemetry that proves that decision boundary fired. Do not describe a one-metric movement as a completed power solution or leave the other metric unanalyzed.",
+        json.dumps(pair_view, ensure_ascii=False, indent=2) if pair_view else "",
+    ]
+
+
 def _assigned_hypothesis_view(hypothesis: Hypothesis) -> dict[str, object]:
     """Expose one Student's executable assignment, never its peer menu."""
 
@@ -76,6 +98,8 @@ def teacher_packet(*, contract: GoalContract, parent: Parent, round_index: int, 
             "## Active Decision Stage",
             json.dumps(decision_context or {"mode": "single_stage"}, ensure_ascii=False, indent=2),
             "",
+            *_power_pair_discipline(decision_context),
+            "",
             "## Cross-Design Iteration Experience",
             "These checked-in lessons are advisory process constraints. They never provide a patch, alter the frozen contract, or replace Controller promotion.",
             json.dumps(cross_design_experience, ensure_ascii=False, indent=2),
@@ -136,6 +160,8 @@ def student_packet(
             "## Active Decision Stage",
             json.dumps(decision_context or {"mode": "single_stage"}, ensure_ascii=False, indent=2),
             "",
+            *_power_pair_discipline(decision_context),
+            "",
             "## Cross-Design Iteration Experience",
             "These checked-in lessons are advisory constraints from completed official-flow campaigns. Apply the stage-relevant Student rule to the assigned hypothesis, then verify it against the live parent. They never authorize a patch outside the assignment, change the QoR contract, or bypass Controller promotion.",
             json.dumps(cross_design_experience, ensure_ascii=False, indent=2),
@@ -147,7 +173,7 @@ def student_packet(
             "When the Teacher Handoff contains an Internal C++ Scheduling Suggestion, you may accept, adapt, or reject this advisory suggestion after independently inspecting the current source. In your final response, record exactly `- Decision: accepted|adapted|rejected` and `- Rationale: <concise source-grounded reason>`. You may change only internal C++ phase/policy scheduling within the assigned source boundary; do not edit Tcl, SDC, design, or benchmark inputs, and do not substitute a different Controller evaluation recipe.",
             "",
             "## Timing/Power Trade-off Discipline",
-            "When the active stage is timing_recovery or adaptive_tradeoff, the controller—not you—selects the named repair_timing recipe and always executes/checkpoints repair_power before any timing phase. Do not edit Tcl or substitute a different recipe. In adaptive_tradeoff, the controller's candidate menu deliberately covers dominant-residual, repair_power-durability, and power-to-timing-reversion mechanisms; your role and selected hypothesis, not a hidden Student-number bucket, determine the source experiment. Every role still runs the complete power-then-timing flow and compares against its exact recipe baseline. Treat the assigned recipe as a controlled schedule experiment (LEGACY_MT/TNS/WNS/WNS_CONE/REROUTE/etc.); use its actual policy and command parameters when reasoning about the C++ change. Preserve or add structured source telemetry for eligible/considered moves, committed moves, journal rollbacks, retained moves, and a reason for any rejected timing-power trade-off. If your timing action reverses a power-reclaim cell replacement, explain and count that direction in the source telemetry; the evaluator independently compares checkpointed instance cell types and sends the overlap/reversion rate to the Teacher.",
+            "When the active stage is timing_recovery or adaptive_tradeoff, the controller—not you—selects the named repair_timing recipe and always executes/checkpoints repair_power before any timing phase. Do not edit Tcl or substitute a different recipe. In adaptive_tradeoff, the controller's candidate menu deliberately covers dominant-residual, repair_power-durability, and power-to-timing-reversion mechanisms; your role and selected hypothesis, not a hidden Student-number bucket, determine the source experiment. Every role still runs the complete power-then-timing flow and compares against its exact recipe baseline. Treat the assigned recipe as a controlled schedule experiment (LEGACY_MT/TNS/WNS/WNS_CONE/REROUTE/etc.); use its actual policy and command parameters when reasoning about the C++ change. A target that was satisfied by the parent is not an immutable no-regression lock in adaptive_tradeoff: do not self-reject a measured dynamic/leakage trade-off solely because it crosses a target, but make the causal benefit and the trade-off auditable. Preserve or add structured source telemetry for eligible/considered moves, committed moves, journal rollbacks, retained moves, and a reason for any rejected timing-power trade-off. If your timing action reverses a power-reclaim cell replacement, explain and count that direction in the source telemetry; the evaluator independently compares checkpointed instance cell types and sends the overlap/reversion rate to the Teacher.",
             *([rmp_controller_fact] if rmp_controller_fact else []),
             "",
             "## Prior Negative Evidence",
@@ -446,6 +472,14 @@ def _teacher_handoff(hypothesis: Hypothesis) -> str:
         lines.extend(["### Predicted Stage Effect", hypothesis.teacher_predicted_stage_effect])
     if hypothesis.teacher_selection_rationale:
         lines.extend(["### Why This Assignment", hypothesis.teacher_selection_rationale])
+    if hypothesis.teacher_qor_causal_ledger:
+        lines.extend(
+            [
+                "### Prior QoR Causal Ledger",
+                "These are the prior Teacher's evidence-grounded causal hypotheses, not promotion authority. Use the relevant checkpoint/reversion fact to implement and instrument this assignment; if live source disproves it, report the mismatch truthfully rather than inventing confirmation.",
+                json.dumps(list(hypothesis.teacher_qor_causal_ledger), ensure_ascii=False, indent=2),
+            ]
+        )
     if hypothesis.teacher_internal_cpp_scheduling_suggestion:
         lines.extend(
             [

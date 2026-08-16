@@ -14,6 +14,7 @@ from .markdown_protocol import (
     parse_teacher_review,
     render_teacher_plan,
     teacher_plan_validation_errors,
+    teacher_review_ledger_validation_errors,
 )
 from .teacher_packet import TeacherPacketBuilder
 from ..planning.diagnosis import Diagnosis
@@ -34,6 +35,10 @@ class CodexTeacherConfig:
     seed_home: Path = Path("outputs/codex_home")
     credential_env: Path | None = None
     max_plan_format_repairs: int = 2
+    # A review that omits causal rows is useful neither to the next Teacher
+    # nor to its Students. This is non-blocking: it repairs the observer
+    # artifact without ever invalidating a completed evaluation round.
+    max_review_ledger_repairs: int = 1
 
 
 @dataclass(frozen=True)
@@ -381,6 +386,50 @@ class CodexTeacher:
         turn = self.runner.run(state_root=state_root, identity=self._review_identity(round_index), operation_id=f"r{round_index:03d}_teacher_review", cwd=round_root, artifact_root=round_root / "teacher" / "review", prompt=prompt)
         markdown = self._read_markdown(turn.artifacts.get("codex_last_message")) if turn.ok else ""
         parsed = parse_teacher_review(markdown)
+        ledger_errors = teacher_review_ledger_validation_errors(
+            markdown,
+            required_student_ids=(candidate.student_id for candidate, _ in rows),
+        ) if turn.ok else ("teacher_review_turn_failed",)
+        repair_artifacts: list[dict[str, str]] = []
+        # Do not turn an observer/provenance omission into a QoR failure. A
+        # bounded fresh review turn gets the same Controller evidence plus
+        # exact schema diagnostics; retain the original review if that repair
+        # cannot produce a complete ledger.
+        for repair_index in range(1, self.config.max_review_ledger_repairs + 1):
+            if not ledger_errors or not turn.ok:
+                break
+            repaired = self.runner.run(
+                state_root=state_root,
+                identity=self._review_ledger_repair_identity(round_index, repair_index),
+                operation_id=(
+                    f"r{round_index:03d}_teacher_review_ledger_repair_{repair_index:02d}"
+                ),
+                cwd=round_root,
+                artifact_root=round_root / "teacher" / "review" / f"ledger_repair_{repair_index:02d}",
+                prompt=self._review_ledger_repair_prompt(
+                    review_prompt=prompt,
+                    prior_markdown=markdown,
+                    errors=ledger_errors,
+                ),
+            )
+            repair_artifacts.append(dict(repaired.artifacts))
+            if not repaired.ok:
+                continue
+            repaired_markdown = self._read_markdown(
+                repaired.artifacts.get("codex_last_message")
+            )
+            repaired_errors = teacher_review_ledger_validation_errors(
+                repaired_markdown,
+                required_student_ids=(candidate.student_id for candidate, _ in rows),
+            )
+            if repaired_errors:
+                ledger_errors = repaired_errors
+                continue
+            turn = repaired
+            markdown = repaired_markdown
+            parsed = parse_teacher_review(markdown)
+            ledger_errors = ()
+            break
         return {
             "schema_version": "goalevolve.v2.teacher_review.v2",
             "teacher_ok": turn.ok,
@@ -399,6 +448,8 @@ class CodexTeacher:
             "outcomes": [_outcome(candidate, verdict) for candidate, verdict in rows],
             "teacher_markdown": markdown,
             "parsed_markdown": parsed,
+            "qor_causal_ledger_validation": list(ledger_errors),
+            "qor_causal_ledger_repair_artifacts": repair_artifacts,
             # Keep this compatibility key controller-generated so old state
             # readers continue to work; Codex itself never emits JSON here.
             "mechanism_actions": parsed.get("mechanism_actions") or [],
@@ -528,6 +579,14 @@ class CodexTeacher:
     @staticmethod
     def _review_identity(round_index: int) -> str:
         return f"{CodexTeacher._round_identity(round_index)}_review"
+
+    @staticmethod
+    def _review_ledger_repair_identity(round_index: int, repair_index: int) -> str:
+        """Use a fresh bounded thread for review-protocol correction."""
+        return (
+            f"{CodexTeacher._round_identity(round_index)}_"
+            f"review_ledger_repair_{repair_index:02d}"
+        )
 
     @staticmethod
     def _assignment_repair_identity(round_index: int, repair_index: int) -> str:
@@ -823,15 +882,19 @@ class CodexTeacher:
         if decision_context.get("stage") == "power_reclaim":
             decision_context["full_contract_distance_required_for_promotion"] = False
             decision_context["teacher_falsification_rule"] = (
-                "Use only strict lexicographic leakage/dynamic residual improvement, "
+                "Use only strict paired lexicographic leakage/dynamic residual improvement, "
                 "complete official integrity evidence, zero DRV, and the explicit TNS "
-                "safety ceiling. Do not additionally require full three-metric distance, "
-                "TNS, or raw dynamic power to improve over the parent."
+                "safety ceiling. Leakage and dynamic remain co-primary until both targets "
+                "are met; every mechanism must analyze both through its shared cell-set "
+                "decision. Do not additionally require full three-metric distance or TNS "
+                "to improve over the parent."
             )
         elif decision_context.get("stage") == "adaptive_tradeoff":
             decision_context["teacher_falsification_rule"] = (
                 "Require the dominant normalized residual and full frozen-contract distance to both improve, "
-                "preserve all already-satisfied targets, and use the exact recipe no-diff baseline. Keep the "
+                "use the exact recipe no-diff baseline, and keep TNS within the explicit safety ceiling. A previously "
+                "satisfied metric may regress when the measured cross-metric trade-off still improves both required "
+                "objectives; do not ban such a candidate solely for crossing its target. Keep the "
                 "candidate menu diverse across dominant-residual, repair_power-durability, and power-to-timing "
                 "handoff evidence even when TNS is dominant; this does not change the Controller-provided role envelopes."
             )
@@ -888,6 +951,8 @@ class CodexTeacher:
                 "",
                 f"You are the Teacher, with expertise in digital backend physical design. Your responsibility is to propose the next-round OpenROAD source-code algorithm modification directions, specifically for the RSZ and RMP source code used in the post-placement optimization stage, as well as optional Tcl scheduling recommendations for a goal-driven algorithm auto-evolution framework based on the current QoR bottlenecks. Diagnose the frozen-goal gap using only the compact decision packet, path-routed EPD evidence, parent checkpoint trajectory, {source_localization}, live source structure, paper-card references, and empirical observation memory. Afterwards, propose task directions for new-mechanism Explorers, promising-mechanism Enhancers, and validated-mechanism Integrators. You do not edit source code.",
                 "The frozen QoR decision contract consists of exactly TNS, dynamic power, and leakage power. Runtime is execution telemetry only: never use it to choose, rank, retain, suppress, reject, or promote a mechanism. The Controller owns source validation, evaluation, and promotion. You own mechanism creation and task assignment. The Controller supplies role envelopes, not candidate mechanisms.",
+                "First perform a QoR causal handoff analysis before proposing any assignment: compare parent and checkpoint leakage, dynamic, and TNS movements; identify the stage that created each gain or loss; inspect the cell-reversion/handoff evidence; then decide whether the next mechanism must target leakage, dynamic, timing, or the repair_power-to-repair_timing handoff. In `Diagnosis Summary`, state that causal chain. In every `Selection Rationale`, name the evidence-backed causal reason for this source boundary and the specific expected preservation or trade-off. A generic `timing is dominant` statement is insufficient when the packet shows power loss or cell reversal.",
+                "During `power_reclaim`, leakage and dynamic are co-primary until both targets are met. Each power-first idea and assignment must explicitly account for both metrics through one source-level cell-set/VT/size/buffer/admission decision and its telemetry; neither metric may be silently treated as completed because the other is active. During `adaptive_tradeoff`, an already-satisfied target is not a permanent no-regression lock: reason about a measured cross-metric trade-off instead of discarding it solely because dynamic or leakage crosses a target, while retaining all Controller safety and distance gates.",
                 *( ["For each fresh Explorer, create a new algorithmic mechanism after at least two successful, read-only live-source rg/sed inspections and after the EPD draft-signature retrieval workflow."] if requires_explorer_ideas else [] ),
                 *( ["This round contains only controller-bound seed revalidations. This instruction supersedes generic Explorer draft-signature, EPD-retrieval, and five-idea language in the compact packet: do not create Pass-A draft signatures, do not invoke EPD novelty retrieval, and do not manufacture five fresh Explorer ideas. Write one Evolution Idea for each assigned seed, retain its exact Candidate, source anchors, and activation signals, and let the Student inspect the live source plus the historical reference diff before making a fresh bounded diff."] if requires_seed_revalidation and not requires_explorer_ideas else [] ),
                 "For Enhancer, explain the prior stage evidence and reinforce one bounded mechanism rather than restarting a failed patch. For Integrator, explain why all selected mechanism decision boundaries, read/write sets, guards, and rollback behavior coexist; explicitly leave the slot empty if no safe pair exists.",
@@ -1089,6 +1154,14 @@ class CodexTeacher:
         rows: Sequence[tuple[CandidateResult, EvidenceVerdict]],
     ) -> str:
         parent_after = parent_after or parent
+        review_outcomes = [
+            _review_outcome(
+                candidate,
+                verdict,
+                parent_metrics=parent.metrics,
+            )
+            for candidate, verdict in rows
+        ]
         controller = {
             "parent_at_start": parent.to_dict(),
             "promoted_student": promoted_student,
@@ -1115,7 +1188,20 @@ class CodexTeacher:
             "",
             "## Timing Schedule / Cell-Reversal Memory", json.dumps(_review_schedule_projection(schedule_memory or {}), ensure_ascii=False, indent=2),
             "",
-            "## Structured Student Feedback", json.dumps([_review_outcome(candidate, verdict) for candidate, verdict in rows], ensure_ascii=False, indent=2),
+            "## Structured Student Feedback", json.dumps(review_outcomes, ensure_ascii=False, indent=2),
+            "",
+            "## Controller QoR Delta Worksheet", "For minimized QoR metrics, positive means candidate lower than the common parent and negative means it regressed. Use this arithmetic together with checkpoint/cell-reversal evidence; it is a reasoning aid, not a promotion decision.", json.dumps(
+                [
+                    {
+                        "student_id": row["student_id"],
+                        "parent_to_candidate_delta": row["parent_to_candidate_delta"],
+                        "checkpoint_metrics": row["checkpoint_metrics"],
+                    }
+                    for row in review_outcomes
+                ],
+                ensure_ascii=False,
+                indent=2,
+            ),
             "",
             "Return Markdown field blocks only. Do not return JSON or a code fence. Use exactly this structure:",
             "",
@@ -1128,17 +1214,66 @@ class CodexTeacher:
             "",
             "Repeat for evaluated mechanisms only.",
             "",
+            "## QoR Causal Ledger",
+            "Create one block for every evaluated Student. Derive every field from the Controller Decision, checkpoint metrics, phase signals, and cell-reversal memory; do not invent a QoR movement. The final field must be a source-bound requirement that the next Teacher can turn into an assignment.",
+            "### <student_id>",
+            "- Student: <student_id>",
+            "- Leakage Delta: <parent/checkpoint/final change and retention or no-change>",
+            "- Dynamic Delta: <parent/checkpoint/final change and retention or no-change>",
+            "- TNS Delta: <parent/checkpoint/final change and retention or no-change>",
+            "- Responsible Stage: <repair_power | repair_timing | handoff | no causal attribution>",
+            "- Cell-Reversion/Handoff Evidence: <measured overlap/reversal evidence, or explicitly none/not available>",
+            "- Next Mechanism Requirement: <specific source-bound causal requirement, or explicitly no follow-up>",
+            "",
             "## Next Round Constraints", "<compact constraints for new explorers, EPD integration, and EPD enhancement>",
         ])
+
+    @staticmethod
+    def _review_ledger_repair_prompt(
+        *,
+        review_prompt: str,
+        prior_markdown: str,
+        errors: Sequence[str],
+    ) -> str:
+        """Ask for a complete replacement review when causal rows were omitted."""
+
+        return "\n".join(
+            [
+                review_prompt,
+                "",
+                "## Controller QoR Causal Ledger Validation Errors",
+                *[f"- {error}" for error in errors],
+                "",
+                "## Prior Review Markdown",
+                prior_markdown or "<no readable prior review>",
+                "",
+                "Return a complete replacement review in the exact schema above. Preserve only evidence-grounded conclusions. Supply exactly one complete QoR Causal Ledger block for every listed Student; use `none/not available` where the Controller evidence is absent instead of omitting a required field. Do not edit source or change Controller promotion.",
+            ]
+        )
 
 
 def _outcome(candidate: CandidateResult, verdict: EvidenceVerdict) -> dict[str, object]:
     return {"student_id": candidate.student_id, "hypothesis": candidate.hypothesis.to_dict(), "metrics": candidate.metrics, "phase_signals": candidate.phase_signals, "evaluation_error": candidate.evaluation_error, "verdict": verdict.to_dict(), "preflight": candidate.artifacts.get("preflight"), "checkpoint_metrics": candidate.artifacts.get("checkpoint_metrics"), "official_4of4_log": candidate.artifacts.get("official_4of4_log")}
 
 
-def _review_outcome(candidate: CandidateResult, verdict: EvidenceVerdict) -> dict[str, object]:
+def _review_outcome(
+    candidate: CandidateResult,
+    verdict: EvidenceVerdict,
+    *,
+    parent_metrics: Mapping[str, object] | None = None,
+) -> dict[str, object]:
     """Project durable outcome facts without replaying source or peer menus."""
     hypothesis = candidate.hypothesis
+    parent_to_candidate_delta: dict[str, float] = {}
+    for metric in ("leakage_power_pw", "dynamic_power_pw", "tns_abs_ns"):
+        try:
+            before = float(dict(parent_metrics or {}).get(metric))
+            after = float(candidate.metrics.get(metric))
+        except (TypeError, ValueError):
+            continue
+        # All three frozen QoR metrics are minimized. Positive therefore
+        # means the candidate improves the common parent for this worksheet.
+        parent_to_candidate_delta[metric] = before - after
     return {
         "student_id": candidate.student_id,
         "hypothesis": {
@@ -1151,6 +1286,7 @@ def _review_outcome(candidate: CandidateResult, verdict: EvidenceVerdict) -> dic
             "expected_signals": list(hypothesis.expected_signals),
         },
         "metrics": candidate.metrics,
+        "parent_to_candidate_delta": parent_to_candidate_delta,
         "phase_signals": candidate.phase_signals,
         "evaluation_error": candidate.evaluation_error,
         "verdict": verdict.to_dict(),
@@ -1302,6 +1438,7 @@ def _hypothesis_from_option(option: dict[str, object]) -> Hypothesis:
         "conclusive_nonactivation_patterns",
         "epd_record_ids",
         "teacher_evolution_ideas",
+        "teacher_qor_causal_ledger",
     }
     # Controller candidate options may carry immutable allocation metadata
     # (for example ``candidate_id`` and ``source_anchors``).  Those fields

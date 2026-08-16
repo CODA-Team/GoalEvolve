@@ -1032,6 +1032,7 @@ class GoalEvolveEngine:
         saved_teacher_plan = self._incomplete_teacher_plan(round_root)
         teacher_plan = None
         teacher_plan_payload: dict[str, object] = {}
+        previous_review = self._previous_teacher_review(round_index, parent=parent)
         if saved_teacher_plan is not None:
             hypotheses, teacher_plan_payload = saved_teacher_plan
             print(
@@ -1039,8 +1040,6 @@ class GoalEvolveEngine:
                 f"reuse_teacher_plan students={len(hypotheses)}",
                 flush=True,
             )
-        else:
-            previous_review = self._previous_teacher_review(round_index, parent=parent)
         epd_database = self._epd()
         epd_portfolio = epd_database.role_portfolio(
             contract=self.contract,
@@ -1551,6 +1550,9 @@ class GoalEvolveEngine:
                             "diagnosis_summary": plan.get("diagnosis_summary"),
                             "parent_policy": plan.get("parent_policy"),
                             "power_reclaim_phase": decision_context.get("power_reclaim_phase"),
+                            "qor_causal_ledger": _teacher_review_causal_ledger(
+                                previous_review
+                            ),
                         },
                         explorer_retrieval_audit=(
                             dict(teacher_plan_payload.get("retrieval_audit") or {})
@@ -2705,6 +2707,7 @@ class GoalEvolveEngine:
             "conclusive_nonactivation_patterns",
             "epd_record_ids",
             "teacher_evolution_ideas",
+            "teacher_qor_causal_ledger",
         }
         for raw in list(payload.get("hypotheses") or []):
             if not isinstance(raw, Mapping):
@@ -4643,3 +4646,22 @@ class GoalEvolveEngine:
                 "authority": "execution_champion" if controller_changed_parent else "committed_round_json",
             },
         }
+
+
+def _teacher_review_causal_ledger(
+    previous_review: Mapping[str, object],
+) -> tuple[dict[str, object], ...]:
+    """Return only bounded parsed causal facts for the next Student handoff.
+
+    Teacher review prose is intentionally not copied into a new Student
+    packet. The fixed ledger fields preserve the causal chain across a round
+    boundary while Controller verdicts remain authoritative.
+    """
+
+    raw = previous_review.get("raw_review")
+    source = raw if isinstance(raw, Mapping) else previous_review
+    return tuple(
+        dict(item)
+        for item in list(source.get("qor_causal_ledger") or ())
+        if isinstance(item, Mapping)
+    )

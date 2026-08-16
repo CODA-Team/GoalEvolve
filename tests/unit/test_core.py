@@ -313,6 +313,8 @@ class GoalEvolveV2Tests(unittest.TestCase):
 
         self.assertIn('"student_id": "student_1"', review)
         self.assertIn('"tns_abs_ns": 55.0', review)
+        self.assertIn("## Controller QoR Delta Worksheet", review)
+        self.assertIn('"parent_to_candidate_delta"', review)
         self.assertIn('"checkpoint_metrics": "/round/student_1/checkpoint_metrics.json"', review)
         self.assertIn('"full_epd_artifact": "/state/knowledge/epd.json"', review)
         self.assertNotIn("DO_NOT_INLINE_UNSELECTED_SOURCE", review)
@@ -321,7 +323,11 @@ class GoalEvolveV2Tests(unittest.TestCase):
         self.assertNotIn("FULL_OBSERVATION_SHOULD_NOT_REACH_REVIEW_PROMPT", review)
 
     def test_teacher_markdown_protocol_parses_fixed_assignment_and_review_blocks(self) -> None:
-        from goalevolve.agents.markdown_protocol import parse_teacher_plan, parse_teacher_review
+        from goalevolve.agents.markdown_protocol import (
+            parse_teacher_plan,
+            parse_teacher_review,
+            teacher_review_ledger_validation_errors,
+        )
 
         plan = parse_teacher_plan(
             """## Diagnosis Summary
@@ -364,6 +370,16 @@ One timing mechanism is validated.
 - Evidence Classification: validated_official_gain
 - Rationale: Improve the bounded candidate ordering.
 
+## QoR Causal Ledger
+### student_1
+- Student: student_1
+- Leakage Delta: repair_power reduced leakage, then timing retained it.
+- Dynamic Delta: unchanged after the handoff.
+- TNS Delta: repair_timing recovered the dominant debt.
+- Responsible Stage: handoff
+- Cell-Reversion/Handoff Evidence: one prior low-leakage cell reverted during repair_timing.
+- Next Mechanism Requirement: instrument the timing admission that reverses the low-leakage cell.
+
 ## Next Round Constraints
 Retain the verified timing guard.
 """
@@ -384,6 +400,34 @@ Retain the verified timing guard.
         )
         self.assertEqual(plan["assignments"][1]["epd_record_ids"], ("EPD_timing", "EPD_power"))
         self.assertEqual(review["mechanism_actions"][0]["action"], "refine")
+        self.assertEqual(review["qor_causal_ledger"][0]["student_id"], "student_1")
+        self.assertIn(
+            "reverses the low-leakage cell",
+            review["qor_causal_ledger"][0]["next_mechanism_requirement"],
+        )
+        self.assertEqual(
+            teacher_review_ledger_validation_errors(
+                "## Round Assessment\nmissing causal evidence\n",
+                required_student_ids=("student_1",),
+            ),
+            ("missing_qor_causal_ledger:student_1",),
+        )
+        self.assertEqual(
+            teacher_review_ledger_validation_errors(
+                """## QoR Causal Ledger
+### student_1
+- Student: student_1
+- Leakage Delta: retained
+- Dynamic Delta: retained
+- TNS Delta: improved
+- Responsible Stage: handoff
+- Cell-Reversion/Handoff Evidence: none
+- Next Mechanism Requirement: inspect the timing commit boundary
+""",
+                required_student_ids=("student_1",),
+            ),
+            (),
+        )
         self.assertEqual(review["next_round_constraints"], "Retain the verified timing guard.")
 
     def test_teacher_markdown_protocol_preserves_overload_declarator_commas(self) -> None:
@@ -852,6 +896,15 @@ Keep the checked parent.
                 source_root=source,
                 allowed_patch_roots=("src/rsz",),
                 historical_ideas=(),
+                teacher_context={
+                    "qor_causal_ledger": (
+                        {
+                            "student_id": "student_9",
+                            "responsible_stage": "handoff",
+                            "next_mechanism_requirement": "instrument the timing replacement admission",
+                        },
+                    )
+                },
             )
         self.assertEqual(result.errors, ())
         self.assertEqual(len(result.hypotheses), 1)
@@ -861,6 +914,10 @@ Keep the checked parent.
         self.assertEqual(hypothesis.activation_signals, ("endpoint_repair_examined",))
         self.assertEqual(hypothesis.allowed_patch_paths, ())
         self.assertEqual(hypothesis.teacher_idea_reference, "idea_3")
+        self.assertEqual(
+            hypothesis.teacher_qor_causal_ledger[0]["next_mechanism_requirement"],
+            "instrument the timing replacement admission",
+        )
 
     def test_explorer_assignment_requires_retrieval_audit(self) -> None:
         from goalevolve.execution.teacher_assignment import (
@@ -8602,7 +8659,239 @@ Keep the checked parent.
         self.assertIn("Controller-provided role envelopes", prompt)
         self.assertNotIn("does not change the four Student roles", prompt)
 
-    def test_adaptive_tradeoff_preserves_satisfied_power_target(self) -> None:
+    def test_power_first_prompts_make_leakage_and_dynamic_co_primary(self) -> None:
+        from goalevolve.agents.prompting import student_packet, teacher_packet
+        from goalevolve.agents.teacher import CodexTeacher
+        from goalevolve.planning.diagnosis import diagnose
+
+        contract = build_contract(
+            design="paired_power_prompt",
+            baseline_metrics={
+                "tns_abs_ns": 12.69,
+                "dynamic_power_pw": 411_904_600_000.0,
+                "leakage_power_pw": 95_400_000.0,
+            },
+            target_metrics={
+                "tns_abs_ns": 12.0,
+                "dynamic_power_pw": 350_000_000_000.0,
+                "leakage_power_pw": 35_000_000.0,
+            },
+        )
+        parent_metrics = {
+            "tns_abs_ns": 12.69,
+            "dynamic_power_pw": 411_904_600_000.0,
+            "leakage_power_pw": 95_400_000.0,
+            "drv_count": 0.0,
+        }
+        parent = Parent(
+            "p0", parent_metrics, "source", "hash", contract.evaluate(parent_metrics)[0]
+        )
+        policy = PowerFirstPromotion(
+            power_stage_tns_ceiling_ns=80.0, protected_power_rounds=8
+        )
+        context = policy.context(contract=contract, parent=parent, round_index=1)
+        self.assertEqual(context["primary_metrics"], ["leakage_power_pw", "dynamic_power_pw"])
+        self.assertIn("Power-first is incomplete until both", context["power_pair_objective"]["completion_rule"])
+        self.assertEqual(
+            policy.context(contract=contract, parent=parent, round_index=8)["stage"],
+            "power_reclaim",
+        )
+        self.assertEqual(
+            policy.context(contract=contract, parent=parent, round_index=9)["stage"],
+            "adaptive_tradeoff",
+        )
+
+        teacher_prompt = CodexTeacher._plan_prompt(
+            parent=parent,
+            diagnosis=diagnose(contract=contract, parent=parent, checkpoints={}),
+            epd={},
+            observations={},
+            previous_review={},
+            fallback=(replace(self.hypothesis, student_id="student_1"),),
+            contract=contract,
+            decision_context=context,
+        )
+        student_prompt = student_packet(
+            parent=parent,
+            hypothesis=replace(self.hypothesis, student_id="student_1"),
+            prior=(),
+            decision_context=context,
+        )
+        compact_teacher_packet = teacher_packet(
+            contract=contract,
+            parent=parent,
+            round_index=1,
+            retrieval_audit={},
+            decision_context=context,
+        )
+        for prompt in (teacher_prompt, student_prompt, compact_teacher_packet):
+            self.assertIn("## Power-First Pair Discipline", prompt)
+            self.assertIn("co-primary", prompt.lower())
+            self.assertIn("cell-set/VT/size/buffer/admission decision", prompt)
+        self.assertIn(
+            "Primary bottleneck: ['leakage_power_pw', 'dynamic_power_pw']",
+            teacher_prompt,
+        )
+
+    def test_qor_causal_ledger_reaches_next_teacher_and_student_handoff(self) -> None:
+        from goalevolve.agents.prompting import student_packet
+        from goalevolve.agents.teacher import CodexTeacher
+        from goalevolve.planning.diagnosis import diagnose
+
+        ledger = {
+            "student_id": "student_2",
+            "leakage_delta": "repair_power lowered leakage before timing",
+            "dynamic_delta": "dynamic stayed below target before timing",
+            "tns_delta": "repair_timing improved TNS but erased one low-leakage choice",
+            "responsible_stage": "handoff",
+            "cell_reversion_handoff_evidence": "post_repair_timing reverses 4 of 12 power replacements",
+            "next_mechanism_requirement": "instrument the timing admission that reverses the low-leakage cell set",
+        }
+        previous_review = {
+            "raw_review": {"qor_causal_ledger": [ledger]},
+            "artifact_path": "/state/rounds/round_010/teacher_review.json",
+        }
+        teacher_prompt = CodexTeacher._plan_prompt(
+            parent=self.parent,
+            diagnosis=diagnose(contract=self.contract, parent=self.parent, checkpoints={}),
+            epd={},
+            observations={},
+            previous_review=previous_review,
+            fallback=(replace(self.hypothesis, student_id="student_1"),),
+            contract=self.contract,
+            decision_context={"stage": "adaptive_tradeoff", "evaluation_mode": "power_then_timing"},
+        )
+        student_prompt = student_packet(
+            parent=self.parent,
+            hypothesis=replace(
+                self.hypothesis,
+                student_id="student_1",
+                teacher_qor_causal_ledger=(ledger,),
+            ),
+            prior=(),
+            decision_context={"stage": "adaptive_tradeoff", "evaluation_mode": "power_then_timing"},
+        )
+        review_prompt = CodexTeacher._review_prompt(
+            parent=self.parent,
+            diagnosis=diagnose(contract=self.contract, parent=self.parent, checkpoints={}),
+            epd={},
+            observations={},
+            rows=(),
+        )
+
+        self.assertIn("## Prior QoR Causal Ledger", teacher_prompt)
+        self.assertIn("reverses 4 of 12 power replacements", teacher_prompt)
+        self.assertIn("### Prior QoR Causal Ledger", student_prompt)
+        self.assertIn("instrument the timing admission", student_prompt)
+        self.assertIn("Create one block for every evaluated Student", review_prompt)
+        self.assertIn("Next Mechanism Requirement", review_prompt)
+
+    def test_teacher_review_repairs_a_missing_qor_causal_ledger_without_rejecting_qor(self) -> None:
+        from goalevolve.agents.teacher import CodexTeacherConfig
+
+        initial_review = """## Round Assessment
+The timing candidate improved a measured checkpoint.
+
+## Mechanism Actions
+### timing
+- Action: refine
+- Evidence Classification: validated_official_gain
+- Rationale: retain the bounded timing direction.
+
+## Next Round Constraints
+Inspect the timing handoff.
+"""
+        repaired_review = """## Round Assessment
+The timing candidate improved a measured checkpoint.
+
+## Mechanism Actions
+### timing
+- Action: refine
+- Evidence Classification: validated_official_gain
+- Rationale: retain the bounded timing direction.
+
+## QoR Causal Ledger
+### student_1
+- Student: student_1
+- Leakage Delta: no measured leakage change.
+- Dynamic Delta: no dynamic metric in this frozen contract.
+- TNS Delta: TNS improved relative to the parent.
+- Responsible Stage: repair_timing
+- Cell-Reversion/Handoff Evidence: not available in this timing-only run.
+- Next Mechanism Requirement: inspect the bounded timing admission before changing the power handoff.
+
+## Next Round Constraints
+Inspect the timing handoff.
+"""
+
+        class FakeReviewRunner:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, str]] = []
+
+            def run(self, *, identity, operation_id, artifact_root, **_):
+                self.calls.append((identity, operation_id))
+                artifact_root.mkdir(parents=True, exist_ok=True)
+                message = artifact_root / "last_message.md"
+                message.write_text(
+                    repaired_review if "ledger_repair" in operation_id else initial_review,
+                    encoding="utf-8",
+                )
+                return SimpleNamespace(
+                    ok=True,
+                    operation_id=operation_id,
+                    detail="ok",
+                    artifacts={"codex_last_message": str(message)},
+                )
+
+        candidate = CandidateResult(
+            "student_1",
+            self.hypothesis,
+            {"tns_abs_ns": 60.0, "leakage_power_pw": 180.0},
+            {"accepted": 1.0},
+            [CheckResult(name, True) for name in ("build", "flow", "metrics", "lec")],
+            "+timing change",
+            "candidate",
+        )
+        verdict = classify_candidate(
+            contract=self.contract,
+            parent=self.parent,
+            candidate=candidate,
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            teacher = CodexTeacher(
+                CodexTeacherConfig(max_review_ledger_repairs=1)
+            )
+            runner = FakeReviewRunner()
+            teacher.runner = runner
+            review = teacher.review(
+                state_root=root,
+                round_root=root / "rounds" / "round_001",
+                round_index=1,
+                parent=self.parent,
+                diagnosis=SimpleNamespace(to_dict=lambda: {}),
+                rows=((candidate, verdict),),
+            )
+
+        self.assertEqual(
+            runner.calls,
+            [
+                ("teacher_r001_review", "r001_teacher_review"),
+                (
+                    "teacher_r001_review_ledger_repair_01",
+                    "r001_teacher_review_ledger_repair_01",
+                ),
+            ],
+        )
+        self.assertTrue(review["teacher_ok"])
+        self.assertEqual(review["qor_causal_ledger_validation"], [])
+        self.assertEqual(
+            review["parsed_markdown"]["qor_causal_ledger"][0]["responsible_stage"],
+            "repair_timing",
+        )
+        self.assertEqual(len(review["qor_causal_ledger_repair_artifacts"]), 1)
+
+    def test_adaptive_tradeoff_allows_a_bounded_regression_of_a_satisfied_power_target(self) -> None:
         contract = build_contract(
             design="adaptive",
             baseline_metrics={"tns_abs_ns": 100.0, "dynamic_power_pw": 300.0, "leakage_power_pw": 180.0},
@@ -8633,8 +8922,8 @@ Keep the checked parent.
         verdict = PowerFirstPromotion(power_stage_tns_ceiling_ns=200.0).classify(
             contract=contract, parent=parent, candidate=candidate
         )
-        self.assertEqual(verdict.state, "refuted")
-        self.assertIn("adaptive_regressed_satisfied_target:dynamic_power_pw", verdict.reasons)
+        self.assertEqual(verdict.state, "validated")
+        self.assertNotIn("adaptive_regressed_satisfied_target:dynamic_power_pw", verdict.reasons)
 
     def test_adaptive_planner_preserves_dominant_power_and_handoff_buckets(self) -> None:
         timing_one = MechanismCard(

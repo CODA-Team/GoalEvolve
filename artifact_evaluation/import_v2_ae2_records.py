@@ -258,9 +258,29 @@ def _refresh_stage_qor_reports(tcl: str) -> str:
     Historical campaigns reported power before detailed placement and then
     reused OpenSTA's instance-power cache after placement/global-route RC was
     re-estimated.  Keep the recorded optimization schedule intact, but make
-    every newly imported AE-2 replay use the fixed controller-owned tail.
+    every *full recorded flow* use the fixed controller-owned tail.  The
+    release-import helper is also used by provenance/unit fixtures that carry
+    a deliberately minimal Tcl program rather than a GoalEvolve contest flow;
+    those fixtures have no stage boundaries to normalize and must remain
+    portable as supplied.  A partially marked flow remains an error below,
+    because that would make a real replay ambiguous.
     """
     lines = tcl.splitlines()
+    stage_markers = (
+        'puts "GOALEVOLVE_CHECKPOINT_BEGIN post_placement"',
+        'puts "GOALEVOLVE_CHECKPOINT_END post_placement"',
+        'puts "GOALEVOLVE_CHECKPOINT_BEGIN post_route"',
+        'puts "GOALEVOLVE_CHECKPOINT_END post_route"',
+    )
+    present_markers = {
+        line.strip() for line in lines if line.strip() in set(stage_markers)
+    }
+    if not present_markers:
+        return tcl if tcl.endswith("\n") else tcl + "\n"
+    missing_markers = set(stage_markers) - present_markers
+    if missing_markers:
+        missing = ", ".join(sorted(missing_markers))
+        raise ValueError(f"recorded Tcl has incomplete stage markers: {missing}")
 
     def index_exact(value: str, *, start: int = 0) -> int:
         for index in range(start, len(lines)):

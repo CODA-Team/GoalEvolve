@@ -221,6 +221,11 @@ class ReleaseArtifactTests(unittest.TestCase):
             self.assertNotIn("artifacts", selected["parent"])
             self.assertEqual(candidate["metrics"], {"tns_abs_ns": 1.0})
 
+    def test_stage_qor_refresh_leaves_a_markerless_fixture_unchanged(self) -> None:
+        """Minimal provenance fixtures are not contest flows to normalize."""
+        fixture = "puts {minimal flow}\n"
+        self.assertEqual(release_import._refresh_stage_qor_reports(fixture), fixture)
+
     def test_ae2_stages_a_private_source_copy(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

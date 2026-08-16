@@ -92,6 +92,7 @@ class TeacherPacketBuilder:
             "- **Observation Memory** — Treat these ten-or-fewer lessons as compressed empirical feedback. Avoid a disproven family or explain a materially different boundary. Prefer mechanisms with measured activation and retained benefit. Open full records only if this compact view is insufficient.",
             "- **Cross-Design Iteration Experience** — Treat the checked-in, stage-relevant lessons as process constraints distilled from completed official-flow campaigns. They never supply a patch or override the local EPD, source boundary, frozen QoR contract, or Controller promotion rule.",
             "- **Timing Schedule / Cell-Reversal Memory** — Use this only to understand measured schedule interactions and to select from Controller recipes. Never edit Tcl or create a new recipe. Keep a source mechanism separate from a schedule recommendation. Follow the stated reversal and retention evidence.",
+            "- **Prior QoR Causal Ledger** — Re-derive a concrete leakage/dynamic/TNS causal hypothesis from the previous Teacher's checkpoint and cell-reversion conclusions. It is not a verdict or a patch recipe. Turn its next-mechanism requirement into a source-bound assignment, or explicitly replace it when the live source/evidence refutes it.",
             "- **Student Reflection Digest** — Read this as implementation-level feedback from completed attempts. Reuse an actionable lesson only after checking its reflection and diff path in EPD. Turn a limitation into a bounded enhancer hypothesis rather than an ungrounded rewrite. The Controller still owns verdicts.",
             "- **Controller Role Envelopes** — Fill every supplied role and keep its source/evaluation boundary. Explorer creates a novel mechanism, Enhancer reinforces supported evidence, and Integrator checks compatibility. Choose only a listed recipe. Do not invent Students, parents, or EPD records.",
             (
@@ -112,6 +113,7 @@ class TeacherPacketBuilder:
         sections.extend(self._observations())
         sections.extend(self._cross_design_experience())
         sections.extend(self._schedule_memory())
+        sections.extend(self._prior_qor_causal_ledger())
         sections.extend(self._student_reflection_digest())
         sections.extend(self._role_envelopes())
         sections.extend(self._live_source())
@@ -168,7 +170,16 @@ class TeacherPacketBuilder:
     def _active_stage(self) -> list[str]:
         context = self.decision_context
         stage = str(context.get("stage") or context.get("mode") or "single_stage")
-        primary = context.get("dominant_metric") or context.get("primary_metrics") or self.diagnosis.get("dominant_bottleneck") or "<unspecified>"
+        primary = (
+            context.get("primary_metrics")
+            if stage == "power_reclaim" and context.get("primary_metrics")
+            else (
+                context.get("dominant_metric")
+                or context.get("primary_metrics")
+                or self.diagnosis.get("dominant_bottleneck")
+                or "<unspecified>"
+            )
+        )
         guards = context.get("guards") or context.get("protected_metrics") or "preserve Controller guards, zero DRV, and official evidence"
         falsification = context.get("teacher_falsification_rule") or context.get("falsification_rule") or "use the Controller-provided official evidence rule"
         reduced = {
@@ -184,9 +195,20 @@ class TeacherPacketBuilder:
                 "full_contract_distance_required_for_promotion",
                 "teacher_falsification_rule",
                 "falsification_rule",
+                "power_pair_objective",
             )
             if key in context
         }
+        power_pair_discipline = (
+            [
+                "## Power-First Pair Discipline",
+                "Leakage power and dynamic power are co-primary for this protected stage. Power-first is incomplete until both targets are met; do not present the current dominant residual as a one-metric completion condition.",
+                "For every mechanism, analyze both power effects through the same source-level cell-set/VT/size/buffer/admission decision, name a possible trade-off, and require telemetry at that decision boundary.",
+                "",
+            ]
+            if stage == "power_reclaim"
+            else []
+        )
         return [
             "## Active Decision Stage",
             "This tells you what must be improved this round and what would falsify the mechanism. Use its summary for planning and its reduced JSON only for exact Controller semantics.",
@@ -197,6 +219,7 @@ class TeacherPacketBuilder:
             f"Falsification: {_short(falsification)}",
             _json(reduced or {"mode": "single_stage"}),
             "",
+            *power_pair_discipline,
         ]
 
     def _diagnosis(self) -> list[str]:
@@ -309,6 +332,34 @@ class TeacherPacketBuilder:
             "## Timing Schedule / Cell-Reversal Memory",
             "This summarizes only measured controller-owned recipe interactions and cell-reversal evidence. It informs source-level hypotheses but never authorizes a Tcl edit, recipe invention, or a promotion decision.",
             _json({"recommended_recipe_ids": list(self.schedule_memory.get("recommended_recipe_ids") or ()), "recipe_rollup": compact_rollup, "recent": _rows(self.schedule_memory.get("recent"))[-4:], "full_schedule_memory": self.schedule_memory.get("full_schedule_memory_artifact") or default_path}),
+            "",
+        ]
+
+    def _prior_qor_causal_ledger(self) -> list[str]:
+        raw_review = _mapping(self.previous_review.get("raw_review"))
+        ledger = _rows(raw_review.get("qor_causal_ledger"))
+        if not ledger:
+            ledger = _rows(self.previous_review.get("qor_causal_ledger"))
+        compact = [
+            {
+                key: row.get(key)
+                for key in (
+                    "student_id",
+                    "leakage_delta",
+                    "dynamic_delta",
+                    "tns_delta",
+                    "responsible_stage",
+                    "cell_reversion_handoff_evidence",
+                    "next_mechanism_requirement",
+                )
+                if row.get(key)
+            }
+            for row in ledger[-4:]
+        ]
+        return [
+            "## Prior QoR Causal Ledger",
+            "This is the parsed causal conclusion from the immediately preceding Teacher review. Reconcile it with current checkpoint facts and live source before assigning work. Do not merely repeat a timing label: identify whether repair_power produced or lost leakage/dynamic benefit, whether repair_timing reversed that cell decision, and why the next source mechanism should target leakage, timing, or their handoff.",
+            _json({"ledger": compact, "full_round_review": self.previous_review.get("artifact_path") or "rounds/<previous>/teacher_review.json"}),
             "",
         ]
 

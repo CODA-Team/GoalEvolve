@@ -30,11 +30,10 @@ class PowerFirstPromotion:
     """Two-stage controller: reach power targets first, then repair timing.
 
     Stage 1 is deliberately not a weakened final contract.  It admits only
-    complete official evidence and zero DRV, ranks candidates lexicographically
-    by the residuals of leakage and dynamic power, and bounds timing with an
-    explicit safety ceiling.  Once both power targets are met, Stage 2 returns
-    to the frozen three-metric contract and seeks timing recovery from that
-    low-power parent.
+    complete official evidence and zero DRV, ranks candidates with the paired
+    leakage/dynamic residual vector, and bounds timing with an explicit safety
+    ceiling.  Once both power targets are met, Stage 2 returns to the frozen
+    three-metric contract and seeks timing recovery from that low-power parent.
     """
 
     name = "power_first_promotion"
@@ -96,7 +95,7 @@ class PowerFirstPromotion:
                 "Strictly improve the lexicographic leakage/dynamic residual vector with complete official evidence and zero DRV; TNS may worsen only up to the explicit safety ceiling."
                 if stage == "power_reclaim"
                 else (
-                    "After the protected power-only rounds, strictly improve both the dominant normalized residual and the frozen final three-metric distance; preserve every already-satisfied QoR target."
+                    "After the protected power-only rounds, strictly improve both the dominant normalized residual and the frozen final three-metric distance. A previously satisfied target may temporarily miss its target only when this bounded cross-metric trade-off still satisfies both improvements and all hard safety gates."
                     if stage == "adaptive_tradeoff"
                     else "Both power targets are met; strictly improve the frozen final three-metric contract while repairing timing."
                 )
@@ -108,7 +107,13 @@ class PowerFirstPromotion:
                     "evaluation_mode": "power_only",
                     "baseline_policy": "Use the current parent's complete official power_only metrics directly. Do not rerun a no-diff baseline within this mode; remeasure only on an actual stage or recipe transition.",
                     "full_contract_distance_required_for_promotion": False,
-                    "falsification_rule": "Require strict lexicographic leakage/dynamic residual improvement, complete official evidence, zero DRV, and TNS within the safety ceiling; do not additionally require full three-metric distance or TNS to improve.",
+                    "power_pair_objective": {
+                        "co_primary_metrics": list(self.power_metrics),
+                        "completion_rule": "Power-first is incomplete until both leakage and dynamic targets are met; one satisfied power target never completes the stage by itself.",
+                        "teacher_student_discipline": "Every power-first mechanism must reason about its expected leakage and dynamic effects together, including a shared cell-set/VT/size/buffer decision, possible trade-off, and telemetry for the decision boundary. Do not relabel a single-metric effect as power completion or leave the other power metric unanalyzed.",
+                        "controller_semantics": "The Controller retains the existing paired lexicographic residual admission rule. The prompt discipline makes both metrics explicit without changing that deterministic ranking.",
+                    },
+                    "falsification_rule": "Require strict paired lexicographic leakage/dynamic residual improvement, complete official evidence, zero DRV, and TNS within the safety ceiling. Both power metrics remain co-primary in the causal analysis; do not additionally require full three-metric distance or TNS to improve.",
                     "executed_command_boundary": "top-level repair_power command: Resizer.tcl -> Resizer.i -> Resizer::repairPower -> Optimizer(REPAIR_POWER) -> power-specialized policies",
                     "source_focus": ["src/rsz"],
                     "implementation_rule": "Treat the complete repair_power call chain under src/rsz as the power-reclaim subsystem, not just its first policy hook. A power hypothesis may modify its command dispatch, REPAIR_POWER optimizer configuration, dedicated policies, and their power-specific helpers. If a useful Setup/VT/size/upsize, buffering, parasitic, or routing-related mechanism currently exists only for repair_timing, copy or specialize it behind REPAIR_POWER and invoke that copy only from repair_power. Do not change ordinary repair_timing semantics to obtain a power effect; shared utilities may change only when their existing timing behavior is provably preserved.",
@@ -145,7 +150,7 @@ class PowerFirstPromotion:
                             "power_timing_handoff_candidates": 1,
                             "rule": "Build a diverse controller-verified candidate menu covering the dominant residual, repair_power durability, and power-to-timing handoff. These are retrieval coverage groups, not Student roles. The Teacher assigns only the role envelopes supplied by the Controller: when no EPD role is eligible, all available slots are Explorers; otherwise the Controller retains its Explorer and eligible Integrator/Enhancer envelopes. An evidence-exhausted group narrows the menu rather than being relabeled as another mechanism type.",
                         },
-                        "falsification_rule": "Require a strict reduction in the active dominant normalized residual and in full three-metric normalized distance, keep every metric already at target within target, require zero DRV and official 4/4 LEC, and compare each recipe only with its exact no-diff baseline.",
+                        "falsification_rule": "Require a strict reduction in the active dominant normalized residual and in full three-metric normalized distance, require zero DRV and official 4/4 LEC, keep TNS within the explicit safety ceiling, and compare each recipe only with its exact no-diff baseline. A metric already at target may regress when the measured cross-metric trade-off still improves both required objectives.",
                         "baseline_policy": "The transition from power_only to power_then_timing is measured once. Every distinct controller-owned timing/RMP recipe then uses a cached exact-recipe no-diff parent baseline; never rerun an unchanged baseline.",
                     }
                 )
@@ -295,14 +300,16 @@ class PowerFirstPromotion:
         candidate: CandidateResult,
         verdict: EvidenceVerdict,
     ) -> EvidenceVerdict:
-        """Prevent post-protection tradeoffs from hiding a new target miss.
+        """Require an adaptive trade-off to improve the real bottleneck.
 
-        Full normalized distance is the cross-metric objective, but it alone
-        can buy a large TNS gain by giving back an already achieved power
-        target.  The adaptive stage therefore requires two simultaneous facts:
-        the parent's largest normalized residual decreases, and every metric
-        already at target remains at target.  Unresolved secondary metrics may
-        trade only when the full distance still improves.
+        The frozen normalized distance is the cross-metric objective.  After
+        the protected power-first window, a candidate may deliberately give
+        back a previously satisfied target (for example dynamic power) to
+        recover a much larger unresolved timing or leakage debt.  It remains
+        admissible only when the parent's largest residual and total frozen
+        distance both decrease, with the usual official evidence, zero-DRV,
+        and explicit TNS safety ceiling gates.  Target status by itself is
+        therefore not a permanent no-regression lock.
         """
         if verdict.state not in {"validated", "verified_qor_unattributed"}:
             return verdict
@@ -317,12 +324,6 @@ class PowerFirstPromotion:
         }
         reasons = list(verdict.reasons)
         violations: list[str] = []
-        for name, residual in parent_residuals.items():
-            if residual is None or float(residual) > 0.0:
-                continue
-            candidate_residual = candidate_residuals.get(name)
-            if candidate_residual is not None and float(candidate_residual) > 0.0:
-                violations.append(f"adaptive_regressed_satisfied_target:{name}")
         if unresolved:
             dominant = max(unresolved, key=unresolved.get)
             candidate_dominant = float(candidate_residuals.get(dominant) or 0.0)
