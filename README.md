@@ -112,7 +112,10 @@ make setup INSTALL_CODEX_CLI=1
 Copy and build p0 to prepare the matching OpenROAD executable. This keeps the
 frozen source snapshot unchanged; the dependency installer uses `sudo` only for
 host packages, while `-local` keeps downloaded build dependencies under the
-current user.
+current user. Before `Build.sh`, activate the prepared OpenROAD/ORFS workspace
+when it already provides the matching compiler and native dependency bundle;
+its activation must make those tools visible through `PATH` and
+`CMAKE_PREFIX_PATH` (or its equivalent).
 
 ```bash
 P0_INPUT="$PWD/artifact_evaluation/lineage/openroad_power/p0/source"
@@ -121,6 +124,8 @@ rm -rf "$P0_BUILD"
 mkdir -p "$(dirname "$P0_BUILD")"
 cp -a "$P0_INPUT" "$P0_BUILD"
 cd "$P0_BUILD"
+# Run these two installers only when the activated host workspace does not
+# already provide the matching native dependencies.
 sudo ./etc/DependencyInstaller.sh -base
 ./etc/DependencyInstaller.sh -common -local
 ./etc/Build.sh
@@ -135,6 +140,11 @@ make check
 build dependencies but does not grant `sudo` (a common shared-server setup),
 skip only that `-base` line and run `-common -local`; ask the administrator to
 install any missing host package rather than trying to work around privileges.
+If an activated, compatible OpenROAD/ORFS workspace already supplies the full
+native dependency bundle, skip **both** installer lines and run `Build.sh`
+directly. This avoids downloading duplicate packages into `$HOME/.local`; it
+does not replace the requirement that the host dependency versions be
+compatible with the frozen p0 source.
 
 `make check` runs the AE-1 preflight. It verifies the release manifest, p0 and
 fixed-source snapshots, benchmark inputs, ASAP7 data, official parser/checker,

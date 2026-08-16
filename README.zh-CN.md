@@ -161,6 +161,13 @@ README 中的 `sudo ./etc/DependencyInstaller.sh -base` 只安装宿主机 packa
 `./etc/DependencyInstaller.sh -common -local`；缺失的系统 package 应由管理员安装，
 不要绕过权限策略。
 
+执行 `Build.sh` 前，若已准备兼容的 OpenROAD/ORFS workspace，应先按该 workspace
+的说明激活它，使 compiler、native dependency 的 `PATH` 与 `CMAKE_PREFIX_PATH`
+（或等效变量）在当前 shell 可见。若该 workspace 已提供完整且版本兼容的 native
+dependency bundle，可跳过 **两条** `DependencyInstaller.sh` 命令，直接执行
+`Build.sh`。这样不会在 `$HOME/.local` 重复下载依赖；它不免除宿主机依赖必须与
+冻结 p0 源码兼容的要求。
+
 ## AE-3：新鲜进化
 
 从 [config/credentials/goalevolve_codex.env.example](config/credentials/goalevolve_codex.env.example) 建立被忽略的 `config/credentials/goalevolve_codex.env`，并执行 `chmod 600 config/credentials/goalevolve_codex.env`。GoalEvolve 永远不读取 `~/.codex`，而是从这个项目文件创建隔离的 Teacher/Student home。所有 design 共用的模型和推理强度位于 `config/codex.json`，当前为 `gpt-5.6-terra` 与 `xhigh`。
