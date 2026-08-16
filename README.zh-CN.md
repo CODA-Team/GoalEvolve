@@ -51,7 +51,7 @@ hook 和建议的 `avoid_exact_source_hooks` 前沿，要求 Teacher 换用新 h
 | AE-1 | 源码、benchmark、checker、manifest 与本机接口完整 | 否 | 是 |
 | AE-2 | 固定的八个已选择 artifact 之一的 post-route replay | 否 | 是，使用明确容差 |
 | AE-3 | 用户能启动新的 Teacher/Student 源码进化 campaign | 是 | 只检查流程；QoR 本身随机 |
-| AE-4 | 使用 AES 演化后二进制评测七个非 AES contest design | 否 | 是，记录 21 个 flow |
+| AE-4 | 使用 AES 演化后二进制评测七个非 AES contest design | 否 | 是，记录 7 个 baseline flow |
 
 立即运行 AE-1：
 
@@ -77,7 +77,8 @@ AE-2 使用版本匹配、且在当前 shell 已激活的 OpenROAD 执行可移�
 ## AE-4：跨 design transfer
 
 AE-4 必须在 AES AE-2 已经成功之后运行。它使用本机刚刚 rebuild 且通过 AE-2 的
-`aes_r58_student1` 二进制，在七个非 AES design 上运行三种 schedule；RMP 所需的单文件
+`aes_r58_student1` 二进制，在七个非 AES design 上各运行一个 `baseline_flow`（`repair_design`
+后接 `repair_timing -setup`）；RMP 所需的单文件
 Liberty 会从仓库内 ASAP7 Liberty 自动生成。因此 release 不依赖机器绝对路径或 ELF 二进制 hash。
 
 ```bash
@@ -87,8 +88,8 @@ PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" AE4/run_ae4.py run --jobs 1
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" AE4/run_ae4.py collect
 ```
 
-`--jobs 1` 是共享服务器的安全默认值；只有确认 CPU 和内存足够时再提高并行数。21 个 Tcl、
-日志和汇总都写入被 Git 忽略的 `AE4/results/`。三类 schedule、统计口径和结果解释见
+`--jobs 1` 是共享服务器的安全默认值；只有确认 CPU 和内存足够时再提高并行数。7 个 Tcl、
+日志和汇总都写入被 Git 忽略的 `AE4/results/`。固定 schedule、统计口径和结果解释见
 [AE4/README.md](AE4/README.md)。
 
 ## 环境安装

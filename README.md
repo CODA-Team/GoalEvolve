@@ -196,9 +196,10 @@ PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" AE4/run_ae4.py collect
 ```
 
 `--jobs 1` is the safe default for a shared host; raise it only when memory and
-CPU capacity permit parallel OpenROAD flows.  The 21 generated flows, logs and
-summaries are ignored under `AE4/results/`.  See [AE4/README.md](AE4/README.md)
-for the three schedules and the interpretation of the resulting report.
+CPU capacity permit parallel OpenROAD flows.  The seven generated baseline
+flows, logs and summaries are ignored under `AE4/results/`.  See
+[AE4/README.md](AE4/README.md) for the fixed schedule and interpretation of
+the resulting report.
 
 ## AE-3: Run a new source-evolution campaign
 
