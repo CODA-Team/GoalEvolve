@@ -359,19 +359,18 @@ outputs/
 │   └── <released-artifact>/
 │       ├── report/                    # Rebuild, preflight, and manifest comparison
 │       └── contest_output/            # Flow logs, QoR metrics, and 4/4 result
-└── ae3/
-    └── <design>/
-        ├── rounds/                    # Teacher plans and Student evaluations
-        ├── knowledge/                 # Persisted evolution evidence
-        └── parent.json                # Current promoted source parent
-
-outputs/ae4/
-├── provenance.json                    # Validated AES AE-2 binary provenance
-├── <design>/                          # Generated Tcl, flow log, and per-run JSON
-├── summary.csv / summary.json         # Seven-design comparison rows
-├── aggregate.json                     # Win counts and aggregate improvements
-├── report.md                          # Human-readable AE-4 report
-└── table.tex                          # Paper-ready comparison table
+├── ae3/
+│   └── <design>/
+│       ├── rounds/                    # Teacher plans and Student evaluations
+│       ├── knowledge/                 # Persisted evolution evidence
+│       └── parent.json                # Current promoted source parent
+└── ae4/
+    ├── provenance.json                # Validated AES AE-2 binary provenance
+    ├── <design>/                      # Generated Tcl, flow log, and per-run JSON
+    ├── summary.csv / summary.json     # Seven-design comparison rows
+    ├── aggregate.json                 # Win counts and aggregate improvements
+    ├── report.md                      # Human-readable AE-4 report
+    └── table.tex                      # Paper-ready comparison table
 ```
 
 For AE-2, inspect `report/ae2_report.json` for the fixed-artifact comparison

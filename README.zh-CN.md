@@ -234,16 +234,21 @@ AE-2 的重放输出位于 `outputs/ae2/<released-artifact>/`：`report/ae2_repo
 AE-3 的 campaign 状态位于 `outputs/ae3/<design>/`，其中 `rounds/` 保存候选历史，
 `parent.json` 保存当前晋升结果。
 
-AE-4 的生成结果保存在 `outputs/ae4/`：
+AE-4 的生成结果保存在 `outputs/ae4/`；完整输出树如下：
 
 ```text
-outputs/ae4/
-├── provenance.json              # 已验证的 AES AE-2 binary provenance
-├── <design>/                    # 生成 Tcl、flow 日志和单次运行 JSON
-├── summary.csv / summary.json   # 七个 design 的对比行
-├── aggregate.json               # win count 与聚合改善
-├── report.md                    # 可读的 AE-4 汇总报告
-└── table.tex                    # 论文用对比表
+outputs/
+├── ae2/
+│   └── <released-artifact>/     # 固定 artifact 的报告和 flow 输出
+├── ae3/
+│   └── <design>/                # campaign rounds、knowledge 与 parent.json
+└── ae4/
+    ├── provenance.json          # 已验证的 AES AE-2 binary provenance
+    ├── <design>/                # 生成 Tcl、flow 日志和单次运行 JSON
+    ├── summary.csv / summary.json
+    ├── aggregate.json           # win count 与聚合改善
+    ├── report.md                # 可读的 AE-4 汇总报告
+    └── table.tex                # 论文用对比表
 ```
 
 查看 `report.md` 和 `summary.csv` 获取七个 design 的 transfer 比较；单个 design 的
