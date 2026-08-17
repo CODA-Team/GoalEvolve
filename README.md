@@ -88,14 +88,9 @@ GoalEvolve/
 | Track | Purpose |
 |---|---|
 | AE-1 | Set up the project environment and check the release interfaces. |
-| AE-2 | Rebuild one released evolved OpenROAD source and replay its captured result. |
+| AE-2 | Rebuild and replay each of the eight released evolved OpenROAD source artifacts. |
 | AE-3 | Launch a GoalEvolve campaign for a supplied design or rerun full source evolution. |
 | AE-4 | Evaluate the AES-evolved executable on the seven non-AES contest designs. |
-
-Use AE-1 and AE-2 to set up the release and reproduce one of its eight fixed
-OpenROAD artifacts.
-
-Use AE-3 to evolve a design toward predefined QoR goals.
 
 ## AE-1: Environment setup
 
