@@ -357,6 +357,7 @@ leakage 为 `29.093M pW`。
 - [Paper](paper/GoalEvolve.pdf)：框架、实验设置和 AES case study。
 - 复现结论前先阅读 [artifact_evaluation/README.zh-CN.md](artifact_evaluation/README.zh-CN.md)；变更版本前阅读 [toolchain/README.zh-CN.md](toolchain/README.zh-CN.md)；实现导图见 [goalevolve/README.zh-CN.md](goalevolve/README.zh-CN.md)。
 
+<!--
 ## Web Demo
 
 本地 Web Demo 以只读方式展示一个已持久化的 AE-3 campaign：每轮 Teacher 已记录的 idea、Student 执行状态、QoR 迭代曲线、冻结目标和 Top-3 已验证结果。它只读取写入 `outputs/` 的 artifact，不显示隐藏模型推理，也不会启动、修改或停止 campaign。
@@ -375,6 +376,7 @@ PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli dashboard \
 ```bash
 ssh -N -L 8080:127.0.0.1:8080 USER@SERVER
 ```
+-->
 
 ## Authors and Artifact Evaluation Contributor
 

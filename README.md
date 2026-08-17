@@ -392,6 +392,7 @@ AE-3 validates a new stochastic evolution run.
 - `PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli --help`: public command reference. `run` is the only command that performs fresh source evolution; the other commands measure, validate, import, or report on artifacts.
 - [Paper](paper/GoalEvolve.pdf): framework, experimental setup, goal-attainment results, and AES case study.
 
+<!--
 ## Web Demo
 
 The local Web Demo visualizes one persisted AE-3 campaign. It refreshes the Teacher's recorded ideas, Student execution states, QoR trajectory, frozen targets, and the Top-3 verified QoR results; it displays only saved campaign artifacts and never exposes hidden model reasoning.
@@ -410,6 +411,7 @@ Open `http://127.0.0.1:8080`. The dashboard is read-only and does not launch, al
 ```bash
 ssh -N -L 8080:127.0.0.1:8080 USER@SERVER
 ```
+-->
 
 
 ## Authors and Artifact Evaluation Contributor
