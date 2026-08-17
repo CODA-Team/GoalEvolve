@@ -1,39 +1,7 @@
 {
-  "artifact_id": "mempool_aes_r58_parent",
-  "checks": [
-    {
-      "detail": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/mempool_group_campaign/evolution_r58_target_1850/stage_baselines/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d_power_then_timing_94d03f611279ceab/workspace/build_goalevolve/bin/openroad",
-      "name": "build",
-      "passed": true
-    },
-    {
-      "detail": "official_openroad_flow",
-      "name": "flow",
-      "passed": true
-    },
-    {
-      "detail": "official_parse_log",
-      "name": "metrics",
-      "passed": true
-    },
-    {
-      "detail": "official_4of4_pass",
-      "name": "lec",
-      "passed": true
-    }
-  ],
-  "provenance": {
-    "reference_campaign": "runtime/mempool_group_campaign/evolution_r58_target_1850",
-    "reference_evidence": "stage_baselines/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d_power_then_timing_94d03f611279ceab",
-    "reference_source": "parents/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d/source",
-    "reference_source_manifest": {
-      "content_sha256": "0a8b27ad9b6850fba27f71c67b05b1d3bc92eddf9a899585fb4848e877887f1b",
-      "directory_count": 673,
-      "external_symlinks": [],
-      "regular_file_count": 11924,
-      "symlink_count": 370,
-      "verified_no_external_symlinks": true
-    },
-    "reference_tcl": "stage_baselines/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d_power_then_timing_94d03f611279ceab/evaluate.tcl"
-  }
+  "artifact_id": "mempool_group_student_code",
+  "design": "mempool_group",
+  "replay_evidence": "portable_tcl_and_official_checker",
+  "schema": "goalevolve.ae2-replay-evidence.v2",
+  "source_hash": "ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d"
 }

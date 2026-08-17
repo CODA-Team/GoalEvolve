@@ -1,10 +1,10 @@
 {
   "schema": "goalevolve.ae4.cross-design-transfer.v1",
   "source_binary": {
-    "ae2_artifact": "aes_r58_student1",
-    "parent": "round_058:student_1",
-    "path": "outputs/ae2/aes_r58_student1/build/bin/openroad",
-    "report": "outputs/ae2/aes_r58_student1/report/ae2_report.json",
+    "ae2_artifact": "aes_cipher_top_student_code",
+    "source_alias": "student_code",
+    "path": "outputs/ae2/aes_cipher_top_student_code/build/bin/openroad",
+    "report": "outputs/ae2/aes_cipher_top_student_code/report/ae2_report.json",
     "source_hash": "97b7321cbe1f55057befde8ce2daa7b2ed51908faa49cea1f6b70692d5b09d99"
   },
   "benchmark_root": "third_party/benchmarks",

@@ -1,7 +1,7 @@
 # AE4: cross-design transfer of the AES-evolved OpenROAD
 
 AE4 evaluates one frozen executable—the OpenROAD binary selected by the AES
-AE2 `round_058:student_1` parent—on the seven non-AES contest designs. Every
+AE2 `aes_cipher_top_student_code` release artifact—on the seven non-AES contest designs. Every
 design uses only `baseline_flow`: stock `repair_design` followed by stock
 `repair_timing -setup`. Thus the transferred variable is the AES-evolved
 OpenROAD binary, not an AES-specific or target-specific Tcl policy. Every run
@@ -35,7 +35,7 @@ frozen TNS/leakage/dynamic-power contract.
 
 AE4 has one prerequisite: replay the released AES AE2 artifact successfully
 first. The script checks its `passed`, artifact ID and frozen source hash in
-`outputs/ae2/aes_r58_student1/report/ae2_report.json`. This avoids both
+`outputs/ae2/aes_cipher_top_student_code/report/ae2_report.json`. This avoids both
 machine-specific absolute paths and non-portable executable hashes (an ELF hash
 naturally changes when the frozen source is rebuilt on another host).
 
@@ -44,8 +44,8 @@ flows with:
 
 ```bash
 source outputs/toolchain/activate.sh
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" AE4/run_ae4.py prepare
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" AE4/run_ae4.py run --jobs 1
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_ae4.py prepare
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_ae4.py run --jobs 1
 ```
 
 `--jobs 1` is a safe shared-host default. Increase it only when the host has
@@ -55,11 +55,11 @@ Rebuild the summaries from completed logs with:
 
 ```bash
 source outputs/toolchain/activate.sh
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" AE4/run_ae4.py collect
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_ae4.py collect
 ```
 
 Generated Tcl, raw logs, per-run JSON, and summaries are placed under
-`AE4/results/`.  Table-1 baselines come from the contest benchmark
+`artifact_evaluation/ae4/results/`.  Table-1 baselines come from the contest benchmark
 `metrics.csv` files and are recorded in `experiment.json`; they are not the
 results of AE4's `baseline_flow` schedule.
 

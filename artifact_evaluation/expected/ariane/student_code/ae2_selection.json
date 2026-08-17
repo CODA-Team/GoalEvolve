@@ -1,5 +1,5 @@
 {
-  "artifact_id": "ariane_r11_student3",
+  "artifact_id": "ariane_student_code",
   "cache_safe_replay_metrics": {
     "dynamic_power_pw": 588058613000.0,
     "leakage_power_pw": 17935077000.0,
@@ -73,7 +73,15 @@
       "value": 688.53696249
     }
   },
-  "parent": {
+  "recorded_flow_metrics": {
+    "drv_count": 146.0,
+    "dynamic_power_pw": 588058613000.0,
+    "leakage_power_pw": 17935077000.0,
+    "runtime_s": 378.0,
+    "tns_abs_ns": 688.53696249
+  },
+  "schema": "goalevolve.ae2-selection.v1",
+  "selected_source": {
     "evaluation_mode": "power_then_timing",
     "goal_distance": 0.006239795158286779,
     "metrics": {
@@ -83,31 +91,8 @@
       "runtime_s": 378.0,
       "tns_abs_ns": 688.53696249
     },
-    "parent_id": "round_011:student_3:electric_normalization",
     "source_commit": "f37b1be0b97ff6c9714fe8fac394673e3fef4f6fc064b60fd4501e700fb06f21",
     "source_hash": "1d6475a8066ae156c2211d549f5fa1bc38edee9de10bc77813cea029a18c9c63",
     "timing_recipe_id": "mt1_sampled"
-  },
-  "provenance": {
-    "reference_campaign": "runtime/ariane_evolution/campaign_r58_lpower_17600000000",
-    "reference_evidence": "rounds/round_011/students/student_3/artifacts",
-    "reference_source": "parents/1d6475a8066ae156c2211d549f5fa1bc38edee9de10bc77813cea029a18c9c63/source",
-    "reference_source_manifest": {
-      "content_sha256": "a2de89dabcc048485d287cebcd422ffe2b28233cef3eca90852f959275fb34bf",
-      "directory_count": 673,
-      "external_symlinks": [],
-      "regular_file_count": 11924,
-      "symlink_count": 370,
-      "verified_no_external_symlinks": true
-    },
-    "reference_tcl": "rounds/round_011/students/student_3/artifacts/contest_output/evaluate.tcl"
-  },
-  "recorded_flow_metrics": {
-    "drv_count": 146.0,
-    "dynamic_power_pw": 588058613000.0,
-    "leakage_power_pw": 17935077000.0,
-    "runtime_s": 378.0,
-    "tns_abs_ns": 688.53696249
-  },
-  "schema": "goalevolve.ae2-selection.v1"
+  }
 }

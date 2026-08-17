@@ -1,5 +1,5 @@
 {
-  "artifact_id": "jpeg_r16_student1",
+  "artifact_id": "jpeg_encoder_student_code",
   "cache_safe_replay_metrics": {
     "dynamic_power_pw": 270427704000.0,
     "leakage_power_pw": 114525000.0,
@@ -73,7 +73,15 @@
       "value": 51.175317876
     }
   },
-  "parent": {
+  "recorded_flow_metrics": {
+    "drv_count": 0.0,
+    "dynamic_power_pw": 270427704000.0,
+    "leakage_power_pw": 114525000.0,
+    "runtime_s": 745.0,
+    "tns_abs_ns": 51.175317876
+  },
+  "schema": "goalevolve.ae2-selection.v1",
+  "selected_source": {
     "evaluation_mode": "power_then_timing",
     "goal_distance": 0.08931422432276949,
     "metrics": {
@@ -83,31 +91,8 @@
       "runtime_s": 745.0,
       "tns_abs_ns": 51.175317876
     },
-    "parent_id": "round_016:student_1",
     "source_commit": "b50053ce98c242ff89b1c71ad5cdcb4c0184908bef4ce64e331830eae5348eaa",
     "source_hash": "1d76634cfe95582ddb6f43a429eaa1f6907136b33414fe586be2e95ad9adb1f0",
     "timing_recipe_id": "mt1_mid_power"
-  },
-  "provenance": {
-    "reference_campaign": "runtime/jpeg_campaign",
-    "reference_evidence": "rounds/round_016/students/student_1/artifacts",
-    "reference_source": "parents/1d76634cfe95582ddb6f43a429eaa1f6907136b33414fe586be2e95ad9adb1f0/source",
-    "reference_source_manifest": {
-      "content_sha256": "89b3568142a8f39e594ccb7c4c4bf03f3e2213e64745a3611a8fd4bf9f506f1c",
-      "directory_count": 673,
-      "external_symlinks": [],
-      "regular_file_count": 11924,
-      "symlink_count": 370,
-      "verified_no_external_symlinks": true
-    },
-    "reference_tcl": "rounds/round_016/students/student_1/artifacts/contest_output/evaluate.tcl"
-  },
-  "recorded_flow_metrics": {
-    "drv_count": 0.0,
-    "dynamic_power_pw": 270427704000.0,
-    "leakage_power_pw": 114525000.0,
-    "runtime_s": 745.0,
-    "tns_abs_ns": 51.175317876
-  },
-  "schema": "goalevolve.ae2-selection.v1"
+  }
 }

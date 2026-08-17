@@ -1,5 +1,5 @@
 {
-  "artifact_id": "mempool_aes_r58_parent",
+  "artifact_id": "mempool_group_student_code",
   "cache_safe_replay_metrics": {
     "dynamic_power_pw": 249586381000.0,
     "leakage_power_pw": 3059457000.0,
@@ -73,7 +73,15 @@
       "value": 2714.6869201
     }
   },
-  "parent": {
+  "recorded_flow_metrics": {
+    "drv_count": 814.0,
+    "dynamic_power_pw": 249586381000.0,
+    "leakage_power_pw": 3059457000.0,
+    "runtime_s": 491.0,
+    "tns_abs_ns": 2714.6869201
+  },
+  "schema": "goalevolve.ae2-selection.v1",
+  "selected_source": {
     "evaluation_mode": "power_then_timing",
     "goal_distance": 0.35714839505052903,
     "metrics": {
@@ -83,31 +91,8 @@
       "runtime_s": 491.0,
       "tns_abs_ns": 2714.6869201
     },
-    "parent_id": "preexperiment:aes_best_r58_target_1850",
     "source_commit": "d231bd8f98d2a0adb8369002b2c1e7aa8e7877ed",
     "source_hash": "ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d",
     "timing_recipe_id": "mt1_sampled"
-  },
-  "provenance": {
-    "reference_campaign": "runtime/mempool_group_campaign/evolution_r58_target_1850",
-    "reference_evidence": "stage_baselines/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d_power_then_timing_94d03f611279ceab",
-    "reference_source": "parents/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d/source",
-    "reference_source_manifest": {
-      "content_sha256": "0a8b27ad9b6850fba27f71c67b05b1d3bc92eddf9a899585fb4848e877887f1b",
-      "directory_count": 673,
-      "external_symlinks": [],
-      "regular_file_count": 11924,
-      "symlink_count": 370,
-      "verified_no_external_symlinks": true
-    },
-    "reference_tcl": "stage_baselines/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d_power_then_timing_94d03f611279ceab/evaluate.tcl"
-  },
-  "recorded_flow_metrics": {
-    "drv_count": 814.0,
-    "dynamic_power_pw": 249586381000.0,
-    "leakage_power_pw": 3059457000.0,
-    "runtime_s": 491.0,
-    "tns_abs_ns": 2714.6869201
-  },
-  "schema": "goalevolve.ae2-selection.v1"
+  }
 }

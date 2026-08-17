@@ -1,18 +1,7 @@
 {
-  "artifact_id": "aes_r58_student1",
-  "checks": [],
-  "provenance": {
-    "reference_campaign": "runtime/aes_campaign_power_target",
-    "reference_evidence": "rounds/round_058/students/student_1/artifacts",
-    "reference_source": "rounds/round_058/students/student_1/workspace/source",
-    "reference_source_manifest": {
-      "content_sha256": "97b7321cbe1f55057befde8ce2daa7b2ed51908faa49cea1f6b70692d5b09d99",
-      "directory_count": 673,
-      "external_symlinks": [],
-      "regular_file_count": 11924,
-      "symlink_count": 370,
-      "verified_no_external_symlinks": true
-    },
-    "reference_tcl": "rounds/round_058/students/student_1/artifacts/contest_output/evaluate.tcl"
-  }
+  "artifact_id": "aes_cipher_top_student_code",
+  "design": "aes_cipher_top",
+  "replay_evidence": "portable_tcl_and_official_checker",
+  "schema": "goalevolve.ae2-replay-evidence.v2",
+  "source_hash": "97b7321cbe1f55057befde8ce2daa7b2ed51908faa49cea1f6b70692d5b09d99"
 }

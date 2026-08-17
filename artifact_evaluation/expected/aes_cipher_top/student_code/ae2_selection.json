@@ -1,5 +1,5 @@
 {
-  "artifact_id": "aes_r58_student1",
+  "artifact_id": "aes_cipher_top_student_code",
   "cache_safe_replay_metrics": {
     "dynamic_power_pw": 335607141000.0,
     "leakage_power_pw": 29093000.0,
@@ -73,36 +73,18 @@
       "value": 15.572590769
     }
   },
-  "parent": {
-    "artifacts": {
-      "candidate_source": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/workspace/source",
-      "checkpoint_metrics": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/contest_output/checkpoint_metrics.json",
-      "checkpoint_post_route_db": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/contest_output/post_route.odb",
-      "codex": "{\"initial\": {\"artifacts\": {\"codex_events\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/events.jsonl\", \"codex_invocation\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/invocation.json\", \"codex_last_message\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/last_message.md\", \"codex_prompt\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/prompt.md\", \"codex_session\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/codex_sessions/student_1_r058.json\", \"codex_stderr\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/stderr.log\", \"codex_token_usage\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/token_usage_attempt_01.json\"}, \"detail\": \"codex_turn_completed\", \"ok\": true, \"operation_id\": \"r058_student_1\", \"thread_id\": \"019f9bfc-9029-7921-ab54-02e9c72e2316\"}, \"repairs\": [{\"artifacts\": {\"codex_events\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/telemetry_repair_01/events.jsonl\", \"codex_invocation\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/telemetry_repair_01/invocation.json\", \"codex_last_message\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/telemetry_repair_01/last_message.md\", \"codex_prompt\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/telemetry_repair_01/prompt.md\", \"codex_session\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/codex_sessions/student_1_r058.json\", \"codex_stderr\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/telemetry_repair_01/stderr.log\", \"codex_token_usage\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/telemetry_repair_01/token_usage_attempt_01.json\"}, \"detail\": \"codex_turn_completed\", \"ok\": true, \"operation_id\": \"r058_student_1_telemetry_repair_01\", \"thread_id\": \"019f9bfc-9029-7921-ab54-02e9c72e2316\"}]}",
-      "codex_events": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/events.jsonl",
-      "codex_invocation": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/invocation.json",
-      "codex_last_message": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/last_message.md",
-      "codex_prompt": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/prompt.md",
-      "codex_session": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/codex_sessions/student_1_r058.json",
-      "codex_stderr": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/stderr.log",
-      "codex_token_usage": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/token_usage_attempt_01.json",
-      "evaluation_log": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/contest_output/evaluation.log",
-      "metrics_csv": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/contest_output/metrics.csv",
-      "official_4of4_log": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/contest_output/official_4of4.log",
-      "power_timing_cell_tradeoff": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/contest_output/power_timing_cell_tradeoff.json",
-      "preflight": "{\"changed_files\": [\"src/rmp/src/Restructure.cpp\"], \"ok\": true, \"require_cpp_patch\": true, \"violations\": []}",
-      "sfinal_observation": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/contest_output/sfinal_observation.json",
-      "telemetry_repair_codex_events": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/telemetry_repair_01/events.jsonl",
-      "telemetry_repair_codex_invocation": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/telemetry_repair_01/invocation.json",
-      "telemetry_repair_codex_last_message": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/telemetry_repair_01/last_message.md",
-      "telemetry_repair_codex_prompt": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/telemetry_repair_01/prompt.md",
-      "telemetry_repair_codex_session": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/codex_sessions/student_1_r058.json",
-      "telemetry_repair_codex_stderr": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/telemetry_repair_01/stderr.log",
-      "telemetry_repair_codex_token_usage": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/artifacts/codex/telemetry_repair_01/token_usage_attempt_01.json"
-    },
+  "recorded_flow_metrics": {
+    "drv_count": 0.0,
+    "dynamic_power_pw": 335607141000.0,
+    "leakage_power_pw": 29093000.0,
+    "runtime_s": 235.0,
+    "tns_abs_ns": 15.572590769
+  },
+  "schema": "goalevolve.ae2-selection.v1",
+  "selected_source": {
     "checks": [
       {
-        "detail": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/round_058/students/student_1/workspace/build_goalevolve/bin/openroad",
+        "detail": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/aes_campaign_power_target/rounds/selected_source/students/student_code/workspace/build_goalevolve/bin/openroad",
         "name": "build",
         "passed": true
       },
@@ -142,7 +124,6 @@
       "expected_signals": [
         "rmp_post_timing_halo_examined"
       ],
-      "hypothesis_id": "r58_student_1_timing_recovery_rmp_post_timing_halo",
       "mechanism_family": "timing_recovery_rmp_post_timing_halo",
       "novelty_key": "timing_recovery_rmp_post_timing_halo:src/rmp/src/Restructure.cpp",
       "retrieval_ids": [
@@ -173,8 +154,6 @@
       ],
       "timing_recipe_id": "rmp_post_timing_halo"
     },
-    "implementation_diff": "--- a/src/rmp/src/Restructure.cpp\n+++ b/src/rmp/src/Restructure.cpp\n@@ -825,6 +825,16 @@\n     std::set<std::string> tried_cloud_keys;\n     const std::set<std::string> target_net_allowlist\n         = envStringSet(\"RMP_TARGET_NET_ALLOWLIST\");\n+    const bool post_timing_halo_recipe\n+        = max_accepted_clouds == 1 && max_tried_clouds == 4\n+          && envIsSet(\"RMP_UNION_ENDPOINT_PATHS\")\n+          && !envIsSet(\"RMP_LEGACY_FANIN_BLOB\")\n+          && !envIsSet(\"RMP_PRUNE_SIDE_OUTPUTS_ALLOW_PATH_REMOVAL\")\n+          && envDouble(\"RMP_MAX_CLOUDS\", 1.0) == 4.0\n+          && envDouble(\"RMP_ENDPOINT_PATH_COUNT\", 1.0) == 4.0\n+          && envDouble(\"RMP_EXPAND_SIDE_FANIN_LEVELS\", 0.0) == 2.0\n+          && envDouble(\"RMP_EXPAND_SIDE_FANIN_MAX_ADD\", 64.0) == 24.0;\n+    int post_timing_halo_examined = 0;\n \n     auto try_budget_exhausted = [&]() {\n       return max_tried_clouds > 0 && tried_clouds >= max_tried_clouds;\n@@ -840,8 +850,8 @@\n                         max_tried_clouds);\n         return false;\n       }\n+      int missing_count = 0;\n       if (cloud_index < path_inst_cloud_names_.size()) {\n-        int missing_count = 0;\n         path_insts_ = resolveCloudInsts(\n             block_, path_inst_cloud_names_[cloud_index], missing_count);\n         path_inst_target_net_name_\n@@ -865,6 +875,17 @@\n       if (path_insts_.empty()) {\n         logger_->report(\"RMP_GUARD|skip_cloud|index={}|reason=empty_live\",\n                         tried_clouds);\n+        skipped_clouds++;\n+        tried_clouds++;\n+        return false;\n+      }\n+      if (post_timing_halo_recipe && missing_count > 0) {\n+        logger_->report(\n+            \"RMP_GUARD|skip_cloud|index={}|instances={}|reason=incomplete_\"\n+            \"restore|missing={}\",\n+            tried_clouds,\n+            path_insts_.size(),\n+            missing_count);\n         skipped_clouds++;\n         tried_clouds++;\n         return false;\n@@ -967,6 +988,27 @@\n           tried_clouds++;\n           return false;\n         }\n+      }\n+      if (post_timing_halo_recipe) {\n+        const bool legal_cloud\n+            = std::all_of(path_insts_.begin(),\n+                          path_insts_.end(),\n+                          [this](odb::dbInst* inst) {\n+                            return safeRestructureInst(inst);\n+                          });\n+        if (!legal_cloud) {\n+          logger_->report(\n+              \"RMP_GUARD|skip_cloud|index={}|instances={}|reason=unsafe_\"\n+              \"live_inst\",\n+              tried_clouds,\n+              path_insts_.size());\n+          skipped_clouds++;\n+          tried_clouds++;\n+          return false;\n+        }\n+        post_timing_halo_examined++;\n+        logger_->report(\"METRIC|rmp_post_timing_halo_examined|{}\",\n+                        post_timing_halo_examined);\n       }\n       logger_->report(\"RMP_GUARD|try_cloud|index={}|instances={}|target_net={}\",\n                       tried_clouds,\n",
-    "legacy": false,
     "metrics": {
       "drv_count": 0.0,
       "dynamic_power_pw": 335607141000.0,
@@ -182,34 +161,10 @@
       "runtime_s": 203.0,
       "tns_abs_ns": 15.572590769
     },
-    "parent_id": "round_058:student_1",
     "phase_signals": {
       "rmp_post_timing_halo_examined": 10.0
     },
     "source_commit": "ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d",
-    "source_hash": "97b7321cbe1f55057befde8ce2daa7b2ed51908faa49cea1f6b70692d5b09d99",
-    "student_id": "student_1"
-  },
-  "provenance": {
-    "reference_campaign": "runtime/aes_campaign_power_target",
-    "reference_evidence": "rounds/round_058/students/student_1/artifacts",
-    "reference_source": "rounds/round_058/students/student_1/workspace/source",
-    "reference_source_manifest": {
-      "content_sha256": "97b7321cbe1f55057befde8ce2daa7b2ed51908faa49cea1f6b70692d5b09d99",
-      "directory_count": 673,
-      "external_symlinks": [],
-      "regular_file_count": 11924,
-      "symlink_count": 370,
-      "verified_no_external_symlinks": true
-    },
-    "reference_tcl": "rounds/round_058/students/student_1/artifacts/contest_output/evaluate.tcl"
-  },
-  "recorded_flow_metrics": {
-    "drv_count": 0.0,
-    "dynamic_power_pw": 335607141000.0,
-    "leakage_power_pw": 29093000.0,
-    "runtime_s": 235.0,
-    "tns_abs_ns": 15.572590769
-  },
-  "schema": "goalevolve.ae2-selection.v1"
+    "source_hash": "97b7321cbe1f55057befde8ce2daa7b2ed51908faa49cea1f6b70692d5b09d99"
+  }
 }

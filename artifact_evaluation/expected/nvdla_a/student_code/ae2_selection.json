@@ -1,5 +1,5 @@
 {
-  "artifact_id": "nvdla_a_r16_student1",
+  "artifact_id": "nvdla_a_student_code",
   "cache_safe_replay_metrics": {
     "dynamic_power_pw": 144228574000.0,
     "leakage_power_pw": 285284000.0,
@@ -73,7 +73,15 @@
       "value": 90.640386651
     }
   },
-  "parent": {
+  "recorded_flow_metrics": {
+    "drv_count": 1844.0,
+    "dynamic_power_pw": 144228574000.0,
+    "leakage_power_pw": 285284000.0,
+    "runtime_s": 828.0,
+    "tns_abs_ns": 90.640386651
+  },
+  "schema": "goalevolve.ae2-selection.v1",
+  "selected_source": {
     "evaluation_mode": "power_then_timing",
     "goal_distance": 0.33285534327104765,
     "metrics": {
@@ -83,31 +91,8 @@
       "runtime_s": 828.0,
       "tns_abs_ns": 90.640386651
     },
-    "parent_id": "round_016:student_1",
     "source_commit": "2f9f7b20aa9cd31d60abcabb27dfae325b2412382978a20d4d5ee0a2087aaec9",
     "source_hash": "f197af5d713bb2c40577e8450114cd34b1d635c60e203f3c6e84b0f495d985c6",
     "timing_recipe_id": "mt1_deep"
-  },
-  "provenance": {
-    "reference_campaign": "runtime/nvdla_a_evolution/campaign_aes_r58_power_target",
-    "reference_evidence": "rounds/round_016/students/student_1/artifacts",
-    "reference_source": "rounds/round_016/students/student_1/workspace/source",
-    "reference_source_manifest": {
-      "content_sha256": "f197af5d713bb2c40577e8450114cd34b1d635c60e203f3c6e84b0f495d985c6",
-      "directory_count": 673,
-      "external_symlinks": [],
-      "regular_file_count": 11924,
-      "symlink_count": 370,
-      "verified_no_external_symlinks": true
-    },
-    "reference_tcl": "rounds/round_016/students/student_1/artifacts/contest_output/evaluate.tcl"
-  },
-  "recorded_flow_metrics": {
-    "drv_count": 1844.0,
-    "dynamic_power_pw": 144228574000.0,
-    "leakage_power_pw": 285284000.0,
-    "runtime_s": 828.0,
-    "tns_abs_ns": 90.640386651
-  },
-  "schema": "goalevolve.ae2-selection.v1"
+  }
 }

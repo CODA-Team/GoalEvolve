@@ -1,5 +1,5 @@
 {
-  "artifact_id": "nvdla_a_r16_student1",
+  "artifact_id": "nvdla_a_student_code",
   "design": "nvdla_a",
   "metrics": {
     "drv_count": 1844.0,
@@ -8,7 +8,6 @@
     "runtime_s": 828.0,
     "tns_abs_ns": 90.640386651
   },
-  "parent_id": "round_016:student_1",
   "source_commit": "2f9f7b20aa9cd31d60abcabb27dfae325b2412382978a20d4d5ee0a2087aaec9",
   "source_hash": "f197af5d713bb2c40577e8450114cd34b1d635c60e203f3c6e84b0f495d985c6"
 }

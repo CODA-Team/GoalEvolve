@@ -1,5 +1,5 @@
 {
-  "artifact_id": "nvdla_c_rmp_path_cone_halo_timing",
+  "artifact_id": "nvdla_c_student_code",
   "cache_safe_replay_metrics": {
     "dynamic_power_pw": 584086037000.0,
     "leakage_power_pw": 17259404000.0,
@@ -73,7 +73,15 @@
       "value": 7.247678218
     }
   },
-  "parent": {
+  "recorded_flow_metrics": {
+    "drv_count": 476.0,
+    "dynamic_power_pw": 584086037000.0,
+    "leakage_power_pw": 17259404000.0,
+    "runtime_s": 124.0,
+    "tns_abs_ns": 7.247678218
+  },
+  "schema": "goalevolve.ae2-selection.v1",
+  "selected_source": {
     "evaluation_mode": "timing_only",
     "goal_distance": 0.015252264386745507,
     "metrics": {
@@ -83,31 +91,8 @@
       "runtime_s": 124.0,
       "tns_abs_ns": 7.247678218
     },
-    "parent_id": "schedule:rmp_path_cone_halo_timing",
     "source_commit": "baseline",
     "source_hash": "baseline",
-    "timing_recipe_id": "rmp_path_cone_halo_timing"
-  },
-  "provenance": {
-    "reference_campaign": "runtime/nvdla_c_evolution/campaign_schedule_locked_rmp_v1",
-    "reference_evidence": "../campaign_r58_drv499_v2/stage_baselines/baseline_timing_only_rmp_path_cone_halo_timing_efaf3f024348efb7",
-    "reference_source": "../campaign_r58_drv499_v2/parents/baseline/source",
-    "reference_source_manifest": {
-      "content_sha256": "97b7321cbe1f55057befde8ce2daa7b2ed51908faa49cea1f6b70692d5b09d99",
-      "directory_count": 673,
-      "external_symlinks": [],
-      "regular_file_count": 11924,
-      "symlink_count": 370,
-      "verified_no_external_symlinks": true
-    },
-    "reference_tcl": "../campaign_r58_drv499_v2/stage_baselines/baseline_timing_only_rmp_path_cone_halo_timing_efaf3f024348efb7/evaluate.tcl"
-  },
-  "recorded_flow_metrics": {
-    "drv_count": 476.0,
-    "dynamic_power_pw": 584086037000.0,
-    "leakage_power_pw": 17259404000.0,
-    "runtime_s": 124.0,
-    "tns_abs_ns": 7.247678218
-  },
-  "schema": "goalevolve.ae2-selection.v1"
+    "timing_recipe_id": "student_code"
+  }
 }

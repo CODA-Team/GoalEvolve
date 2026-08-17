@@ -1,18 +1,7 @@
 {
-  "artifact_id": "ariane_r11_student3",
-  "checks": [],
-  "provenance": {
-    "reference_campaign": "runtime/ariane_evolution/campaign_r58_lpower_17600000000",
-    "reference_evidence": "rounds/round_011/students/student_3/artifacts",
-    "reference_source": "parents/1d6475a8066ae156c2211d549f5fa1bc38edee9de10bc77813cea029a18c9c63/source",
-    "reference_source_manifest": {
-      "content_sha256": "a2de89dabcc048485d287cebcd422ffe2b28233cef3eca90852f959275fb34bf",
-      "directory_count": 673,
-      "external_symlinks": [],
-      "regular_file_count": 11924,
-      "symlink_count": 370,
-      "verified_no_external_symlinks": true
-    },
-    "reference_tcl": "rounds/round_011/students/student_3/artifacts/contest_output/evaluate.tcl"
-  }
+  "artifact_id": "ariane_student_code",
+  "design": "ariane",
+  "replay_evidence": "portable_tcl_and_official_checker",
+  "schema": "goalevolve.ae2-replay-evidence.v2",
+  "source_hash": "1d6475a8066ae156c2211d549f5fa1bc38edee9de10bc77813cea029a18c9c63"
 }

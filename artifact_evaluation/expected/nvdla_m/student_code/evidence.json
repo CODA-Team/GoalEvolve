@@ -1,18 +1,7 @@
 {
-  "artifact_id": "nvdla_m_r11_student1",
-  "checks": [],
-  "provenance": {
-    "reference_campaign": "runtime/nvdla_m_campaign/evolution",
-    "reference_evidence": "rounds/round_011/students/student_1/artifacts",
-    "reference_source": "rounds/round_011/students/student_1/workspace/source",
-    "reference_source_manifest": {
-      "content_sha256": "7d4a3734332aedd2e9d7173a79cf234bcf821f2fece067cf6e8badfc48400c5e",
-      "directory_count": 673,
-      "external_symlinks": [],
-      "regular_file_count": 11924,
-      "symlink_count": 370,
-      "verified_no_external_symlinks": true
-    },
-    "reference_tcl": "rounds/round_011/students/student_1/artifacts/contest_output/evaluate.tcl"
-  }
+  "artifact_id": "nvdla_m_student_code",
+  "design": "nvdla_m",
+  "replay_evidence": "portable_tcl_and_official_checker",
+  "schema": "goalevolve.ae2-replay-evidence.v2",
+  "source_hash": "7d4a3734332aedd2e9d7173a79cf234bcf821f2fece067cf6e8badfc48400c5e"
 }

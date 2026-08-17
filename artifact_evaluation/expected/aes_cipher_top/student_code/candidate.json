@@ -1,5 +1,5 @@
 {
-  "artifact_id": "aes_r58_student1",
+  "artifact_id": "aes_cipher_top_student_code",
   "design": "aes_cipher_top",
   "metrics": {
     "drv_count": 0.0,
@@ -8,7 +8,6 @@
     "runtime_s": 203.0,
     "tns_abs_ns": 15.572590769
   },
-  "parent_id": "round_058:student_1",
   "source_commit": "ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d",
   "source_hash": "97b7321cbe1f55057befde8ce2daa7b2ed51908faa49cea1f6b70692d5b09d99"
 }

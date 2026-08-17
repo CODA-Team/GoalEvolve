@@ -1,5 +1,5 @@
 {
-  "artifact_id": "nvdla_m_r11_student1",
+  "artifact_id": "nvdla_m_student_code",
   "cache_safe_replay_metrics": {
     "dynamic_power_pw": 39473305000.0,
     "leakage_power_pw": 38326000.0,
@@ -73,37 +73,18 @@
       "value": 14.209663182
     }
   },
-  "parent": {
-    "artifacts": {
-      "candidate_source": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/workspace/source",
-      "checkpoint_metrics": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/contest_output/checkpoint_metrics.json",
-      "checkpoint_post_route_db": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/contest_output/post_route.odb",
-      "codex": "{\"initial\": {\"artifacts\": {\"codex_events\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/events.jsonl\", \"codex_invocation\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/invocation.json\", \"codex_last_message\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/last_message.md\", \"codex_prompt\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/prompt.md\", \"codex_session\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/codex_sessions/student_1_r011.json\", \"codex_stderr\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/stderr.log\", \"codex_token_usage\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/token_usage_attempt_01.json\"}, \"detail\": \"codex_turn_completed\", \"ok\": true, \"operation_id\": \"r011_student_1\", \"thread_id\": \"019fab94-39eb-70d1-b45c-32bc93198229\"}, \"repairs\": [{\"artifacts\": {\"codex_events\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/engineering_repair_01/events.jsonl\", \"codex_invocation\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/engineering_repair_01/invocation.json\", \"codex_last_message\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/engineering_repair_01/last_message.md\", \"codex_prompt\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/engineering_repair_01/prompt.md\", \"codex_session\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/codex_sessions/student_1_r011.json\", \"codex_stderr\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/engineering_repair_01/stderr.log\", \"codex_token_usage\": \"/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/engineering_repair_01/token_usage_attempt_01.json\"}, \"detail\": \"codex_turn_completed\", \"ok\": true, \"operation_id\": \"r011_student_1_engineering_repair_01\", \"thread_id\": \"019fab94-39eb-70d1-b45c-32bc93198229\"}]}",
-      "codex_events": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/events.jsonl",
-      "codex_invocation": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/invocation.json",
-      "codex_last_message": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/last_message.md",
-      "codex_prompt": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/prompt.md",
-      "codex_session": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/codex_sessions/student_1_r011.json",
-      "codex_stderr": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/stderr.log",
-      "codex_token_usage": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/token_usage_attempt_01.json",
-      "evaluation_log": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/contest_output/evaluation.log",
-      "matched_recipe_baseline": "matched:/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/stage_baselines/f672ad5dd9316a884d1ab4e5338c4c9e5121ca6e1f9d3813d7670cb7e67a6995_power_then_timing_rmp_path_cone_halo_sampled_3ad8f9060c71c418/baseline.json",
-      "metrics_csv": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/contest_output/metrics.csv",
-      "official_4of4_log": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/contest_output/official_4of4.log",
-      "power_timing_cell_tradeoff": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/contest_output/power_timing_cell_tradeoff.json",
-      "preflight": "{\"changed_files\": [\"src/rmp/src/Restructure.cpp\"], \"ok\": true, \"require_cpp_patch\": true, \"violations\": []}",
-      "repair_01_codex_events": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/engineering_repair_01/events.jsonl",
-      "repair_01_codex_invocation": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/engineering_repair_01/invocation.json",
-      "repair_01_codex_last_message": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/engineering_repair_01/last_message.md",
-      "repair_01_codex_prompt": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/engineering_repair_01/prompt.md",
-      "repair_01_codex_session": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/codex_sessions/student_1_r011.json",
-      "repair_01_codex_stderr": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/engineering_repair_01/stderr.log",
-      "repair_01_codex_token_usage": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/codex/engineering_repair_01/token_usage_attempt_01.json",
-      "sfinal_observation": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/artifacts/contest_output/sfinal_observation.json"
-    },
+  "recorded_flow_metrics": {
+    "drv_count": 0.0,
+    "dynamic_power_pw": 39473305000.0,
+    "leakage_power_pw": 38326000.0,
+    "runtime_s": 526.0,
+    "tns_abs_ns": 14.209663182
+  },
+  "schema": "goalevolve.ae2-selection.v1",
+  "selected_source": {
     "checks": [
       {
-        "detail": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/round_011/students/student_1/workspace/build_goalevolve/bin/openroad",
+        "detail": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_m_campaign/evolution/rounds/selected_source/students/student_code/workspace/build_goalevolve/bin/openroad",
         "name": "build",
         "passed": true
       },
@@ -141,7 +122,6 @@
       "expected_signals": [
         "rmp_path_cone_admission_decided"
       ],
-      "hypothesis_id": "r11_student_1_timing_recovery_rmp_path_cone_halo_sampled_v6",
       "mechanism_family": "timing_recovery_rmp_path_cone_halo_sampled",
       "novelty_key": "timing_recovery_rmp_path_cone_halo_sampled:src/rmp/src/Restructure.cpp",
       "power_tns_non_regression": false,
@@ -175,8 +155,6 @@
       ],
       "timing_recipe_id": "rmp_path_cone_halo_sampled"
     },
-    "implementation_diff": "--- a/src/rmp/src/Restructure.cpp\n+++ b/src/rmp/src/Restructure.cpp\n@@ -108,6 +108,21 @@\n   return std::atof(value);\n }\n \n+bool isPathConeHaloSampledRecipe()\n+{\n+  return envIsSet(\"RMP_PATH_CONE_ONLY\")\n+         && envIsSet(\"RMP_UNION_ENDPOINT_PATHS\")\n+         && envIsSet(\"RMP_UNIQUE_ENDPOINTS\")\n+         && !envIsSet(\"RMP_LEGACY_FANIN_BLOB\")\n+         && !envIsSet(\"RMP_PRUNE_SIDE_OUTPUTS_ALLOW_PATH_REMOVAL\")\n+         && envDouble(\"RMP_MAX_CLOUDS\", 1.0) == 4.0\n+         && envDouble(\"RMP_ENDPOINT_PATH_COUNT\", 1.0) == 4.0\n+         && envDouble(\"RMP_MAX_TRIED_CLOUDS\", 0.0) == 4.0\n+         && envDouble(\"RMP_MAX_ACCEPTED_CLOUDS\", 1.0) == 1.0\n+         && envDouble(\"RMP_EXPAND_SIDE_FANIN_LEVELS\", 0.0) == 1.0\n+         && envDouble(\"RMP_EXPAND_SIDE_FANIN_MAX_ADD\", 0.0) == 16.0;\n+}\n+\n std::vector<int> envIntList(const char* name)\n {\n   std::vector<int> values;\n@@ -407,6 +422,18 @@\n   total.leakage += add.leakage;\n }\n \n+LocalRmpCost cloudLocalCost(sta::dbSta* open_sta,\n+                            const std::set<odb::dbInst*>& cloud)\n+{\n+  LocalRmpCost cost;\n+  for (odb::dbInst* inst : cloud) {\n+    if (inst != nullptr) {\n+      addLocalCost(cost, masterCost(open_sta, inst->getMaster()));\n+    }\n+  }\n+  return cost;\n+}\n+\n LocalRmpCost snapshotLocalCost(sta::dbSta* open_sta,\n                                const RmpSnapshot& snapshot)\n {\n@@ -489,6 +516,26 @@\n   total.net_count++;\n   total.hpwl_dbu += hpwl;\n   total.max_net_hpwl_dbu = std::max(total.max_net_hpwl_dbu, hpwl);\n+}\n+\n+LocalWireCost cloudWireCost(const std::set<odb::dbInst*>& cloud)\n+{\n+  LocalWireCost cost;\n+  std::set<odb::dbNet*> nets;\n+  for (odb::dbInst* inst : cloud) {\n+    if (inst == nullptr) {\n+      continue;\n+    }\n+    for (odb::dbITerm* iterm : inst->getITerms()) {\n+      if (iterm != nullptr && iterm->getNet() != nullptr) {\n+        nets.insert(iterm->getNet());\n+      }\n+    }\n+  }\n+  for (odb::dbNet* net : nets) {\n+    addWireNetCost(cost, net);\n+  }\n+  return cost;\n }\n \n LocalWireCost snapshotWireCost(odb::dbBlock* block,\n@@ -1120,6 +1167,15 @@\n       }\n       logger_->report(\"Found {} instances for restructuring.\",\n                       path_insts_.size());\n+      return;\n+    }\n+    if (!is_area_mode_ && envIsSet(\"RMP_PATH_CONE_ONLY\")) {\n+      if (isPathConeHaloSampledRecipe()) {\n+        logger_->report(\"METRIC|rmp_path_cone_admission_decided|1\");\n+      }\n+      logger_->report(\n+          \"RMP_GUARD|path_cone_only|status=fallback_blocked|reason=no_\"\n+          \"admitted_path_cone\");\n       return;\n     }\n \n@@ -1932,6 +1988,8 @@\n         = std::getenv(\"RMP_UNION_ENDPOINT_PATHS\") != nullptr;\n     const bool unique_endpoints\n         = std::getenv(\"RMP_UNIQUE_ENDPOINTS\") != nullptr;\n+    const bool path_cone_halo_sampled_recipe\n+        = isPathConeHaloSampledRecipe();\n     const std::vector<int> suffix_sweep_sizes\n         = envIntList(\"RMP_SUFFIX_SWEEP_PATH_INSTS\");\n     int expand_side_fanout_levels = 0;\n@@ -2237,6 +2295,7 @@\n     std::map<std::string, std::set<odb::dbInst*>> endpoint_path_core_clouds;\n     std::map<std::string, std::string> endpoint_target_net_names;\n     std::map<std::string, int> endpoint_path_counts;\n+    std::map<std::string, sta::Slack> endpoint_slacks;\n     int eligible_path_index = 0;\n     int selected_clouds = 0;\n     for (sta::PathEnd* path_end : path_ends) {\n@@ -2293,6 +2352,14 @@\n           logger_->report(\"RMP_GUARD|skip_duplicate_endpoint|name={}\",\n                           endpoint_name);\n           continue;\n+        }\n+        if (path_cone_halo_sampled_recipe) {\n+          const sta::Slack endpoint_slack = path_end->slack(sta_state);\n+          const auto [slack_itr, inserted]\n+              = endpoint_slacks.emplace(endpoint_name, endpoint_slack);\n+          if (!inserted) {\n+            slack_itr->second = std::min(slack_itr->second, endpoint_slack);\n+          }\n         }\n         if (selected_endpoint_names.insert(endpoint_name).second) {\n           endpoint_order.push_back(endpoint_name);\n@@ -2437,7 +2504,20 @@\n       }\n     }\n     if (union_endpoint_paths) {\n-      int cloud_index = 0;\n+      struct CloudRank\n+      {\n+        std::string endpoint_name;\n+        std::string target_net_name;\n+        sta::Slack endpoint_slack;\n+        LocalRmpCost local_cost;\n+        LocalWireCost wire_cost;\n+        std::set<std::string> inst_names;\n+        std::set<odb::dbInst*> cloud;\n+        int path_count;\n+        size_t construction_index;\n+      };\n+      std::vector<CloudRank> ranks;\n+      size_t construction_index = 0;\n       for (const std::string& endpoint_name : endpoint_order) {\n         auto cloud_itr = endpoint_clouds.find(endpoint_name);\n         if (cloud_itr == endpoint_clouds.end() || cloud_itr->second.empty()) {\n@@ -2455,19 +2535,105 @@\n             = endpoint_target_net_names[endpoint_name];\n         prune_side_output_cloud(\n             cloud_itr->second, path_core, target_output_net_name, \"endpoint\");\n-        path_inst_cloud_names_.push_back(cloudInstNames(cloud_itr->second));\n-        path_inst_cloud_target_net_names_.push_back(target_output_net_name);\n-        path_inst_clouds_.push_back(std::move(cloud_itr->second));\n+        if (path_cone_halo_sampled_recipe) {\n+          const bool legal_cloud\n+              = std::all_of(cloud_itr->second.begin(),\n+                            cloud_itr->second.end(),\n+                            [this](odb::dbInst* inst) {\n+                              return safeRestructureInst(inst);\n+                            });\n+          const bool preserves_path_core\n+              = std::includes(cloud_itr->second.begin(),\n+                              cloud_itr->second.end(),\n+                              path_core.begin(),\n+                              path_core.end());\n+          if (!legal_cloud || !preserves_path_core) {\n+            logger_->report(\n+                \"RMP_GUARD|skip_path_cone_cloud|endpoint={}|instances={}|\"\n+                \"reason={}\",\n+                endpoint_name,\n+                cloud_itr->second.size(),\n+                legal_cloud ? \"path_core_removed\" : \"unsafe_live_inst\");\n+            continue;\n+          }\n+        }\n+        CloudRank rank;\n+        rank.endpoint_name = endpoint_name;\n+        rank.target_net_name = target_output_net_name;\n+        rank.inst_names = cloudInstNames(cloud_itr->second);\n+        rank.cloud = std::move(cloud_itr->second);\n+        rank.path_count = endpoint_path_counts[endpoint_name];\n+        rank.construction_index = construction_index++;\n+        if (path_cone_halo_sampled_recipe) {\n+          rank.endpoint_slack = endpoint_slacks[endpoint_name];\n+          rank.local_cost = cloudLocalCost(open_sta_, rank.cloud);\n+          rank.wire_cost = cloudWireCost(rank.cloud);\n+        } else {\n+          rank.endpoint_slack = sta::INF;\n+        }\n+        ranks.push_back(std::move(rank));\n+      }\n+      if (path_cone_halo_sampled_recipe) {\n+        std::sort(ranks.begin(),\n+                  ranks.end(),\n+                  [](const CloudRank& lhs, const CloudRank& rhs) {\n+                    if (lhs.endpoint_slack != rhs.endpoint_slack) {\n+                      return lhs.endpoint_slack < rhs.endpoint_slack;\n+                    }\n+                    if (lhs.local_cost.leakage != rhs.local_cost.leakage) {\n+                      return lhs.local_cost.leakage < rhs.local_cost.leakage;\n+                    }\n+                    if (lhs.local_cost.area != rhs.local_cost.area) {\n+                      return lhs.local_cost.area < rhs.local_cost.area;\n+                    }\n+                    if (lhs.wire_cost.hpwl_dbu != rhs.wire_cost.hpwl_dbu) {\n+                      return lhs.wire_cost.hpwl_dbu < rhs.wire_cost.hpwl_dbu;\n+                    }\n+                    if (lhs.wire_cost.max_net_hpwl_dbu\n+                        != rhs.wire_cost.max_net_hpwl_dbu) {\n+                      return lhs.wire_cost.max_net_hpwl_dbu\n+                             < rhs.wire_cost.max_net_hpwl_dbu;\n+                    }\n+                    if (lhs.local_cost.inst_count != rhs.local_cost.inst_count) {\n+                      return lhs.local_cost.inst_count\n+                             < rhs.local_cost.inst_count;\n+                    }\n+                    if (lhs.inst_names != rhs.inst_names) {\n+                      return lhs.inst_names < rhs.inst_names;\n+                    }\n+                    return lhs.construction_index < rhs.construction_index;\n+                  });\n+      }\n+      for (size_t cloud_index = 0; cloud_index < ranks.size(); ++cloud_index) {\n+        CloudRank& rank = ranks[cloud_index];\n+        if (path_cone_halo_sampled_recipe) {\n+          logger_->report(\n+              \"RMP_GUARD|path_cone_sampled_rank|rank={}|endpoint={}|\"\n+              \"endpoint_slack={}|leakage={}|area={}|hpwl={}|instances={}\",\n+              cloud_index,\n+              rank.endpoint_name,\n+              rank.endpoint_slack,\n+              rank.local_cost.leakage,\n+              rank.local_cost.area,\n+              rank.wire_cost.hpwl_dbu,\n+              rank.local_cost.inst_count);\n+        }\n+        path_inst_cloud_names_.push_back(rank.inst_names);\n+        path_inst_cloud_target_net_names_.push_back(rank.target_net_name);\n+        path_inst_clouds_.push_back(std::move(rank.cloud));\n         logger_->report(\n             \"RMP_GUARD|selected_cloud|index={}|instances={}|endpoint={}|\"\n             \"paths={}|boundary_outputs={}|target_net={}\",\n             cloud_index,\n             path_inst_clouds_.back().size(),\n-            endpoint_name,\n-            endpoint_path_counts[endpoint_name],\n+            rank.endpoint_name,\n+            rank.path_count,\n             cloudBoundaryOutputCount(path_inst_clouds_.back()),\n-            target_output_net_name);\n-        cloud_index++;\n+            rank.target_net_name);\n+      }\n+      if (path_cone_halo_sampled_recipe && !ranks.empty()) {\n+        logger_->report(\"METRIC|rmp_path_cone_admission_decided|{}\",\n+                        ranks.size());\n       }\n       path_insts_.clear();\n     }\n",
-    "legacy": false,
     "metrics": {
       "drv_count": 0.0,
       "dynamic_power_pw": 39473305000.0,
@@ -184,35 +162,11 @@
       "runtime_s": 526.0,
       "tns_abs_ns": 14.209663182
     },
-    "parent_id": "round_011:student_1",
     "phase_signals": {
       "rmp_path_cone_admission_decided": 4.0
     },
     "source_commit": "235fa81c6bb9ff92183848099064bd0e9572be12608e38faa3a918cc42dddfb4",
     "source_hash": "7d4a3734332aedd2e9d7173a79cf234bcf821f2fece067cf6e8badfc48400c5e",
-    "student_id": "student_1",
     "timing_recipe_id": "legacy_setup"
-  },
-  "provenance": {
-    "reference_campaign": "runtime/nvdla_m_campaign/evolution",
-    "reference_evidence": "rounds/round_011/students/student_1/artifacts",
-    "reference_source": "rounds/round_011/students/student_1/workspace/source",
-    "reference_source_manifest": {
-      "content_sha256": "7d4a3734332aedd2e9d7173a79cf234bcf821f2fece067cf6e8badfc48400c5e",
-      "directory_count": 673,
-      "external_symlinks": [],
-      "regular_file_count": 11924,
-      "symlink_count": 370,
-      "verified_no_external_symlinks": true
-    },
-    "reference_tcl": "rounds/round_011/students/student_1/artifacts/contest_output/evaluate.tcl"
-  },
-  "recorded_flow_metrics": {
-    "drv_count": 0.0,
-    "dynamic_power_pw": 39473305000.0,
-    "leakage_power_pw": 38326000.0,
-    "runtime_s": 526.0,
-    "tns_abs_ns": 14.209663182
-  },
-  "schema": "goalevolve.ae2-selection.v1"
+  }
 }

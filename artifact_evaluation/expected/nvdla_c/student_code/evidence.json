@@ -1,39 +1,7 @@
 {
-  "artifact_id": "nvdla_c_rmp_path_cone_halo_timing",
-  "checks": [
-    {
-      "detail": "/home/haixuliu/MLCAD26/GoalEvolve_v2/runtime/nvdla_c_evolution/campaign_r58_drv499_v2/stage_baselines/baseline_timing_only_rmp_path_cone_halo_timing_efaf3f024348efb7/workspace/build_goalevolve/bin/openroad",
-      "name": "build",
-      "passed": true
-    },
-    {
-      "detail": "official_openroad_flow",
-      "name": "flow",
-      "passed": true
-    },
-    {
-      "detail": "official_parse_log",
-      "name": "metrics",
-      "passed": true
-    },
-    {
-      "detail": "official_4of4_pass",
-      "name": "lec",
-      "passed": true
-    }
-  ],
-  "provenance": {
-    "reference_campaign": "runtime/nvdla_c_evolution/campaign_schedule_locked_rmp_v1",
-    "reference_evidence": "../campaign_r58_drv499_v2/stage_baselines/baseline_timing_only_rmp_path_cone_halo_timing_efaf3f024348efb7",
-    "reference_source": "../campaign_r58_drv499_v2/parents/baseline/source",
-    "reference_source_manifest": {
-      "content_sha256": "97b7321cbe1f55057befde8ce2daa7b2ed51908faa49cea1f6b70692d5b09d99",
-      "directory_count": 673,
-      "external_symlinks": [],
-      "regular_file_count": 11924,
-      "symlink_count": 370,
-      "verified_no_external_symlinks": true
-    },
-    "reference_tcl": "../campaign_r58_drv499_v2/stage_baselines/baseline_timing_only_rmp_path_cone_halo_timing_efaf3f024348efb7/evaluate.tcl"
-  }
+  "artifact_id": "nvdla_c_student_code",
+  "design": "nvdla_c",
+  "replay_evidence": "portable_tcl_and_official_checker",
+  "schema": "goalevolve.ae2-replay-evidence.v2",
+  "source_hash": "baseline"
 }

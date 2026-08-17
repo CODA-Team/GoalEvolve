@@ -1,5 +1,5 @@
 {
-  "artifact_id": "nvdla_c_rmp_path_cone_halo_timing",
+  "artifact_id": "nvdla_c_student_code",
   "design": "nvdla_c",
   "metrics": {
     "drv_count": 476.0,
@@ -8,7 +8,6 @@
     "runtime_s": 124.0,
     "tns_abs_ns": 7.247678218
   },
-  "parent_id": "schedule:rmp_path_cone_halo_timing",
   "source_commit": "baseline",
   "source_hash": "baseline"
 }

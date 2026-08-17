@@ -17,7 +17,7 @@ from collections import defaultdict
 from pathlib import Path
 
 AE4_ROOT = Path(__file__).resolve().parent
-PROJECT_ROOT = AE4_ROOT.parent
+PROJECT_ROOT = AE4_ROOT.parents[1]
 CONFIG_PATH = AE4_ROOT / "experiment.json"
 RESULTS_ROOT = AE4_ROOT / "results"
 
@@ -396,7 +396,7 @@ def write_reports(config: dict, rows: list[dict]) -> None:
     lines = [
         "# AE4 cross-design transfer results",
         "",
-        "All rows use the AES AE2 r58 OpenROAD executable. Improvements are measured against",
+        "All rows use the AES AE2 student_code OpenROAD executable. Improvements are measured against",
         "the corresponding contest/Table-1 baseline, not against AE4 `baseline_flow`.",
             "Positive deltas and percentages mean better QoR. Dynamic power is internal plus switching.",
             "Runtime is observer telemetry only and is excluded from every win count and aggregate QoR statistic.",
