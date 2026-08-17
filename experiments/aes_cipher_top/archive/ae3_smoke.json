@@ -37,7 +37,7 @@
     "drv_count": 0.0,
     "runtime_s": 136.0
   },
-  "allowed_patch_roots": ["src/rsz", "src/rmp", "src/grt"],
+  "allowed_patch_roots": ["src/rsz", "src/rmp"],
   "power_stage_tns_ceiling_ns": 60.0,
   "power_reclaim_phase": "early_forced_reclaim",
   "power_reclaim_proportion_percent": 80.0,

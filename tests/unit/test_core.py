@@ -31,7 +31,7 @@ from goalevolve.legacy import LegacyImporter
 from goalevolve.core.models import CandidateResult, CheckResult, EvidenceVerdict, Hypothesis, Parent
 from goalevolve.planning.observations import ObservationMemory
 from goalevolve.execution.preflight import preflight_candidate
-from goalevolve.planning.retrieval import DiversePlanner, DiverseRetriever, MechanismCard
+from goalevolve.planning.retrieval import DEFAULT_CARDS, DiversePlanner, DiverseRetriever, MechanismCard
 from goalevolve.planning.scope import SourceScopeResolver
 from goalevolve.evaluation.promotion import PowerFirstPromotion, StrictEvidencePromotion
 from goalevolve.evaluation.sfinal import score_sfinal
@@ -11820,6 +11820,52 @@ Inspect the timing handoff.
         config = load_config(project_root / "experiments/jpeg_encoder/evolve.json")
         self.assertTrue(config.campaign_ready)
         self.assertIsNone(config.declared_power_reclaim_profile)
+
+    def test_ae3_profile_excludes_global_router_from_editable_roots(self) -> None:
+        project_root = Path(__file__).resolve().parents[2]
+        config = load_config(project_root / "experiments/aes_cipher_top/evolve.json")
+
+        self.assertEqual(config.allowed_patch_roots, ("src/rsz", "src/rmp"))
+
+    def test_checked_in_profiles_never_declare_global_router_as_editable(self) -> None:
+        project_root = Path(__file__).resolve().parents[2]
+        profiles = sorted((project_root / "experiments").rglob("*.json"))
+        declared_roots = {
+            str(path.relative_to(project_root)): tuple(
+                json.loads(path.read_text(encoding="utf-8")).get("allowed_patch_roots") or ()
+            )
+            for path in profiles
+        }
+
+        self.assertTrue(any(declared_roots.values()))
+        self.assertTrue(
+            all("src/grt" not in roots for roots in declared_roots.values())
+        )
+
+    def test_config_rejects_global_router_as_an_editable_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            for root in ("src/grt", "src/grt/src", "./src/grt", "src/grt/../grt"):
+                path = Path(temporary) / "forbidden_grt.json"
+                atomic_json(
+                    path,
+                    {
+                        "design": "unit",
+                        "baseline_metrics": {"tns_abs_ns": 1.0},
+                        "target_metrics": {"tns_abs_ns": 1.0},
+                        "allowed_patch_roots": ["src/rsz", root],
+                    },
+                )
+
+                with self.assertRaisesRegex(ValueError, "forbidden editable source root: src/grt"):
+                    load_config(path)
+
+    def test_global_router_cards_remain_advisory_retrieval_knowledge(self) -> None:
+        self.assertTrue(
+            any(
+                any(hook.startswith("src/grt/") for hook in card.source_hooks)
+                for card in DEFAULT_CARDS
+            )
+        )
 
     def test_configured_baseline_missing_artifact_reports_a_clear_error(self) -> None:
         """A fresh campaign must not crash with AttributeError on an empty root."""

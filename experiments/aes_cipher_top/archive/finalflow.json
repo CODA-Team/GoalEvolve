@@ -14,7 +14,7 @@
   "workspace": "isolated_workspace",
   "promotion": "strict_evidence",
   "students": ["student_1", "student_2", "student_3", "student_4"],
-  "allowed_patch_roots": ["src/rsz", "src/rmp", "src/grt"],
+  "allowed_patch_roots": ["src/rsz", "src/rmp"],
   "require_cpp_patch": true,
   "build_jobs": 8,
   "command_timeout_s": 7200,

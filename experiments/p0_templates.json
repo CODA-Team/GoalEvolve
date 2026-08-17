@@ -4,7 +4,7 @@
     "aes_cipher_top": {
       "template": "aes_cipher_top/evolve.json",
       "target_policy_ready": true,
-      "description": "P0 campaign with the reviewed AES target policy; the first 10 rounds enforce the 60 ns power-stage timing ceiling."
+      "description": "P0 campaign with the reviewed AES target policy."
     },
     "ariane": {
       "template": "ariane/evolve.json",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import posixpath
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -260,6 +261,11 @@ def load_config(path: Path) -> ExperimentConfig:
         raise ValueError(
             "repository_graph_enabled must agree with planning_mode"
         )
+    allowed_patch_roots = tuple(raw.get("allowed_patch_roots") or ())
+    for root in allowed_patch_roots:
+        normalized_root = posixpath.normpath(str(root).replace("\\", "/")).strip("/")
+        if normalized_root == "src/grt" or normalized_root.startswith("src/grt/"):
+            raise ValueError("forbidden editable source root: src/grt")
     return ExperimentConfig(
         design=design,
         state_root=optional_path(raw.get("state_root")) or (PROJECT_ROOT / "outputs" / "ae3" / design),
@@ -284,7 +290,7 @@ def load_config(path: Path) -> ExperimentConfig:
         historical_seed_cards=historical_seed_cards,
         historical_seed_revalidation_schedule=historical_seed_revalidation_schedule,
         students=tuple(raw.get("students") or ("student_1", "student_2", "student_3", "student_4")),
-        allowed_patch_roots=tuple(raw.get("allowed_patch_roots") or ()),
+        allowed_patch_roots=allowed_patch_roots,
         require_cpp_patch=bool(raw.get("require_cpp_patch", True)),
         command_timeout_s=int(raw.get("command_timeout_s", 7200)),
         command_retries=int(raw.get("command_retries", 1)),

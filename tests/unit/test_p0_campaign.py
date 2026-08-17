@@ -25,6 +25,7 @@ class P0CampaignTests(unittest.TestCase):
         aes = next(item for item in report["designs"] if item["design"] == "aes_cipher_top")
         self.assertTrue(aes["target_policy_ready"])
         self.assertEqual(aes["template"], "experiments/aes_cipher_top/evolve.json")
+        self.assertNotIn("the first 10 rounds enforce", aes["description"])
 
     def test_aes_p0_init_copies_policy_into_a_private_runtime_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

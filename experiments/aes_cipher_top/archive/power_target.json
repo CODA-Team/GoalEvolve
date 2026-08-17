@@ -31,7 +31,7 @@
   "power_reclaim_proportion_percent": 80.0,
   "power_reclaim_max_moves": 0,
   "students": ["student_1", "student_2", "student_3", "student_4"],
-  "allowed_patch_roots": ["src/rsz", "src/rmp", "src/grt"],
+  "allowed_patch_roots": ["src/rsz", "src/rmp"],
   "require_cpp_patch": true,
   "build_jobs": 8,
   "command_timeout_s": 1200,
