@@ -109,11 +109,6 @@ make setup
 # Install the project-local Codex CLI, needed by AE-3.
 make setup INSTALL_CODEX_CLI=1
 ```
-
-The release repository requires GitHub access. If your account uses an SSH
-key (or an HTTPS token cannot be entered from a non-interactive shell), clone
-with `git clone git@github.com:CODA-Team/GoalEvolve.git` instead.
-
 On a shared server, a concurrent Conda operation can transiently lock
 libmamba's metadata database. `make setup` automatically retries with Conda's
 classic solver in that case; no manual cache deletion is needed.
@@ -199,7 +194,7 @@ PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae2/run_a
 `--verbose` streams configure, build, and flow logs to the terminal. Each
 artifact preserves its recorded evaluation mode; its numerical tolerances and
 expected evidence are versioned in [release_manifest.json](artifact_evaluation/release_manifest.json).
-The selected modes include `power_then_timing` and NVDLA-C `timing_only`. See
+See
 [AE2_SELECTIONS.md](artifact_evaluation/AE2_SELECTIONS.md) for all artifact
 IDs, source snapshots, Tcl schedules, QoR, and distances to target. Substitute
 any listed ID for `aes_cipher_top_student_code` to replay that design.
