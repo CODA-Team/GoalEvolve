@@ -1,5 +1,7 @@
 # GoalEvolve: From Handcrafted Algorithm Priors to Goal-Driven Evolution of Physical Design Algorithms
 
+English · [中文](README.zh-CN.md)
+
 An open-source goal-driven framework for evolving bounded OpenROAD C++ algorithms toward specified QoR targets. It integrates post-route QoR evaluation and validity checks into a traceable source-level search workflow.
 
 The accompanying paper is [GoalEvolve.pdf](paper/GoalEvolve.pdf).
@@ -34,9 +36,13 @@ GoalEvolve/
 │   ├── dashboard.py             # Read-only local AE-3 dashboard server
 │   └── dashboard_static/        # Browser interface for persisted campaign state
 ├── artifact_evaluation/         # Deterministic artifact-evaluation entry points
-│   ├── lineage/                 # Immutable OpenROAD source snapshots
-│   │   └── openroad_power/p0/    # P0 source manifest and prebuilt rsz/rmp AST graph
-│   └── expected/                # Fixed QoR/evidence manifests and portable Tcl
+│   ├── ae1/                     # Release completeness and path validation
+│   ├── ae2/                     # Fixed OpenROAD artifact preflight and replay
+│   ├── ae3/                     # Pointer to the user-driven goalevolve.cli workflow
+│   ├── ae4/                     # AES-binary cross-design transfer replay
+│   ├── expected/                # Fixed QoR/evidence manifests and portable Tcl
+│   └── lineage/                 # Immutable OpenROAD source snapshots
+│       └── openroad_power/p0/    # P0 source manifest and prebuilt rsz/rmp AST graph
 ├── experiments/                 # Reviewed design profiles and campaign examples
 ├── config/                      # Schema, global Codex policy, templates, and credential example
 ├── third_party/                 # reference inputs and official checker
@@ -208,29 +214,6 @@ the prepared host environment can launch OpenROAD. A formal AE-2 replay never
 uses that external binary; it builds or reuses
 `outputs/ae2/<released-artifact>/build/bin/openroad` from the selected source.
 
-## AE-4: Reproduce cross-design transfer
-
-AE-4 uses the **locally rebuilt and passing** AES AE-2 executable on the seven
-non-AES designs.  It first verifies
-`outputs/ae2/aes_cipher_top_student_code/report/ae2_report.json`, then generates its
-evaluation-local RMP ABC Liberty from the bundled ASAP7 libraries.  No machine
-absolute path, prebuilt binary hash, or generated output is versioned.
-
-```bash
-source outputs/toolchain/activate.sh
-
-# Required once after cloning: build and pass AES AE-2 as shown above.
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_ae4.py prepare
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_ae4.py run --jobs 1
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_ae4.py collect
-```
-
-`--jobs 1` is the safe default for a shared host; raise it only when memory and
-CPU capacity permit parallel OpenROAD flows.  The seven generated baseline
-flows, logs and summaries are ignored under `artifact_evaluation/ae4/results/`.  See
-[artifact_evaluation/ae4/README.md](artifact_evaluation/ae4/README.md) for the fixed schedule and interpretation of
-the resulting report.
-
 ## AE-3: Run a new source-evolution campaign
 
 AE-3 runs the complete Teacher/Student source-evolution workflow. It is
@@ -346,6 +329,29 @@ Use `p0 status --campaign <campaign-directory>` to inspect a campaign and
 `p0 run --campaign <campaign-directory> --rounds N` to resume it.  Generated
 P0 campaigns stay under `outputs/` and are never a replacement for a fixed
 AE-2 artifact.
+
+## AE-4: Reproduce cross-design transfer
+
+AE-4 uses the **locally rebuilt and passing** AES AE-2 executable on the seven
+non-AES designs. It first verifies
+`outputs/ae2/aes_cipher_top_student_code/report/ae2_report.json`, then generates its
+evaluation-local RMP ABC Liberty from the bundled ASAP7 libraries. No machine
+absolute path, prebuilt binary hash, or generated output is versioned.
+
+```bash
+source outputs/toolchain/activate.sh
+
+# Required once after cloning: build and pass AES AE-2 as shown above.
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_ae4.py prepare
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_ae4.py run --jobs 1
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_ae4.py collect
+```
+
+`--jobs 1` is the safe default for a shared host; raise it only when memory and
+CPU capacity permit parallel OpenROAD flows. The seven generated baseline
+flows, logs and summaries are ignored under `artifact_evaluation/ae4/results/`. See
+[artifact_evaluation/ae4/README.md](artifact_evaluation/ae4/README.md) for the fixed schedule and interpretation of
+the resulting report.
 
 ## Outputs and result inspection
 

@@ -1940,13 +1940,10 @@ class Contest2026OpenROADEvaluator:
 
 
 def _observe_sfinal(*, design: str, benchmark_dir: Path, output: Path) -> dict[str, str]:
-    """Persist and print Sfinal only as a post-evaluation comparison observer."""
+    """Persist Sfinal only as a post-evaluation comparison observer."""
     try:
-        report = observe_sfinal(design=design, benchmark_dir=benchmark_dir, candidate_dir=output)
-        score = dict(report["score"])
-        print(f"[GoalEvolve][observer][Sfinal] design={design} Sfinal={float(score['Sfinal']):.12g}", flush=True)
+        observe_sfinal(design=design, benchmark_dir=benchmark_dir, candidate_dir=output)
         return {"sfinal_observation": str(output / "sfinal_observation.json")}
     except Exception as exc:
         detail = f"{type(exc).__name__}:{exc}"
-        print(f"[GoalEvolve][observer][Sfinal] design={design} unavailable={detail}", flush=True)
         return {"sfinal_observation_error": detail}

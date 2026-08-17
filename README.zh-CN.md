@@ -1,5 +1,7 @@
 # GoalEvolve：可复现的 OpenROAD 源码进化
 
+[中文](README.zh-CN.md) · [English](README.md)
+
 GoalEvolve 对 OpenROAD 中有边界的 C++ 机制进行进化；每个候选均经过 post-route flow 和固定的 4/4 checker 验证，并保留晋升所需的证据。工程将依赖、实现、实验和结果清晰分离，但不是训练模型工程。
 
 ```text
@@ -16,7 +18,12 @@ Makefile                   环境 doctor、setup 和 AE-1 check 入口
 scripts/human/             Makefile 环境命令的实现
 config/                    schema 与可移植模板
 experiments/               design 专用的受审 profile 和预期 QoR
-artifact_evaluation/       AE-1/AE-2 manifest、冻结源码和预期证据
+artifact_evaluation/       按 AE-1 至 AE-4 组织的复现实验
+  ae1/                      release 完整性与路径检查
+  ae2/                      固定 OpenROAD artifact 的预检与重放
+  ae3/                      指向 goalevolve.cli 用户进化入口
+  ae4/                      AES 二进制的跨 design transfer
+  expected/ lineage/        冻结证据和不可变 OpenROAD 源码
 third_party/               固定的官方 parser/checker、ASAP7 与 contest 输入
 toolchain/                 版本锁和环境说明
 tests/                     unit、integration、artifact 检查
@@ -53,6 +60,8 @@ hook 和建议的 `avoid_exact_source_hooks` 前沿，要求 Teacher 换用新 h
 | AE-3 | 用户能启动新的 Teacher/Student 源码进化 campaign | 是 | 只检查流程；QoR 本身随机 |
 | AE-4 | 使用 AES 演化后二进制评测七个非 AES contest design | 否 | 是，记录 7 个 baseline flow |
 
+## AE-1：环境与接口检查
+
 立即运行 AE-1：
 
 ```bash
@@ -60,6 +69,8 @@ cd /path/to/GoalEvolve
 source outputs/toolchain/activate.sh
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae1/run_ae1.py
 ```
+
+## AE-2：固定 artifact 的确定性复验
 
 运行确定性的 AE-2：
 
@@ -77,24 +88,6 @@ AE-2 使用版本匹配、且在当前 shell 已激活的 OpenROAD 执行可移�
 这一步是**已选结果的重放，不是重新运行自动进化**：不会创建新的 Teacher/Student candidate，
 也不会改变论文中已经选定的结果。之所以仍须重新编译，是因为每个已选 artifact 都对应一份
 不同的 OpenROAD C++ 源码快照；在干净主机上必须编译该冻结源码，才能测量其捕获的 flow。
-
-## AE-4：跨 design transfer
-
-AE-4 必须在 AES AE-2 已经成功之后运行。它使用本机刚刚 rebuild 且通过 AE-2 的
-`aes_cipher_top_student_code` 二进制，在七个非 AES design 上各运行一个 `baseline_flow`（`repair_design`
-后接 `repair_timing -setup`）；RMP 所需的单文件
-Liberty 会从仓库内 ASAP7 Liberty 自动生成。因此 release 不依赖机器绝对路径或 ELF 二进制 hash。
-
-```bash
-source outputs/toolchain/activate.sh
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_ae4.py prepare
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_ae4.py run --jobs 1
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_ae4.py collect
-```
-
-`--jobs 1` 是共享服务器的安全默认值；只有确认 CPU 和内存足够时再提高并行数。7 个 Tcl、
-日志和汇总都写入被 Git 忽略的 `artifact_evaluation/ae4/results/`。固定 schedule、统计口径和结果解释见
-[artifact_evaluation/ae4/README.md](artifact_evaluation/ae4/README.md)。
 
 ## 环境安装
 
@@ -215,6 +208,24 @@ prompt 必定包含上一轮 diff artifact、修改文件、增删代码、增�
 每个 promising idea 最多有 `epd_max_reinforcement_attempts` 次 Enhancer 强化机会，默认 `2`，
 在 evolve profile 中设置且对整个 campaign 生效。结果被晋升时，对应 idea 会记录继承的 parent
 和 source hash。
+
+## AE-4：跨 design transfer
+
+AE-4 必须在 AES AE-2 已经成功之后运行。它使用本机刚刚 rebuild 且通过 AE-2 的
+`aes_cipher_top_student_code` 二进制，在七个非 AES design 上各运行一个 `baseline_flow`（`repair_design`
+后接 `repair_timing -setup`）；RMP 所需的单文件
+Liberty 会从仓库内 ASAP7 Liberty 自动生成。因此 release 不依赖机器绝对路径或 ELF 二进制 hash。
+
+```bash
+source outputs/toolchain/activate.sh
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_ae4.py prepare
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_ae4.py run --jobs 1
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_ae4.py collect
+```
+
+`--jobs 1` 是共享服务器的安全默认值；只有确认 CPU 和内存足够时再提高并行数。7 个 Tcl、
+日志和汇总都写入被 Git 忽略的 `artifact_evaluation/ae4/results/`。固定 schedule、统计口径和结果解释见
+[artifact_evaluation/ae4/README.md](artifact_evaluation/ae4/README.md)。
 
 ## Design Profile
 

@@ -18,7 +18,7 @@ bash "${PROJECT_ROOT}/scripts/human/doctor.sh"
 
 printf '%s\n' '[INFO] Running AE-1 preflight.'
 cd "${PROJECT_ROOT}"
-PYTHONPATH=. "${PYTHON}" -m artifact_evaluation.runner ae1
+PYTHONPATH=. "${PYTHON}" artifact_evaluation/ae1/run_ae1.py
 
 if command -v codex >/dev/null 2>&1; then
     printf '[OK] Codex CLI available for AE-3: %s\n' "$(command -v codex)"
