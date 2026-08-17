@@ -103,6 +103,18 @@ make setup
 make setup INSTALL_CODEX_CLI=1
 ```
 
+`make setup` 会创建项目内环境并生成 `outputs/toolchain/activate.sh`。完成
+setup 后请 source 它。如果用户已经有兼容的 ORFS/GCC workspace，应在构建
+p0 前按该 workspace 提供的方式激活，例如：
+
+```bash
+source /path/to/your/orfs/activate.sh
+```
+
+激活后的 workspace 必须通过 `PATH` 和 `CMAKE_PREFIX_PATH`（或等效变量）
+提供 compiler 及 native dependency。如果该 workspace 已包含完整且兼容的
+依赖 bundle，则跳过下面两个 `DependencyInstaller.sh` 命令。
+
 共享服务器上的并发 Conda 操作可能暂时锁定 libmamba metadata database。`make setup` 会自动使用 Conda classic solver 重试；不需要手动删除 cache。
 
 复制并构建 p0 以准备匹配的 OpenROAD executable。这样不会改变冻结源码快照；dependency installer 只用 `sudo` 安装宿主 package，使用 `-local` 时下载的构建依赖位于当前用户目录。执行 `Build.sh` 前，如果已准备的 OpenROAD/ORFS workspace 提供匹配的 compiler 和 native dependency bundle，请先激活它；激活后这些工具必须通过 `PATH` 和 `CMAKE_PREFIX_PATH`（或等效变量）可见。
@@ -114,7 +126,7 @@ rm -rf "$P0_BUILD"
 mkdir -p "$(dirname "$P0_BUILD")"
 cp -a "$P0_INPUT" "$P0_BUILD"
 cd "$P0_BUILD"
-# 只有在已激活的 host workspace 没有提供匹配 native dependency 时，才运行下面两个 installer。
+# 如果已激活的 ORFS/GCC workspace 已提供全部 native dependency，则跳过下面两个 installer。
 sudo ./etc/DependencyInstaller.sh -base
 ./etc/DependencyInstaller.sh -common -local
 # AE-1 需要 production executable；项目级验证是下面的 `make check`。

@@ -109,6 +109,20 @@ make setup
 # Install the project-local Codex CLI, needed by AE-3.
 make setup INSTALL_CODEX_CLI=1
 ```
+
+`make setup` creates the project-local environment and generates
+`outputs/toolchain/activate.sh`. Source it after setup. If you already have a
+compatible ORFS/GCC workspace, activate it using that workspace's own command
+before building p0, for example:
+
+```bash
+source /path/to/your/orfs/activate.sh
+```
+
+The activated workspace must expose its compiler and native dependencies through
+`PATH` and `CMAKE_PREFIX_PATH`. When it provides the full compatible dependency
+bundle, skip both `DependencyInstaller.sh` commands below.
+
 On a shared server, a concurrent Conda operation can transiently lock
 libmamba's metadata database. `make setup` automatically retries with Conda's
 classic solver in that case; no manual cache deletion is needed.
@@ -128,8 +142,8 @@ rm -rf "$P0_BUILD"
 mkdir -p "$(dirname "$P0_BUILD")"
 cp -a "$P0_INPUT" "$P0_BUILD"
 cd "$P0_BUILD"
-# Run these two installers only when the activated host workspace does not
-# already provide the matching native dependencies.
+# If the activated ORFS/GCC workspace already provides all native dependencies,
+# skip both installer commands below.
 sudo ./etc/DependencyInstaller.sh -base
 ./etc/DependencyInstaller.sh -common -local
 # AE-1 needs the production executable; project-level validation is `make check` below.
