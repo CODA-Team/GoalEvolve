@@ -7,7 +7,7 @@ state/
 runtime/
 outputs/
 logs/
-AE4/results/
+artifact_evaluation/ae4/results/
 illustrate/
 experiments/**/*.local.json
 .env*
@@ -28,14 +28,6 @@ artifact_evaluation/import_v2_ae2_records.py
 experiments/aes_cipher_top/aes_ast_recovery_seed_cards.json
 experiments/aes_cipher_top/aes_power_only_seed_cards.json
 experiments/aes_cipher_top/seeds/
-
-# Superseded AE-2 captures are retained locally only.
-artifact_evaluation/expected/aes_cipher_top/r054_student1/
-artifact_evaluation/lineage/aes_cipher_top/r054_student1/
-artifact_evaluation/expected/nvdla_m/r002_student1/
-artifact_evaluation/lineage/nvdla_m/r002_student1/
-artifact_evaluation/expected/nvdla_p/r001_student2/
-artifact_evaluation/lineage/nvdla_p/r001_student2/
 
 # Agent-specific configuration is not part of a reproducible OpenROAD source snapshot.
 artifact_evaluation/lineage/**/source/.agents/

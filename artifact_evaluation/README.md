@@ -20,9 +20,9 @@ preflight record.
 ```bash
 export OPENROAD_EXE=/path/to/prepared/OpenROAD/bin/openroad
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2-preflight \
-  --artifact aes_r58_student1 --openroad "$OPENROAD_EXE" --verbose
+  --artifact aes_cipher_top_student_code --openroad "$OPENROAD_EXE" --verbose
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2 \
-  --artifact aes_r58_student1 --rebuild --jobs 8 --verbose
+  --artifact aes_cipher_top_student_code --rebuild --jobs 8 --verbose
 ```
 
 This command never starts Teacher, Student, retrieval, Codex, or an API call.

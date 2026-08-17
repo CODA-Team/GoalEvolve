@@ -15,18 +15,17 @@ the unmet percentage is `max(0, measured - target) / target * 100`.
 
 | Design | Released artifact and parent | Immutable OpenROAD source | GitHub replay Tcl | Flow mode |
 |---|---|---|---|---|
-| AES | `aes_r58_student1`, `round_058:student_1` | `lineage/aes_cipher_top/r058_student1/source/` | `expected/aes_cipher_top/r058_student1/evaluate.tcl` | `power_then_timing` |
-| JPEG | `jpeg_r16_student1`, `round_016:student_1` | `lineage/jpeg_encoder/r016_student1/source/` | `expected/jpeg_encoder/r016_student1/evaluate.tcl` | `power_then_timing` |
-| Ariane | `ariane_r11_student3`, `round_011:student_3:electric_normalization` | `lineage/ariane/r011_student3/source/` | `expected/ariane/r011_student3/evaluate.tcl` | `power_then_timing` |
-| MemPool | `mempool_aes_r58_parent`, `preexperiment:aes_best_r58_target_1850` | `lineage/mempool_group/aes_r58_parent/source/` | `expected/mempool_group/aes_r58_parent/evaluate.tcl` | `power_then_timing` |
-| NVDLA-A | `nvdla_a_r16_student1`, `round_016:student_1` | `lineage/nvdla_a/r016_student1/source/` | `expected/nvdla_a/r016_student1/evaluate.tcl` | `power_then_timing` |
-| NVDLA-C | `nvdla_c_rmp_path_cone_halo_timing`, `schedule:rmp_path_cone_halo_timing` | `lineage/nvdla_c/rmp_path_cone_halo_timing/source/` | `expected/nvdla_c/rmp_path_cone_halo_timing/evaluate.tcl` | `timing_only` |
-| NVDLA-M | `nvdla_m_r11_student1`, `round_011:student_1` | `lineage/nvdla_m/r011_student1/source/` | `expected/nvdla_m/r011_student1/evaluate.tcl` | `power_then_timing` |
-| NVDLA-P | `nvdla_p_r4_student1`, `round_004:student_1` | `lineage/nvdla_p/r004_student1/source/` | `expected/nvdla_p/r004_student1/evaluate.tcl` | `power_then_timing` |
+| AES | `aes_cipher_top_student_code`, `student_code` | `lineage/aes_cipher_top/student_code/source/` | `expected/aes_cipher_top/student_code/evaluate.tcl` | `power_then_timing` |
+| JPEG | `jpeg_encoder_student_code`, `student_code` | `lineage/jpeg_encoder/student_code/source/` | `expected/jpeg_encoder/student_code/evaluate.tcl` | `power_then_timing` |
+| Ariane | `ariane_student_code`, `student_code` | `lineage/ariane/student_code/source/` | `expected/ariane/student_code/evaluate.tcl` | `power_then_timing` |
+| MemPool | `mempool_group_student_code`, `student_code` | `lineage/mempool_group/student_code/source/` | `expected/mempool_group/student_code/evaluate.tcl` | `power_then_timing` |
+| NVDLA-A | `nvdla_a_student_code`, `student_code` | `lineage/nvdla_a/student_code/source/` | `expected/nvdla_a/student_code/evaluate.tcl` | `power_then_timing` |
+| NVDLA-C | `nvdla_c_student_code`, `student_code` | `lineage/nvdla_c/student_code/source/` | `expected/nvdla_c/student_code/evaluate.tcl` | `timing_only` |
+| NVDLA-M | `nvdla_m_student_code`, `student_code` | `lineage/nvdla_m/student_code/source/` | `expected/nvdla_m/student_code/evaluate.tcl` | `power_then_timing` |
+| NVDLA-P | `nvdla_p_student_code`, `student_code` | `lineage/nvdla_p/student_code/source/` | `expected/nvdla_p/student_code/evaluate.tcl` | `power_then_timing` |
 
-The exact recorded campaign-relative Tcl location, source hash, source commit,
-contract, and raw parent record are preserved in the corresponding
-`expected/<design>/<selection>/ae2_selection.json` file.
+Each selection record preserves the release source hash, source commit, QoR
+contract, and replay evidence under `expected/<design>/student_code/`.
 
 ## QoR and distance to target
 

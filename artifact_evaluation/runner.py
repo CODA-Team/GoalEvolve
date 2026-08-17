@@ -390,7 +390,7 @@ def ae2(*, artifact: dict[str, Any], openroad: Path | None, jobs: int, rebuild: 
 def main() -> int:
     parser = argparse.ArgumentParser(description="GoalEvolve artifact evaluation")
     parser.add_argument("mode", choices=("ae1", "ae2", "ae2-preflight"))
-    parser.add_argument("--artifact", default="aes_r58_student1")
+    parser.add_argument("--artifact", default="aes_cipher_top_student_code")
     parser.add_argument("--openroad", type=Path, help="prepared host executable for ae2-preflight only")
     parser.add_argument("--rebuild", action="store_true", help="configure and build the frozen AE-2 source before replay")
     parser.add_argument("--jobs", type=int, default=2)

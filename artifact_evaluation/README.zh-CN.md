@@ -20,9 +20,9 @@ OpenROAD；JSON 输出是权威预检记录。
 # 先按宿主 OpenROAD/ORFS 工作区自身的说明激活环境。
 export OPENROAD_EXE=/path/to/prepared/OpenROAD/build/bin/openroad
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2-preflight \
-  --artifact aes_r58_student1 --openroad "$OPENROAD_EXE" --verbose
+  --artifact aes_cipher_top_student_code --openroad "$OPENROAD_EXE" --verbose
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2 \
-  --artifact aes_r58_student1 --rebuild --jobs 8 --verbose
+  --artifact aes_cipher_top_student_code --rebuild --jobs 8 --verbose
 ```
 
 该命令绝不启动 Teacher、Student、retrieval、Codex 或 API 调用。它将所选

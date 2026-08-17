@@ -67,12 +67,12 @@ PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner
 source outputs/toolchain/activate.sh
 export OPENROAD_EXE=/path/to/prepared/OpenROAD/build/bin/openroad
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2-preflight \
-  --artifact aes_r58_student1 --openroad "$OPENROAD_EXE"
+  --artifact aes_cipher_top_student_code --openroad "$OPENROAD_EXE"
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2 \
-  --artifact aes_r58_student1 --rebuild --jobs 8 --verbose
+  --artifact aes_cipher_top_student_code --rebuild --jobs 8 --verbose
 ```
 
-AE-2 使用版本匹配、且在当前 shell 已激活的 OpenROAD 执行可移植的已捕获 Tcl、官方 parser 与 4/4 checker，然后与 `artifact_evaluation/expected/aes_cipher_top/r058_student1/metrics.json` 对比 TNS、dynamic power、leakage。该结果的阶段是 `global_route + estimate_parasitics`，不是 detailed routing。
+AE-2 使用版本匹配、且在当前 shell 已激活的 OpenROAD 执行可移植的已捕获 Tcl、官方 parser 与 4/4 checker，然后与 `artifact_evaluation/expected/aes_cipher_top/student_code/metrics.json` 对比 TNS、dynamic power、leakage。该结果的阶段是 `global_route + estimate_parasitics`，不是 detailed routing。
 
 这一步是**已选结果的重放，不是重新运行自动进化**：不会创建新的 Teacher/Student candidate，
 也不会改变论文中已经选定的结果。之所以仍须重新编译，是因为每个已选 artifact 都对应一份
@@ -81,20 +81,20 @@ AE-2 使用版本匹配、且在当前 shell 已激活的 OpenROAD 执行可移�
 ## AE-4：跨 design transfer
 
 AE-4 必须在 AES AE-2 已经成功之后运行。它使用本机刚刚 rebuild 且通过 AE-2 的
-`aes_r58_student1` 二进制，在七个非 AES design 上各运行一个 `baseline_flow`（`repair_design`
+`aes_cipher_top_student_code` 二进制，在七个非 AES design 上各运行一个 `baseline_flow`（`repair_design`
 后接 `repair_timing -setup`）；RMP 所需的单文件
 Liberty 会从仓库内 ASAP7 Liberty 自动生成。因此 release 不依赖机器绝对路径或 ELF 二进制 hash。
 
 ```bash
 source outputs/toolchain/activate.sh
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" AE4/run_ae4.py prepare
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" AE4/run_ae4.py run --jobs 1
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" AE4/run_ae4.py collect
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_ae4.py prepare
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_ae4.py run --jobs 1
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_ae4.py collect
 ```
 
 `--jobs 1` 是共享服务器的安全默认值；只有确认 CPU 和内存足够时再提高并行数。7 个 Tcl、
-日志和汇总都写入被 Git 忽略的 `AE4/results/`。固定 schedule、统计口径和结果解释见
-[AE4/README.md](AE4/README.md)。
+日志和汇总都写入被 Git 忽略的 `artifact_evaluation/ae4/results/`。固定 schedule、统计口径和结果解释见
+[artifact_evaluation/ae4/README.md](artifact_evaluation/ae4/README.md)。
 
 ## 环境安装
 
@@ -331,7 +331,7 @@ PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli run \
 
 ## 当前固定 AES artifact
 
-`aes_r58_student1` 是 `round_058:student_1`；其 cache-safe post-route
+`aes_cipher_top_student_code` 是 `student_code`；其 cache-safe post-route
 replay 记录的 TNS 为 `15.5726 ns`、dynamic power 为 `335.607141B pW`、
 leakage 为 `29.093M pW`。
 复现实验应使用本文档的 AE-2 命令，以本机兼容工具链重新生成结果。

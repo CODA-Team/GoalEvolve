@@ -4,6 +4,7 @@ import tempfile
 import unittest
 import json
 import subprocess
+import re
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,6 +16,21 @@ from goalevolve.planning.repository_graph import RepositoryGraphIndex
 
 
 class ReleaseArtifactTests(unittest.TestCase):
+    def test_public_artifacts_use_student_code_aliases(self) -> None:
+        forbidden = re.compile(r"(?:round_[0-9]+|r[0-9]+_student[0-9]+|student_[0-9]+)")
+        artifacts = _artifacts()
+        self.assertEqual(len(artifacts), 8)
+        for artifact_id, artifact in artifacts.items():
+            self.assertTrue(artifact_id.endswith("_student_code"), artifact_id)
+            self.assertTrue(str(artifact["expected_root"]).endswith("/student_code"), artifact_id)
+            self.assertTrue(str(artifact["source_root"]).endswith("/student_code/source"), artifact_id)
+            expected = runner._path(str(artifact["expected_root"]))
+            for path in expected.glob("*"):
+                if path.suffix in {".json", ".md", ".tcl", ".csv"}:
+                    self.assertIsNone(
+                        forbidden.search(path.read_text(encoding="utf-8", errors="replace")),
+                        path,
+                    )
     def test_checked_in_p0_repository_graph_matches_the_frozen_source(self) -> None:
         source_root = runner.PROJECT_ROOT / "artifact_evaluation/lineage/openroad_power/p0/source"
         checked_in_root = source_root.parent / "repository_graph"
@@ -154,7 +170,7 @@ class ReleaseArtifactTests(unittest.TestCase):
             (campaign / "flow" / "candidate.json").write_text(
                 json.dumps(
                     {
-                        "parent_id": "round_058:student_1",
+                        "parent_id": "student_code",
                         "source_hash": "selected-hash",
                         "source_commit": "selected-commit",
                         "metrics": {"tns_abs_ns": 1.0},
@@ -214,11 +230,10 @@ class ReleaseArtifactTests(unittest.TestCase):
                     encoding="utf-8"
                 )
             )
-            self.assertEqual(selected["parent"]["parent_id"], "round_058:student_1")
-            self.assertEqual(selected["parent"]["source_commit"], "selected-commit")
-            self.assertEqual(selected["parent"]["evaluation_mode"], "power_then_timing")
-            self.assertEqual(selected["parent"]["timing_recipe_id"], "mt1_deep")
-            self.assertNotIn("artifacts", selected["parent"])
+            self.assertEqual(selected["selected_source"]["source_commit"], "selected-commit")
+            self.assertEqual(selected["selected_source"]["evaluation_mode"], "power_then_timing")
+            self.assertEqual(selected["selected_source"]["timing_recipe_id"], "mt1_deep")
+            self.assertNotIn("artifacts", selected["selected_source"])
             self.assertEqual(candidate["metrics"], {"tns_abs_ns": 1.0})
 
     def test_stage_qor_refresh_leaves_a_markerless_fixture_unchanged(self) -> None:
@@ -241,7 +256,7 @@ class ReleaseArtifactTests(unittest.TestCase):
             self.assertEqual((staged / "Version.hh").read_text(encoding="utf-8"), "generated\n")
 
     def test_eight_artifact_release_is_complete_and_buildable(self) -> None:
-        report = ae1(artifact=_artifact("aes_r58_student1"))
+        report = ae1(artifact=_artifact("aes_cipher_top_student_code"))
         self.assertTrue(all(report["checks"].values()))
         self.assertTrue(report["checks"]["benchmark_jpeg_encoder"])
         self.assertTrue(report["checks"]["benchmark_nvdla_p"])
@@ -268,11 +283,9 @@ class ReleaseArtifactTests(unittest.TestCase):
             self.assertNotIn("/home/haixuliu", tcl, artifact_id)
             self.assertNotIn('""" +', tcl, artifact_id)
             self.assertTrue((expected / "ae2_selection.json").is_file(), artifact_id)
-            self.assertEqual(candidate["metrics"], selection["parent"]["metrics"], artifact_id)
-            if "parent_id" in candidate:
-                self.assertEqual(candidate["parent_id"], selection["parent"]["parent_id"], artifact_id)
+            self.assertEqual(candidate["metrics"], selection["selected_source"]["metrics"], artifact_id)
             self.assertEqual(len(selection["goal_distances"]), 3, artifact_id)
-            self.assertEqual(artifact["evaluation_mode"], selection["parent"]["evaluation_mode"], artifact_id)
+            self.assertEqual(artifact["evaluation_mode"], selection["selected_source"]["evaluation_mode"], artifact_id)
             self.assertTrue(runner._snapshot_matches(source=source, manifest_path=expected / "source_manifest.json"), artifact_id)
             self.assertTrue((benchmark / f"{artifact['design']}.v").is_file(), artifact_id)
 
@@ -354,8 +367,8 @@ report_power
 
     def test_ae2_materializes_rmp_liberty_only_for_rmp_recipes(self) -> None:
         benchmark = runner.PROJECT_ROOT / "third_party/benchmarks/benchmarks/aes_cipher_top"
-        rmp_tcl = runner.PROJECT_ROOT / "artifact_evaluation/expected/aes_cipher_top/r058_student1/evaluate.tcl"
-        plain_tcl = runner.PROJECT_ROOT / "artifact_evaluation/expected/ariane/r011_student3/evaluate.tcl"
+        rmp_tcl = runner.PROJECT_ROOT / "artifact_evaluation/expected/aes_cipher_top/student_code/evaluate.tcl"
+        plain_tcl = runner.PROJECT_ROOT / "artifact_evaluation/expected/ariane/student_code/evaluate.tcl"
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "out"
             combined = runner._materialize_rmp_liberty(
@@ -397,7 +410,7 @@ report_power
         self.assertEqual(environment["LD_LIBRARY_PATH"], "/host/lib")
 
     def test_ae2_rejects_a_source_that_does_not_match_its_release_manifest(self) -> None:
-        artifact = runner._artifact("aes_r58_student1")
+        artifact = runner._artifact("aes_cipher_top_student_code")
         from unittest.mock import patch
 
         with patch.object(runner, "_snapshot_matches", return_value=False):
@@ -411,7 +424,7 @@ report_power
                 )
 
     def test_ae2_does_not_accept_an_unproven_external_openroad_binary(self) -> None:
-        artifact = runner._artifact("aes_r58_student1")
+        artifact = runner._artifact("aes_cipher_top_student_code")
         with self.assertRaisesRegex(RuntimeError, "per-artifact OpenROAD build"):
             runner.ae2(
                 artifact=artifact,
@@ -422,7 +435,7 @@ report_power
             )
 
     def test_ae1_does_not_require_a_standalone_cmake_binary(self) -> None:
-        artifact = runner._artifact("aes_r58_student1")
+        artifact = runner._artifact("aes_cipher_top_student_code")
         from unittest.mock import patch
 
         with patch.object(runner.shutil, "which", side_effect=lambda command: "/usr/bin/python3" if command == "python3" else None):

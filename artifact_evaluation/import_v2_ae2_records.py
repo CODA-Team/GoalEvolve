@@ -44,92 +44,92 @@ class Selection:
 
 SELECTIONS = (
     Selection(
-        "aes_r58_student1",
+        "aes_cipher_top_student_code",
         "aes_cipher_top",
         "runtime/aes_campaign_power_target",
-        "rounds/round_058/students/student_1/workspace/source",
-        "rounds/round_058/students/student_1/artifacts/contest_output",
-        "rounds/round_058/students/student_1/artifacts",
-        "aes_cipher_top/r058_student1",
-        "aes_cipher_top/r058_student1",
-        candidate_relative="rounds/round_058/students/student_1/artifacts/candidate.json",
-        selected_parent_id="round_058:student_1",
+        "selected_source/student_code/workspace/source",
+        "selected_source/student_code/artifacts/contest_output",
+        "selected_source/student_code/artifacts",
+        "aes_cipher_top/student_code",
+        "aes_cipher_top/student_code",
+        candidate_relative="selected_source/student_code/artifacts/candidate.json",
+        selected_parent_id="student_code",
     ),
     Selection(
-        "jpeg_r16_student1",
+        "jpeg_encoder_student_code",
         "jpeg_encoder",
         "runtime/jpeg_campaign",
         "parents/1d76634cfe95582ddb6f43a429eaa1f6907136b33414fe586be2e95ad9adb1f0/source",
-        "rounds/round_016/students/student_1/artifacts/contest_output",
-        "rounds/round_016/students/student_1/artifacts",
-        "jpeg_encoder/r016_student1",
-        "jpeg_encoder/r016_student1",
+        "selected_source/student_code/artifacts/contest_output",
+        "selected_source/student_code/artifacts",
+        "jpeg_encoder/student_code",
+        "jpeg_encoder/student_code",
     ),
     Selection(
-        "ariane_r11_student3",
+        "ariane_student_code",
         "ariane",
-        "runtime/ariane_evolution/campaign_r58_lpower_17600000000",
+        "runtime/ariane_evolution/campaign_selected_source",
         "parents/1d6475a8066ae156c2211d549f5fa1bc38edee9de10bc77813cea029a18c9c63/source",
-        "rounds/round_011/students/student_3/artifacts/contest_output",
-        "rounds/round_011/students/student_3/artifacts",
-        "ariane/r011_student3",
-        "ariane/r011_student3",
+        "selected_source/student_code/artifacts/contest_output",
+        "selected_source/student_code/artifacts",
+        "ariane/student_code",
+        "ariane/student_code",
     ),
     Selection(
-        "mempool_aes_r58_parent",
+        "mempool_group_student_code",
         "mempool_group",
-        "runtime/mempool_group_campaign/evolution_r58_target_1850",
+        "runtime/mempool_group_campaign/evolution_selected_source",
         "parents/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d/source",
         "stage_baselines/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d_power_then_timing_94d03f611279ceab",
         "stage_baselines/ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d_power_then_timing_94d03f611279ceab",
-        "mempool_group/aes_r58_parent",
-        "mempool_group/aes_r58_parent",
+        "mempool_group/student_code",
+        "mempool_group/student_code",
     ),
     Selection(
-        "nvdla_a_r16_student1",
+        "nvdla_a_student_code",
         "nvdla_a",
-        "runtime/nvdla_a_evolution/campaign_aes_r58_power_target",
-        "rounds/round_016/students/student_1/workspace/source",
-        "rounds/round_016/students/student_1/artifacts/contest_output",
-        "rounds/round_016/students/student_1/artifacts",
-        "nvdla_a/r016_student1",
-        "nvdla_a/r016_student1",
-        candidate_relative="rounds/round_016/students/student_1/artifacts/candidate.json",
-        selected_parent_id="round_016:student_1",
+        "runtime/nvdla_a_evolution/campaign_selected_source",
+        "selected_source/student_code/workspace/source",
+        "selected_source/student_code/artifacts/contest_output",
+        "selected_source/student_code/artifacts",
+        "nvdla_a/student_code",
+        "nvdla_a/student_code",
+        candidate_relative="selected_source/student_code/artifacts/candidate.json",
+        selected_parent_id="student_code",
     ),
     Selection(
-        "nvdla_c_rmp_path_cone_halo_timing",
+        "nvdla_c_student_code",
         "nvdla_c",
         "runtime/nvdla_c_evolution/campaign_schedule_locked_rmp_v1",
-        "../campaign_r58_drv499_v2/parents/baseline/source",
-        "../campaign_r58_drv499_v2/stage_baselines/baseline_timing_only_rmp_path_cone_halo_timing_efaf3f024348efb7",
-        "../campaign_r58_drv499_v2/stage_baselines/baseline_timing_only_rmp_path_cone_halo_timing_efaf3f024348efb7",
-        "nvdla_c/rmp_path_cone_halo_timing",
-        "nvdla_c/rmp_path_cone_halo_timing",
+        "../campaign_selected_source/parents/baseline/source",
+        "../campaign_selected_source/stage_baselines/baseline_timing_only_student_code_efaf3f024348efb7",
+        "../campaign_selected_source/stage_baselines/baseline_timing_only_student_code_efaf3f024348efb7",
+        "nvdla_c/student_code",
+        "nvdla_c/student_code",
     ),
     Selection(
-        "nvdla_m_r11_student1",
+        "nvdla_m_student_code",
         "nvdla_m",
         "runtime/nvdla_m_campaign/evolution",
-        "rounds/round_011/students/student_1/workspace/source",
-        "rounds/round_011/students/student_1/artifacts/contest_output",
-        "rounds/round_011/students/student_1/artifacts",
-        "nvdla_m/r011_student1",
-        "nvdla_m/r011_student1",
-        candidate_relative="rounds/round_011/students/student_1/artifacts/candidate.json",
-        selected_parent_id="round_011:student_1",
+        "selected_source/student_code/workspace/source",
+        "selected_source/student_code/artifacts/contest_output",
+        "selected_source/student_code/artifacts",
+        "nvdla_m/student_code",
+        "nvdla_m/student_code",
+        candidate_relative="selected_source/student_code/artifacts/candidate.json",
+        selected_parent_id="student_code",
     ),
     Selection(
-        "nvdla_p_r4_student1",
+        "nvdla_p_student_code",
         "nvdla_p",
         "runtime/nvdla_p_campaign/evolution_top1_restart",
-        "rounds/round_004/students/student_1/workspace/source",
-        "rounds/round_004/students/student_1/artifacts/contest_output",
-        "rounds/round_004/students/student_1/artifacts",
-        "nvdla_p/r004_student1",
-        "nvdla_p/r004_student1",
-        candidate_relative="rounds/round_004/students/student_1/artifacts/candidate.json",
-        selected_parent_id="round_004:student_1",
+        "selected_source/student_code/workspace/source",
+        "selected_source/student_code/artifacts/contest_output",
+        "selected_source/student_code/artifacts",
+        "nvdla_p/student_code",
+        "nvdla_p/student_code",
+        candidate_relative="selected_source/student_code/artifacts/candidate.json",
+        selected_parent_id="student_code",
     ),
 )
 
@@ -142,49 +142,49 @@ SELECTIONS = (
 # consume.  Runtime and electrical-violation telemetry remain historical
 # observer fields because the cache refresh does not change them.
 CACHE_SAFE_REPLAY_METRICS: dict[str, dict[str, float]] = {
-    "aes_r58_student1": {
+    "aes_cipher_top_student_code": {
         "tns_abs_ns": 15.572590769,
         "dynamic_power_pw": 335_607_141_000.0,
         "leakage_power_pw": 29_093_000.0,
         "total_power_pw": 335_636_234_000.0,
     },
-    "ariane_r11_student3": {
+    "ariane_student_code": {
         "tns_abs_ns": 688.536962490,
         "dynamic_power_pw": 588_058_613_000.0,
         "leakage_power_pw": 17_935_077_000.0,
         "total_power_pw": 605_993_690_000.0,
     },
-    "jpeg_r16_student1": {
+    "jpeg_encoder_student_code": {
         "tns_abs_ns": 51.175317876,
         "dynamic_power_pw": 270_427_704_000.0,
         "leakage_power_pw": 114_525_000.0,
         "total_power_pw": 270_542_229_000.0,
     },
-    "mempool_aes_r58_parent": {
+    "mempool_group_student_code": {
         "tns_abs_ns": 2714.686920100,
         "dynamic_power_pw": 249_586_381_000.0,
         "leakage_power_pw": 3_059_457_000.0,
         "total_power_pw": 252_645_838_000.0,
     },
-    "nvdla_a_r16_student1": {
+    "nvdla_a_student_code": {
         "tns_abs_ns": 90.640386651,
         "dynamic_power_pw": 144_228_574_000.0,
         "leakage_power_pw": 285_284_000.0,
         "total_power_pw": 144_513_858_000.0,
     },
-    "nvdla_c_rmp_path_cone_halo_timing": {
+    "nvdla_c_student_code": {
         "tns_abs_ns": 7.247678218,
         "dynamic_power_pw": 584_086_037_000.0,
         "leakage_power_pw": 17_259_404_000.0,
         "total_power_pw": 601_345_441_000.0,
     },
-    "nvdla_m_r11_student1": {
+    "nvdla_m_student_code": {
         "tns_abs_ns": 14.209663182,
         "dynamic_power_pw": 39_473_305_000.0,
         "leakage_power_pw": 38_326_000.0,
         "total_power_pw": 39_511_631_000.0,
     },
-    "nvdla_p_r4_student1": {
+    "nvdla_p_student_code": {
         "tns_abs_ns": 163.493983868,
         "dynamic_power_pw": 38_231_478_000.0,
         "leakage_power_pw": 256_406_000.0,
@@ -401,9 +401,10 @@ def refresh_cache_safe_replay_records() -> dict[str, dict[str, float]]:
         metrics_path = expected / "metrics.json"
         csv_path = expected / "metrics.csv"
         record = _read_json(selection_path)
-        parent_metrics = dict(record["parent"]["metrics"])
+        selected_source = dict(record.get("selected_source") or record.get("parent") or {})
+        parent_metrics = dict(selected_source["metrics"])
         parent_metrics.update(decision)
-        record["parent"]["metrics"] = parent_metrics
+        selected_source["metrics"] = parent_metrics
         recorded = dict(record.get("recorded_flow_metrics") or {})
         recorded.update(decision)
         record["recorded_flow_metrics"] = recorded
@@ -424,9 +425,11 @@ def refresh_cache_safe_replay_records() -> dict[str, dict[str, float]]:
             for name, item in contract_metrics.items()
         }
         record["goal_distances"] = normalized
-        record["parent"]["goal_distance"] = sum(
+        selected_source["goal_distance"] = sum(
             float(row["normalized_residual"]) for row in normalized.values()
         ) / max(len(normalized), 1)
+        record["selected_source"] = selected_source
+        record.pop("parent", None)
         _write_json(selection_path, record)
 
         candidate = _read_json(candidate_path)
@@ -494,12 +497,12 @@ def import_selection(reference: Path, selection: Selection, *, copy_sources: boo
     if reference_source_manifest != destination_source_manifest:
         raise RuntimeError(f"source snapshot mismatch for {selection.artifact_id}")
     actual_metrics = _metrics(tcl_root / "metrics.csv")
-    selected_parent = dict(parent)
+    selected_parent = {}
     # Candidate artifacts include local workspace and Codex paths.  Preserve
     # only the identity and measured-QoR fields that define a public AE-2
     # parent; the complete candidate hypothesis remains a separate audit file.
-    for key in ("parent_id", "source_hash", "source_commit", "metrics", "evaluation_mode", "timing_recipe_id"):
-        value = candidate.get(key)
+    for key in ("source_hash", "source_commit", "metrics", "evaluation_mode", "timing_recipe_id"):
+        value = candidate.get(key) or parent.get(key)
         if value is not None:
             selected_parent[key] = value
     candidate_hypothesis = dict(candidate.get("hypothesis") or {})
@@ -512,11 +515,7 @@ def import_selection(reference: Path, selection: Selection, *, copy_sources: boo
             selected_parent[key] = value
     if selection.candidate_relative:
         selected_parent["source_hash"] = candidate.get("source_hash") or reference_source_manifest["content_sha256"]
-    selected_parent["parent_id"] = (
-        selection.selected_parent_id
-        or selected_parent.get("parent_id")
-        or selection.artifact_id
-    )
+    selected_parent["source_alias"] = "student_code"
     parent_metrics = dict(selected_parent["metrics"])
     contract_metrics = {item["name"]: item for item in contract["metrics"]}
     normalized = {
@@ -537,22 +536,14 @@ def import_selection(reference: Path, selection: Selection, *, copy_sources: boo
         "schema": "goalevolve.ae2-selection.v1",
         "artifact_id": selection.artifact_id,
         "design": selection.design,
-        "parent": selected_parent,
+        "selected_source": selected_parent,
         "contract": contract,
         "recorded_flow_metrics": actual_metrics,
         "goal_distances": normalized,
-        "provenance": {
-            "reference_campaign": selection.campaign,
-            "reference_source": selection.source_relative,
-            "reference_tcl": selection.tcl_relative + "/evaluate.tcl",
-            "reference_evidence": selection.evidence_relative,
-            "reference_source_manifest": reference_source_manifest,
-        },
     }
     _write_json(expected / "ae2_selection.json", selected)
     if not selection.preserve_existing_release:
         original_tcl = (tcl_root / "evaluate.tcl").read_text(encoding="utf-8")
-        _copy_file(tcl_root / "evaluate.tcl", expected / "evaluate.original.tcl")
         benchmark_root = "/home/haixuliu/MLCAD26/MLCAD26-Contest-Scripts-Benchmarks"
         output_root = str(tcl_root)
         portable_tcl = _refresh_stage_qor_reports(
@@ -572,7 +563,6 @@ def import_selection(reference: Path, selection: Selection, *, copy_sources: boo
             {
                 "artifact_id": selection.artifact_id,
                 "design": selection.design,
-                "parent_id": selected_parent["parent_id"],
                 "source_hash": selected_parent["source_hash"],
                 "source_commit": selected_parent["source_commit"],
                 "metrics": parent_metrics,
@@ -584,7 +574,6 @@ def import_selection(reference: Path, selection: Selection, *, copy_sources: boo
             {
                 "artifact_id": selection.artifact_id,
                 "checks": _read_json(evidence_file).get("checks", []),
-                "provenance": selected["provenance"],
             },
         )
         _write_json(expected / "source_commit.json", {"source_commit": selected_parent["source_commit"], "source_hash": selected_parent["source_hash"]})
@@ -597,7 +586,7 @@ def import_selection(reference: Path, selection: Selection, *, copy_sources: boo
         "design": selection.design,
         "source_hash": selected_parent["source_hash"],
         "source_commit": selected_parent["source_commit"],
-        "parent_id": selected_parent["parent_id"],
+        "source_alias": "student_code",
         "source_root": str((lineage / "source").relative_to(PROJECT_ROOT)),
         "expected_root": str(expected.relative_to(PROJECT_ROOT)),
         "benchmark_root": f"third_party/benchmarks/benchmarks/{selection.design}",

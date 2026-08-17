@@ -1,127 +1,127 @@
 {
   "artifacts": {
-    "aes_r58_student1": {
-      "artifact_id": "aes_r58_student1",
+    "aes_cipher_top_student_code": {
+      "artifact_id": "aes_cipher_top_student_code",
       "benchmark_root": "third_party/benchmarks/benchmarks/aes_cipher_top",
       "design": "aes_cipher_top",
       "evaluation_mode": "power_then_timing",
-      "expected_root": "artifact_evaluation/expected/aes_cipher_top/r058_student1",
-      "parent_id": "round_058:student_1",
+      "expected_root": "artifact_evaluation/expected/aes_cipher_top/student_code",
+      "parent_id": "student_code",
       "source_commit": "ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d",
       "source_hash": "97b7321cbe1f55057befde8ce2daa7b2ed51908faa49cea1f6b70692d5b09d99",
-      "source_root": "artifact_evaluation/lineage/aes_cipher_top/r058_student1/source",
+      "source_root": "artifact_evaluation/lineage/aes_cipher_top/student_code/source",
       "tolerances": {
         "dynamic_power_pw": 1000000000.0,
         "leakage_power_pw": 1000000.0,
         "tns_abs_ns": 0.05
       }
     },
-    "ariane_r11_student3": {
-      "artifact_id": "ariane_r11_student3",
+    "ariane_student_code": {
+      "artifact_id": "ariane_student_code",
       "benchmark_root": "third_party/benchmarks/benchmarks/ariane",
       "design": "ariane",
       "evaluation_mode": "power_then_timing",
-      "expected_root": "artifact_evaluation/expected/ariane/r011_student3",
-      "parent_id": "round_011:student_3:electric_normalization",
+      "expected_root": "artifact_evaluation/expected/ariane/student_code",
+      "parent_id": "student_code",
       "source_commit": "f37b1be0b97ff6c9714fe8fac394673e3fef4f6fc064b60fd4501e700fb06f21",
       "source_hash": "1d6475a8066ae156c2211d549f5fa1bc38edee9de10bc77813cea029a18c9c63",
-      "source_root": "artifact_evaluation/lineage/ariane/r011_student3/source",
+      "source_root": "artifact_evaluation/lineage/ariane/student_code/source",
       "tolerances": {
         "dynamic_power_pw": 1000000000.0,
         "leakage_power_pw": 1000000.0,
         "tns_abs_ns": 0.05
       }
     },
-    "jpeg_r16_student1": {
-      "artifact_id": "jpeg_r16_student1",
+    "jpeg_encoder_student_code": {
+      "artifact_id": "jpeg_encoder_student_code",
       "benchmark_root": "third_party/benchmarks/benchmarks/jpeg_encoder",
       "design": "jpeg_encoder",
       "evaluation_mode": "power_then_timing",
-      "expected_root": "artifact_evaluation/expected/jpeg_encoder/r016_student1",
-      "parent_id": "round_016:student_1",
+      "expected_root": "artifact_evaluation/expected/jpeg_encoder/student_code",
+      "parent_id": "student_code",
       "source_commit": "b50053ce98c242ff89b1c71ad5cdcb4c0184908bef4ce64e331830eae5348eaa",
       "source_hash": "1d76634cfe95582ddb6f43a429eaa1f6907136b33414fe586be2e95ad9adb1f0",
-      "source_root": "artifact_evaluation/lineage/jpeg_encoder/r016_student1/source",
+      "source_root": "artifact_evaluation/lineage/jpeg_encoder/student_code/source",
       "tolerances": {
         "dynamic_power_pw": 1000000000.0,
         "leakage_power_pw": 1000000.0,
         "tns_abs_ns": 0.05
       }
     },
-    "mempool_aes_r58_parent": {
-      "artifact_id": "mempool_aes_r58_parent",
+    "mempool_group_student_code": {
+      "artifact_id": "mempool_group_student_code",
       "benchmark_root": "third_party/benchmarks/benchmarks/mempool_group",
       "design": "mempool_group",
       "evaluation_mode": "power_then_timing",
-      "expected_root": "artifact_evaluation/expected/mempool_group/aes_r58_parent",
-      "parent_id": "preexperiment:aes_best_r58_target_1850",
+      "expected_root": "artifact_evaluation/expected/mempool_group/student_code",
+      "parent_id": "student_code",
       "source_commit": "d231bd8f98d2a0adb8369002b2c1e7aa8e7877ed",
       "source_hash": "ef789dcbfcd67a2aa693497244fccdbb535becdc320aa4011d804a93cc7f6b2d",
-      "source_root": "artifact_evaluation/lineage/mempool_group/aes_r58_parent/source",
+      "source_root": "artifact_evaluation/lineage/mempool_group/student_code/source",
       "tolerances": {
         "dynamic_power_pw": 1000000000.0,
         "leakage_power_pw": 1000000.0,
         "tns_abs_ns": 0.05
       }
     },
-    "nvdla_a_r16_student1": {
-      "artifact_id": "nvdla_a_r16_student1",
+    "nvdla_a_student_code": {
+      "artifact_id": "nvdla_a_student_code",
       "benchmark_root": "third_party/benchmarks/benchmarks/nvdla_a",
       "design": "nvdla_a",
       "evaluation_mode": "power_then_timing",
-      "expected_root": "artifact_evaluation/expected/nvdla_a/r016_student1",
-      "parent_id": "round_016:student_1",
+      "expected_root": "artifact_evaluation/expected/nvdla_a/student_code",
+      "parent_id": "student_code",
       "source_commit": "2f9f7b20aa9cd31d60abcabb27dfae325b2412382978a20d4d5ee0a2087aaec9",
       "source_hash": "f197af5d713bb2c40577e8450114cd34b1d635c60e203f3c6e84b0f495d985c6",
-      "source_root": "artifact_evaluation/lineage/nvdla_a/r016_student1/source",
+      "source_root": "artifact_evaluation/lineage/nvdla_a/student_code/source",
       "tolerances": {
         "dynamic_power_pw": 1000000000.0,
         "leakage_power_pw": 1000000.0,
         "tns_abs_ns": 0.05
       }
     },
-    "nvdla_c_rmp_path_cone_halo_timing": {
-      "artifact_id": "nvdla_c_rmp_path_cone_halo_timing",
+    "nvdla_c_student_code": {
+      "artifact_id": "nvdla_c_student_code",
       "benchmark_root": "third_party/benchmarks/benchmarks/nvdla_c",
       "design": "nvdla_c",
       "evaluation_mode": "timing_only",
-      "expected_root": "artifact_evaluation/expected/nvdla_c/rmp_path_cone_halo_timing",
-      "parent_id": "schedule:rmp_path_cone_halo_timing",
+      "expected_root": "artifact_evaluation/expected/nvdla_c/student_code",
+      "parent_id": "student_code",
       "source_commit": "baseline",
       "source_hash": "baseline",
-      "source_root": "artifact_evaluation/lineage/nvdla_c/rmp_path_cone_halo_timing/source",
+      "source_root": "artifact_evaluation/lineage/nvdla_c/student_code/source",
       "tolerances": {
         "dynamic_power_pw": 1000000000.0,
         "leakage_power_pw": 1000000.0,
         "tns_abs_ns": 0.05
       }
     },
-    "nvdla_m_r11_student1": {
-      "artifact_id": "nvdla_m_r11_student1",
+    "nvdla_m_student_code": {
+      "artifact_id": "nvdla_m_student_code",
       "benchmark_root": "third_party/benchmarks/benchmarks/nvdla_m",
       "design": "nvdla_m",
       "evaluation_mode": "power_then_timing",
-      "expected_root": "artifact_evaluation/expected/nvdla_m/r011_student1",
-      "parent_id": "round_011:student_1",
+      "expected_root": "artifact_evaluation/expected/nvdla_m/student_code",
+      "parent_id": "student_code",
       "source_commit": "235fa81c6bb9ff92183848099064bd0e9572be12608e38faa3a918cc42dddfb4",
       "source_hash": "7d4a3734332aedd2e9d7173a79cf234bcf821f2fece067cf6e8badfc48400c5e",
-      "source_root": "artifact_evaluation/lineage/nvdla_m/r011_student1/source",
+      "source_root": "artifact_evaluation/lineage/nvdla_m/student_code/source",
       "tolerances": {
         "dynamic_power_pw": 1000000000.0,
         "leakage_power_pw": 1000000.0,
         "tns_abs_ns": 0.05
       }
     },
-    "nvdla_p_r4_student1": {
-      "artifact_id": "nvdla_p_r4_student1",
+    "nvdla_p_student_code": {
+      "artifact_id": "nvdla_p_student_code",
       "benchmark_root": "third_party/benchmarks/benchmarks/nvdla_p",
       "design": "nvdla_p",
       "evaluation_mode": "power_then_timing",
-      "expected_root": "artifact_evaluation/expected/nvdla_p/r004_student1",
-      "parent_id": "round_004:student_1",
+      "expected_root": "artifact_evaluation/expected/nvdla_p/student_code",
+      "parent_id": "student_code",
       "source_commit": "dd08f9bd8621ab5b3c1c62fb474c66f1f8be3fc16ecc20464fd0f052cf169967",
       "source_hash": "704c006c7149d97ec97a3cbfd392f793831b2c4b455c75c4de69172af908b866",
-      "source_root": "artifact_evaluation/lineage/nvdla_p/r004_student1/source",
+      "source_root": "artifact_evaluation/lineage/nvdla_p/student_code/source",
       "tolerances": {
         "dynamic_power_pw": 1000000000.0,
         "leakage_power_pw": 1000000.0,

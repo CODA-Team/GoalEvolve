@@ -188,11 +188,11 @@ source outputs/toolchain/activate.sh
 export OPENROAD_EXE="$PWD/outputs/toolchain/openroad-p0/build/bin/openroad"
 
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2-preflight \
-  --artifact aes_r58_student1 --openroad "$OPENROAD_EXE" --verbose
+  --artifact aes_cipher_top_student_code --openroad "$OPENROAD_EXE" --verbose
 
 # Build and replay this artifact's own immutable OpenROAD source snapshot.
 PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2 \
-  --artifact aes_r58_student1 --rebuild --jobs 8 --verbose
+  --artifact aes_cipher_top_student_code --rebuild --jobs 8 --verbose
 ```
 
 `--verbose` streams configure, build, and flow logs to the terminal. Each
@@ -201,7 +201,7 @@ expected evidence are versioned in [release_manifest.json](artifact_evaluation/r
 The selected modes include `power_then_timing` and NVDLA-C `timing_only`. See
 [AE2_SELECTIONS.md](artifact_evaluation/AE2_SELECTIONS.md) for all artifact
 IDs, source snapshots, Tcl schedules, QoR, and distances to target. Substitute
-any listed ID for `aes_r58_student1` to replay that design.
+any listed ID for `aes_cipher_top_student_code` to replay that design.
 
 `--openroad` is intentionally accepted only by `ae2-preflight`: it checks that
 the prepared host environment can launch OpenROAD. A formal AE-2 replay never
@@ -212,7 +212,7 @@ uses that external binary; it builds or reuses
 
 AE-4 uses the **locally rebuilt and passing** AES AE-2 executable on the seven
 non-AES designs.  It first verifies
-`outputs/ae2/aes_r58_student1/report/ae2_report.json`, then generates its
+`outputs/ae2/aes_cipher_top_student_code/report/ae2_report.json`, then generates its
 evaluation-local RMP ABC Liberty from the bundled ASAP7 libraries.  No machine
 absolute path, prebuilt binary hash, or generated output is versioned.
 
@@ -220,15 +220,15 @@ absolute path, prebuilt binary hash, or generated output is versioned.
 source outputs/toolchain/activate.sh
 
 # Required once after cloning: build and pass AES AE-2 as shown above.
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" AE4/run_ae4.py prepare
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" AE4/run_ae4.py run --jobs 1
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" AE4/run_ae4.py collect
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_ae4.py prepare
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_ae4.py run --jobs 1
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_ae4.py collect
 ```
 
 `--jobs 1` is the safe default for a shared host; raise it only when memory and
 CPU capacity permit parallel OpenROAD flows.  The seven generated baseline
-flows, logs and summaries are ignored under `AE4/results/`.  See
-[AE4/README.md](AE4/README.md) for the fixed schedule and interpretation of
+flows, logs and summaries are ignored under `artifact_evaluation/ae4/results/`.  See
+[artifact_evaluation/ae4/README.md](artifact_evaluation/ae4/README.md) for the fixed schedule and interpretation of
 the resulting report.
 
 ## AE-3: Run a new source-evolution campaign
