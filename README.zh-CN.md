@@ -58,7 +58,7 @@ hook 和建议的 `avoid_exact_source_hooks` 前沿，要求 Teacher 换用新 h
 ```bash
 cd /path/to/GoalEvolve
 source outputs/toolchain/activate.sh
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae1
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae1/run_ae1.py
 ```
 
 运行确定性的 AE-2：
@@ -66,9 +66,9 @@ PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner
 ```bash
 source outputs/toolchain/activate.sh
 export OPENROAD_EXE=/path/to/prepared/OpenROAD/build/bin/openroad
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2-preflight \
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae2/run_ae2.py preflight \
   --artifact aes_cipher_top_student_code --openroad "$OPENROAD_EXE"
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2 \
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae2/run_ae2.py replay \
   --artifact aes_cipher_top_student_code --rebuild --jobs 8 --verbose
 ```
 

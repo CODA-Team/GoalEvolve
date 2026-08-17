@@ -8,9 +8,10 @@ import re
 from pathlib import Path
 from unittest.mock import patch
 
-from artifact_evaluation import runner
 from artifact_evaluation import import_v2_ae2_records as release_import
-from artifact_evaluation.runner import _artifact, _artifacts, ae1
+from artifact_evaluation.ae1 import run_ae1
+from artifact_evaluation.ae1.run_ae1 import _artifact, _artifacts, ae1
+from artifact_evaluation.ae2 import run_ae2 as runner
 from goalevolve.core.io import sha256_file
 from goalevolve.planning.repository_graph import RepositoryGraphIndex
 
@@ -256,7 +257,7 @@ class ReleaseArtifactTests(unittest.TestCase):
             self.assertEqual((staged / "Version.hh").read_text(encoding="utf-8"), "generated\n")
 
     def test_eight_artifact_release_is_complete_and_buildable(self) -> None:
-        report = ae1(artifact=_artifact("aes_cipher_top_student_code"))
+        report = run_ae1.ae1(artifact=run_ae1._artifact("aes_cipher_top_student_code"))
         self.assertTrue(all(report["checks"].values()))
         self.assertTrue(report["checks"]["benchmark_jpeg_encoder"])
         self.assertTrue(report["checks"]["benchmark_nvdla_p"])
@@ -439,7 +440,7 @@ report_power
         from unittest.mock import patch
 
         with patch.object(runner.shutil, "which", side_effect=lambda command: "/usr/bin/python3" if command == "python3" else None):
-            result = runner.ae1(artifact=artifact)
+            result = run_ae1.ae1(artifact=artifact)
         self.assertTrue(result["passed"])
         self.assertFalse(result["tools"]["cmake"])
 

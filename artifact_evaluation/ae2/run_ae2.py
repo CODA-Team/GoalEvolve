@@ -1,198 +1,27 @@
-"""Artifact-evaluation entry point.
-
-AE-1 checks that a release is complete and runnable on the current machine.
-AE-2 rebuilds and replays a *fixed* released source artifact.  It deliberately
-does not import Teacher, Student, retrieval, or any API credential.  Fresh,
-non-deterministic evolution remains the separate AE-3 workflow.
-"""
+"""AE-2 replay and OpenROAD preflight entry point."""
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-MANIFEST_PATH = PROJECT_ROOT / "artifact_evaluation" / "release_manifest.json"
-SHIPPED_CONTEST_DESIGNS = (
-    "aes_cipher_top",
-    "ariane",
-    "jpeg_encoder",
-    "mempool_group",
-    "nvdla_a",
-    "nvdla_c",
-    "nvdla_m",
-    "nvdla_p",
+from artifact_evaluation._common import (
+    MANIFEST_PATH,
+    PROJECT_ROOT,
+    _artifact,
+    _json,
+    _path,
+    _run,
+    _sha256,
+    _snapshot_matches,
+    _stage_source,
+    _toolchain_environment,
 )
-
-
-def _json(path: Path) -> dict[str, Any]:
-    return dict(json.loads(path.read_text(encoding="utf-8")))
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def _artifact(name: str) -> dict[str, Any]:
-    manifest = _json(MANIFEST_PATH)
-    artifacts = dict(manifest.get("artifacts") or {})
-    if name not in artifacts:
-        raise SystemExit(f"unknown artifact {name!r}; available: {', '.join(sorted(artifacts))}")
-    result = dict(artifacts[name])
-    result["artifact_id"] = name
-    return result
-
-
-def _artifacts() -> dict[str, dict[str, Any]]:
-    manifest = _json(MANIFEST_PATH)
-    return {name: {**dict(payload), "artifact_id": name} for name, payload in dict(manifest.get("artifacts") or {}).items()}
-
-
-def _path(relative: str) -> Path:
-    return (PROJECT_ROOT / relative).resolve()
-
-
-def _run(command: list[str], *, cwd: Path, env: dict[str, str], log: Path, live: bool = False) -> int:
-    log.parent.mkdir(parents=True, exist_ok=True)
-    with log.open("w", encoding="utf-8") as stream:
-        stream.write("$ " + " ".join(command) + "\n")
-        stream.flush()
-        if not live:
-            process = subprocess.run(command, cwd=cwd, env=env, stdout=stream, stderr=subprocess.STDOUT, check=False)
-            return process.returncode
-        process = subprocess.Popen(
-            command,
-            cwd=cwd,
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            errors="replace",
-        )
-        assert process.stdout is not None
-        for line in process.stdout:
-            stream.write(line)
-            stream.flush()
-            sys.stdout.write(line)
-            sys.stdout.flush()
-        return process.wait()
-
-
-def _toolchain_environment(base: dict[str, str] | None = None) -> dict[str, str]:
-    """Preserve the OpenROAD/ORFS environment selected by the caller."""
-    return dict(base or os.environ)
-
-
-def _stage_source(*, source: Path, workspace: Path) -> Path:
-    """Copy immutable lineage input before CMake writes generated version files."""
-    if workspace.exists():
-        shutil.rmtree(workspace)
-    shutil.copytree(source, workspace, symlinks=True)
-    return workspace
-
-
-def _snapshot_matches(*, source: Path, manifest_path: Path) -> bool:
-    if not manifest_path.is_file():
-        return False
-    from artifact_evaluation.verify_openroad_snapshot import snapshot_metadata
-
-    manifest = _json(manifest_path)
-    observed = snapshot_metadata(
-        source,
-        capture_excludes=manifest.get("capture_excludes") or (),
-    )
-    return all(
-        observed[name] == manifest.get(name)
-        for name in (
-            "content_sha256",
-            "regular_file_count",
-            "symlink_count",
-            "directory_count",
-            "verified_no_external_symlinks",
-        )
-    )
-
-
-def ae1(*, artifact: dict[str, Any]) -> dict[str, Any]:
-    released = _artifacts()
-    expected_root = _path(str(artifact["expected_root"]))
-    source = _path(str(artifact["source_root"]))
-    benchmark = _path(str(artifact["benchmark_root"]))
-    required = {
-        "release_manifest": MANIFEST_PATH,
-        "frozen_source": source,
-        "portable_tcl": expected_root / "evaluate.tcl",
-        "expected_metrics": expected_root / "metrics.csv",
-        "expected_evidence": expected_root / "evidence.json",
-        "official_checker": PROJECT_ROOT / "third_party/official_checker/validity_check/def_validity_check.py",
-        "official_parser": PROJECT_ROOT / "third_party/official_checker/evaluation/parse_log.py",
-        "artifact_benchmark": benchmark / f"{artifact['design']}.def.gz",
-        "asap7": benchmark.parents[1] / "asap7/setRC.tcl",
-    }
-    checks = {name: path.is_file() or path.is_dir() for name, path in required.items()}
-    contest_root = benchmark.parent
-    for design in SHIPPED_CONTEST_DESIGNS:
-        design_root = contest_root / design
-        checks[f"benchmark_{design}"] = (
-            ((design_root / f"{design}.def.gz").is_file() or (design_root / f"{design}.def").is_file())
-            and (design_root / f"{design}.v").is_file()
-            and (design_root / f"{design}.sdc").is_file()
-            and (design_root / "metrics.csv").is_file()
-        )
-    p0_manifest = PROJECT_ROOT / "artifact_evaluation/lineage/openroad_power/p0/source_manifest.json"
-    checks["shared_openroad_p0_manifest"] = p0_manifest.is_file()
-    if checks["shared_openroad_p0_manifest"]:
-        from artifact_evaluation.verify_openroad_snapshot import snapshot_metadata
-
-        manifest = _json(p0_manifest)
-        observed = snapshot_metadata(
-            p0_manifest.parent / "source",
-            capture_excludes=manifest.get("capture_excludes") or (),
-        )
-        checks["shared_openroad_p0"] = all(
-            observed[name] == manifest.get(name)
-            for name in (
-                "content_sha256",
-                "regular_file_count",
-                "symlink_count",
-                "directory_count",
-                "verified_no_external_symlinks",
-            )
-        )
-    else:
-        checks["shared_openroad_p0"] = False
-    for artifact_id, released_artifact in released.items():
-        released_source = _path(str(released_artifact["source_root"]))
-        released_expected = _path(str(released_artifact["expected_root"]))
-        released_manifest = released_expected / "source_manifest.json"
-        checks[f"frozen_source_manifest_{artifact_id}"] = released_manifest.is_file()
-        checks[f"frozen_source_{artifact_id}"] = _snapshot_matches(
-            source=released_source,
-            manifest_path=released_manifest,
-        )
-    tools = {name: shutil.which(name) is not None for name in ("cmake", "python3")}
-    tools["openroad_on_path"] = shutil.which("openroad") is not None
-    return {
-        "schema": "goalevolve.artifact-ae1.v1",
-        "artifact_id": artifact["artifact_id"],
-        "passed": all(checks.values()) and tools["python3"],
-        "paths": {name: str(path) for name, path in required.items()},
-        "checks": checks,
-        "tools": tools,
-        "portable_tcl_sha256": _sha256(expected_root / "evaluate.tcl") if checks["portable_tcl"] else None,
-        "released_artifacts": sorted(released),
-    }
 
 
 def ae2_preflight(*, artifact: dict[str, Any], openroad: Path | None, verbose: bool) -> dict[str, Any]:
@@ -296,7 +125,7 @@ def ae2(*, artifact: dict[str, Any], openroad: Path | None, jobs: int, rebuild: 
     build_dir = output.parent / "build"
     if openroad is not None:
         raise RuntimeError(
-            "AE-2 requires the per-artifact OpenROAD build; use --openroad only with ae2-preflight, "
+            "AE-2 requires the per-artifact OpenROAD build; use --openroad only with the preflight mode, "
             "then invoke ae2 with --rebuild or its existing per-artifact build cache"
         )
     openroad = _build_openroad(source=source, build=build_dir, jobs=jobs, report=report, verbose=verbose) if rebuild else build_dir / "bin" / "openroad"
@@ -388,18 +217,16 @@ def ae2(*, artifact: dict[str, Any], openroad: Path | None, jobs: int, rebuild: 
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="GoalEvolve artifact evaluation")
-    parser.add_argument("mode", choices=("ae1", "ae2", "ae2-preflight"))
+    parser = argparse.ArgumentParser(description="GoalEvolve AE-2 artifact evaluation")
+    parser.add_argument("mode", choices=("replay", "preflight"))
     parser.add_argument("--artifact", default="aes_cipher_top_student_code")
-    parser.add_argument("--openroad", type=Path, help="prepared host executable for ae2-preflight only")
+    parser.add_argument("--openroad", type=Path, help="prepared host executable for preflight only")
     parser.add_argument("--rebuild", action="store_true", help="configure and build the frozen AE-2 source before replay")
     parser.add_argument("--jobs", type=int, default=2)
     parser.add_argument("--verbose", action="store_true", help="stream CMake, build, parser, and flow logs to the terminal")
     args = parser.parse_args()
     artifact = _artifact(args.artifact)
-    if args.mode == "ae1":
-        result = ae1(artifact=artifact)
-    elif args.mode == "ae2-preflight":
+    if args.mode == "preflight":
         result = ae2_preflight(artifact=artifact, openroad=args.openroad, verbose=args.verbose)
     else:
         result = ae2(

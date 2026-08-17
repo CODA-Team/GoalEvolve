@@ -48,8 +48,8 @@ global-route parasitics and an explicit OpenSTA power-cache refresh.
 Run an individual artifact with:
 
 ```bash
-PYTHONPATH=. python3 -m artifact_evaluation.runner ae2 \
-  --artifact <released-artifact-id> --openroad "$OPENROAD_EXE" --verbose
+PYTHONPATH=. python3 artifact_evaluation/ae2/run_ae2.py replay \
+  --artifact <released-artifact-id> --verbose
 ```
 
 The available artifact IDs are the first values in the table above and can

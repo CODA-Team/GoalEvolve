@@ -6,7 +6,7 @@ This directory separates a deterministic release claim from a stochastic LLM exp
 
 ```bash
 source outputs/toolchain/activate.sh
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae1
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae1/run_ae1.py
 ```
 
 AE-1 verifies the release manifest, all eight frozen sources and portable Tcl
@@ -19,9 +19,9 @@ preflight record.
 
 ```bash
 export OPENROAD_EXE=/path/to/prepared/OpenROAD/bin/openroad
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2-preflight \
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae2/run_ae2.py preflight \
   --artifact aes_cipher_top_student_code --openroad "$OPENROAD_EXE" --verbose
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2 \
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae2/run_ae2.py replay \
   --artifact aes_cipher_top_student_code --rebuild --jobs 8 --verbose
 ```
 
@@ -32,7 +32,7 @@ official 4/4 checker, and compares the three decision metrics with the
 tolerances in `release_manifest.json`. A later run may omit `--rebuild` to
 reuse only that artifact's build cache.
 
-Before replay, `ae2-preflight` with `OPENROAD_EXE` verifies that the active
+Before replay, AE2's `preflight` mode with `OPENROAD_EXE` verifies that the active
 host environment can launch OpenROAD. The external executable is a diagnostic
 only: formal AE-2 never uses it in place of the selected artifact binary.
 `--verbose` streams flow logs to the terminal; all logs remain recorded under
@@ -46,6 +46,11 @@ rediscover the same patch. See
 [AE2_SELECTIONS.md](AE2_SELECTIONS.md) for the eight source/Tcl/QoR records.
 
 ## AE-3: fresh evolution
+
+AE-3 is the user-driven evolution workflow. Its executable entry point is
+`python -m goalevolve.cli run`; its implementation is in `goalevolve/` and its
+experiment configurations are in `experiments/`. It is intentionally separate
+from the frozen artifact-evaluation directories.
 
 Create `config/credentials/goalevolve_codex.env` from
 `config/credentials/goalevolve_codex.env.example`, with mode `0600`; it is

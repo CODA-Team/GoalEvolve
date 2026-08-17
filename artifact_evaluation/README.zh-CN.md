@@ -6,7 +6,7 @@
 
 ```bash
 source outputs/toolchain/activate.sh
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae1
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae1/run_ae1.py
 ```
 
 AE-1 检查 release manifest、八套冻结源码与可移植 Tcl、官方
@@ -19,9 +19,9 @@ OpenROAD；JSON 输出是权威预检记录。
 ```bash
 # 先按宿主 OpenROAD/ORFS 工作区自身的说明激活环境。
 export OPENROAD_EXE=/path/to/prepared/OpenROAD/build/bin/openroad
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2-preflight \
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae2/run_ae2.py preflight \
   --artifact aes_cipher_top_student_code --openroad "$OPENROAD_EXE" --verbose
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2 \
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae2/run_ae2.py replay \
   --artifact aes_cipher_top_student_code --rebuild --jobs 8 --verbose
 ```
 
@@ -30,7 +30,7 @@ artifact 的冻结源码构建为 OpenROAD，在 `outputs/ae2/` 运行其路径�
 解析指标，运行官方 4/4 checker，并按 `release_manifest.json` 的容差对比三项决策指标。
 后续运行可省略 `--rebuild`，只复用该 artifact 自己的 build cache。
 
-`ae2-preflight` 会在当前 shell 环境中验证 `OPENROAD_EXE` 能够启动，但它只是
+AE2 的 `preflight` 模式会在当前 shell 环境中验证 `OPENROAD_EXE` 能够启动，但它只是
 宿主环境诊断。正式 AE-2 不会用该外部二进制替代所选 artifact 的 OpenROAD；完整
 AE-2 使用 `--verbose` 时会持续输出 flow 日志，日志仍会保存在 `outputs/ae2/`。
 
@@ -40,6 +40,10 @@ benchmark、checker 和 flow 可以产生报告结果；它不证明新鲜 LLM �
 [AE2_SELECTIONS.md](AE2_SELECTIONS.md)。
 
 ## AE-3：新鲜进化
+
+AE-3 是用户自己运行的 GoalEvolve 进化流程。实际命令入口是
+`python -m goalevolve.cli run`，代码在 `goalevolve/`，实验配置在
+`experiments/`；它不属于冻结 artifact evaluation 目录。
 
 从 `config/credentials/goalevolve_codex.env.example` 建立权限为 `0600` 的 `config/credentials/goalevolve_codex.env`；它被 Git 忽略，绝不能提交：
 

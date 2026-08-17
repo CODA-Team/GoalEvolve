@@ -187,11 +187,11 @@ OpenROAD source before replaying its Tcl:
 source outputs/toolchain/activate.sh
 export OPENROAD_EXE="$PWD/outputs/toolchain/openroad-p0/build/bin/openroad"
 
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2-preflight \
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae2/run_ae2.py preflight \
   --artifact aes_cipher_top_student_code --openroad "$OPENROAD_EXE" --verbose
 
 # Build and replay this artifact's own immutable OpenROAD source snapshot.
-PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m artifact_evaluation.runner ae2 \
+PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae2/run_ae2.py replay \
   --artifact aes_cipher_top_student_code --rebuild --jobs 8 --verbose
 ```
 
@@ -203,7 +203,7 @@ The selected modes include `power_then_timing` and NVDLA-C `timing_only`. See
 IDs, source snapshots, Tcl schedules, QoR, and distances to target. Substitute
 any listed ID for `aes_cipher_top_student_code` to replay that design.
 
-`--openroad` is intentionally accepted only by `ae2-preflight`: it checks that
+`--openroad` is intentionally accepted only by the AE2 `preflight` mode: it checks that
 the prepared host environment can launch OpenROAD. A formal AE-2 replay never
 uses that external binary; it builds or reuses
 `outputs/ae2/<released-artifact>/build/bin/openroad` from the selected source.
