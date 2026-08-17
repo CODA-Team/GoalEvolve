@@ -349,13 +349,12 @@ leakage 为 `29.093M pW`。
 
 ## Further documentation
 
-- [Artifact evaluation](artifact_evaluation/README.md)：AE-1、AE-2、AE-3 语义和证据清单。
+- [Artifact evaluation](artifact_evaluation/README.zh-CN.md)：AE-1、AE-2 重放、AE-3 运行入口和证据清单。
+- [AE-4 跨 design transfer](artifact_evaluation/ae4/README.md)：transfer 环境、固定 schedule 和报告解释。
 - [Toolchain lock](toolchain/README.md)：版本锁策略和 artifact 边界。
 - [Implementation map](goalevolve/README.md)：planning、execution、evaluation 和 agents 的代码归属。
 - [Configuration guide](config/README.md)：profile、路径解析和 credential 策略。
-- `PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli --help`：公共命令参考。
 - [Paper](paper/GoalEvolve.pdf)：框架、实验设置和 AES case study。
-- 复现结论前先阅读 [artifact_evaluation/README.zh-CN.md](artifact_evaluation/README.zh-CN.md)；变更版本前阅读 [toolchain/README.zh-CN.md](toolchain/README.zh-CN.md)；实现导图见 [goalevolve/README.zh-CN.md](goalevolve/README.zh-CN.md)。
 
 <!--
 ## Web Demo

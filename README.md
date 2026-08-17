@@ -370,6 +370,7 @@ For AE-2, inspect `report/ae2_report.json` for the fixed-artifact comparison
 and `contest_output/` for the underlying flow. For AE-3, inspect the design's
 `rounds/` and `parent.json` for candidate history and the current result.
 
+<!--
 ## Testing and validation
 
 Run the in-tree test suite after AE-1 setup:
@@ -382,14 +383,15 @@ PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m pytest
 Report AE-1 preflight, AE-2 replay/4/4 result, and AE-3 measured valid
 candidates separately. A successful AE-2 replay validates the fixed artifact;
 AE-3 validates a new stochastic evolution run.
+-->
 
 ## Further documentation
 
-- [Artifact evaluation](artifact_evaluation/README.md): AE-1, AE-2, AE-3 semantics and evidence inventory.
+- [Artifact evaluation](artifact_evaluation/README.md): AE-1 and AE-2 replay, plus the AE-3 execution pointer and evidence inventory.
+- [AE-4 cross-design transfer](artifact_evaluation/ae4/README.md): transfer setup, fixed schedule, and report interpretation.
 - [Toolchain lock](toolchain/README.md): version-lock policy and artifact boundary.
 - [Implementation map](goalevolve/README.md): ownership of planning, execution, evaluation, and agents.
 - [Configuration guide](config/README.md): profiles, path resolution, and credentials policy.
-- `PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" -m goalevolve.cli --help`: public command reference. `run` is the only command that performs fresh source evolution; the other commands measure, validate, import, or report on artifacts.
 - [Paper](paper/GoalEvolve.pdf): framework, experimental setup, goal-attainment results, and AES case study.
 
 <!--
