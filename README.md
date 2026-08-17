@@ -344,7 +344,7 @@ PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_a
 
 `--jobs 1` is the safe default for a shared host; raise it only when memory and
 CPU capacity permit parallel OpenROAD flows. The seven generated baseline
-flows, logs and summaries are ignored under `artifact_evaluation/ae4/results/`. See
+flows, logs and summaries are ignored under `outputs/ae4/`. See
 [artifact_evaluation/ae4/README.md](artifact_evaluation/ae4/README.md) for the fixed schedule and interpretation of
 the resulting report.
 
@@ -364,11 +364,22 @@ outputs/
         ├── rounds/                    # Teacher plans and Student evaluations
         ├── knowledge/                 # Persisted evolution evidence
         └── parent.json                # Current promoted source parent
+
+outputs/ae4/
+├── provenance.json                    # Validated AES AE-2 binary provenance
+├── <design>/                          # Generated Tcl, flow log, and per-run JSON
+├── summary.csv / summary.json         # Seven-design comparison rows
+├── aggregate.json                     # Win counts and aggregate improvements
+├── report.md                          # Human-readable AE-4 report
+└── table.tex                          # Paper-ready comparison table
 ```
 
 For AE-2, inspect `report/ae2_report.json` for the fixed-artifact comparison
 and `contest_output/` for the underlying flow. For AE-3, inspect the design's
-`rounds/` and `parent.json` for candidate history and the current result.
+`rounds/` and `parent.json` for candidate history and the current result. For
+AE-4, inspect `outputs/ae4/report.md` and `summary.csv` for
+the seven-design comparison; per-design logs and parsed results are under
+`outputs/ae4/<design>/`.
 
 <!--
 ## Testing and validation

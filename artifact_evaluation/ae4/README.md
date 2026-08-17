@@ -59,16 +59,16 @@ PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_a
 ```
 
 Generated Tcl, raw logs, per-run JSON, and summaries are placed under
-`artifact_evaluation/ae4/results/`.  Table-1 baselines come from the contest benchmark
+`outputs/ae4/`. Table-1 baselines come from the contest benchmark
 `metrics.csv` files and are recorded in `experiment.json`; they are not the
 results of AE4's `baseline_flow` schedule.
 
 The generated summary artifacts are:
 
-- `results/summary.csv` and `results/summary.json`: one row per design, with
+- `outputs/ae4/summary.csv` and `outputs/ae4/summary.json`: one row per design, with
   absolute and percentage changes from the Table-1 baseline;
-- `results/aggregate.json`: seven-design win counts and equal-weight,
+- `outputs/ae4/aggregate.json`: seven-design win counts and equal-weight,
   macro-mean, and pooled improvements;
-- `results/report.md`: human-readable baselines, the seven post-route results,
+- `outputs/ae4/report.md`: human-readable baselines, the seven post-route results,
   and the source-transfer interpretation;
-- `results/table.tex`: a paper-ready LaTeX form of the seven-row comparison.
+- `outputs/ae4/table.tex`: a paper-ready LaTeX form of the seven-row comparison.

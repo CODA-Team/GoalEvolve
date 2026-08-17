@@ -7,7 +7,6 @@ state/
 runtime/
 outputs/
 logs/
-artifact_evaluation/ae4/results/
 illustrate/
 experiments/**/*.local.json
 .env*

@@ -20,6 +20,7 @@ def load_ae4_module():
 def test_ae4_resolves_moved_project_root_and_public_aes_artifact() -> None:
     module = load_ae4_module()
     assert module.PROJECT_ROOT == PROJECT_ROOT
+    assert module.RESULTS_ROOT == PROJECT_ROOT / "outputs" / "ae4"
     config = module.load_config()
     assert config["source_binary"]["ae2_artifact"] == "aes_cipher_top_student_code"
     assert "student_code" in config["source_binary"]["path"]

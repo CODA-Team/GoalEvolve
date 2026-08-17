@@ -224,8 +224,30 @@ PYTHONPATH=. "$GOALEVOLVE_CONDA_PREFIX/bin/python" artifact_evaluation/ae4/run_a
 ```
 
 `--jobs 1` 是共享服务器的安全默认值；只有确认 CPU 和内存足够时再提高并行数。7 个 Tcl、
-日志和汇总都写入被 Git 忽略的 `artifact_evaluation/ae4/results/`。固定 schedule、统计口径和结果解释见
+日志和汇总都写入被 Git 忽略的 `outputs/ae4/`。固定 schedule、统计口径和结果解释见
 [artifact_evaluation/ae4/README.md](artifact_evaluation/ae4/README.md)。
+
+## 输出与结果检查
+
+AE-2 的重放输出位于 `outputs/ae2/<released-artifact>/`：`report/ae2_report.json`
+记录固定 artifact 的比较结果，`contest_output/` 保存 flow 日志、QoR 指标和 4/4 结果。
+AE-3 的 campaign 状态位于 `outputs/ae3/<design>/`，其中 `rounds/` 保存候选历史，
+`parent.json` 保存当前晋升结果。
+
+AE-4 的生成结果保存在 `outputs/ae4/`：
+
+```text
+outputs/ae4/
+├── provenance.json              # 已验证的 AES AE-2 binary provenance
+├── <design>/                    # 生成 Tcl、flow 日志和单次运行 JSON
+├── summary.csv / summary.json   # 七个 design 的对比行
+├── aggregate.json               # win count 与聚合改善
+├── report.md                    # 可读的 AE-4 汇总报告
+└── table.tex                    # 论文用对比表
+```
+
+查看 `report.md` 和 `summary.csv` 获取七个 design 的 transfer 比较；单个 design 的
+日志和解析结果位于对应的 `<design>/` 目录。
 
 ## Design Profile
 

@@ -19,7 +19,7 @@ from pathlib import Path
 AE4_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = AE4_ROOT.parents[1]
 CONFIG_PATH = AE4_ROOT / "experiment.json"
-RESULTS_ROOT = AE4_ROOT / "results"
+RESULTS_ROOT = PROJECT_ROOT / "outputs" / "ae4"
 
 
 BASELINE_FLOW = [
