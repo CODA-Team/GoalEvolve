@@ -435,22 +435,45 @@ ssh -N -L 8080:127.0.0.1:8080 USER@SERVER
 -->
 
 
-## Authors and Artifact Evaluation Contributor
+## Contributor
 
+<!--
 ### Paper Authors
+-->
 
 - **Haixu Liu** — Fudan University
   ([22307130026@m.fudan.edu.cn](mailto:22307130026@m.fudan.edu.cn))
 - **Lei Zhou** — Fudan University
   ([zhoulei26@m.fudan.edu.cn](mailto:zhoulei26@m.fudan.edu.cn))
+<!--  
 - **Yuhao Ren** — Fudan University
   ([24112020153@m.fudan.edu.cn](mailto:24112020153@m.fudan.edu.cn))
 - **Yumao Wu** — Fudan University
   ([yumaowu@fudan.edu.cn](mailto:yumaowu@fudan.edu.cn))
+-->  
 - **Zhiang Wang** — Fudan University
   ([zhiangwang@fudan.edu.cn](mailto:zhiangwang@fudan.edu.cn))
 
+<!--
 ### Artifact Evaluation Contributor
 
 - **Haixu Liu** — Fudan University
   ([22307130026@m.fudan.edu.cn](mailto:22307130026@m.fudan.edu.cn))
+-->
+
+## Citation
+
+If you find GoalEvolve useful in your research, please cite our paper:
+
+> Liu *et al.*, “GoalEvolve: From Handcrafted Algorithm Priors to Goal-Driven Evolution of Physical Design Algorithms,” 2026.
+
+The paper is available on [arXiv](https://arxiv.org/abs/2608.16733) and as a [PDF](https://arxiv.org/pdf/2608.16733).
+
+```bibtex
+@article{liu2026goalevolve,
+  title   = {GoalEvolve: From Handcrafted Algorithm Priors to Goal-Driven Evolution of Physical Design Algorithms},
+  author  = {Liu, Haixu and Zhou, Lei and Ren, Yuhao and Wu, Yumao and Wang, Zhiang},
+  journal = {arXiv preprint arXiv:2608.16733},
+  year    = {2026},
+  url     = {https://arxiv.org/abs/2608.16733}
+}
