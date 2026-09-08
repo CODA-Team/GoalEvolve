@@ -6,7 +6,6 @@ An open-source goal-driven framework for evolving bounded OpenROAD C++ algorithm
 
 The accompanying paper is [GoalEvolve.pdf](paper/GoalEvolve.pdf).
 
-A demonstration video is available at [Demo Video](images/video.mp4).
 
 <p align="center">
   <img src="images/goalevolve_overview_v3.png" alt="GoalEvolve overview: frozen QoR targets guide checkpoint diagnosis, bounded OpenROAD source evolution, full-flow evaluation, and evidence-based promotion." width="100%">
